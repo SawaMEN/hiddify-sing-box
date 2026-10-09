@@ -4,15 +4,21 @@ import (
 	"context"
 	"net"
 	"net/netip"
+	"sync"
 
-	"github.com/amnezia-vpn/amneziawg-go/tun"
+	legacy "github.com/amnezia-vpn/amneziawg-go/tun"
 	"github.com/amnezia-vpn/amneziawg-go/tun/netstack"
+	"github.com/amnezia-vpn/amneziawg-go/v3/tun"
 	"github.com/sagernet/sing/common/metadata"
 )
 
 type networkTun struct {
-	tun.Device
-	conn *netstack.Net
+	legacy.Device
+	conn      *netstack.Net
+	events    chan tun.Event
+	done      chan struct{}
+	closeOnce sync.Once
+	closeErr  error
 }
 
 func newNetworkTun(address []netip.Prefix, mtu uint32) (tunAdapter, error) {
@@ -21,15 +27,39 @@ func newNetworkTun(address []netip.Prefix, mtu uint32) (tunAdapter, error) {
 		localAddresses = append(localAddresses, prefix.Addr())
 	}
 
-	tun, conn, err := netstack.CreateNetTUN(localAddresses, []netip.Addr{}, int(mtu))
+	device, conn, err := netstack.CreateNetTUN(localAddresses, []netip.Addr{}, int(mtu))
 	if err != nil {
 		return nil, err
 	}
 
-	return &networkTun{
-		Device: tun,
-		conn:   conn,
-	}, nil
+	// Keep the existing sing-box-compatible gVisor stack while using AWG v3's
+	// wire protocol. Its only nominal interface difference is the Event type.
+	result := &networkTun{Device: device, conn: conn, events: make(chan tun.Event, 1), done: make(chan struct{})}
+	go func() {
+		defer close(result.events)
+		for {
+			select {
+			case <-result.done:
+				return
+			case event, ok := <-device.Events():
+				if !ok {
+					return
+				}
+				select {
+				case result.events <- tun.Event(event):
+				case <-result.done:
+					return
+				}
+			}
+		}
+	}()
+	return result, nil
+}
+
+func (t *networkTun) Events() <-chan tun.Event { return t.events }
+func (t *networkTun) Close() error {
+	t.closeOnce.Do(func() { close(t.done); t.closeErr = t.Device.Close() })
+	return t.closeErr
 }
 
 func (t *networkTun) Start() error {

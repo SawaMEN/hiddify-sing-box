@@ -33,6 +33,9 @@ func SetMemoryLimit(enabled bool) {
 		return
 	}
 	limit := sOOMMemoryLimit
+	if limit == 0 && C.IsAndroid {
+		limit = 256 * 1024 * 1024
+	}
 	if limit == 0 && C.IsIos {
 		limit = oomkiller.DefaultAppleNetworkExtensionMemoryLimit
 	}

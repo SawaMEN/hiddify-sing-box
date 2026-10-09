@@ -132,6 +132,17 @@ func NewDefault(ctx context.Context, options option.DialerOptions) (*DefaultDial
 				autoDetectBindFunc = bindFunc
 			}
 		}
+		// Android's VpnService needs SO_BINDTODEVICE-equivalent protection on all
+		// core outbound TCP/UDP sockets, even when auto_detect_interface is false
+		// (it is intentionally disabled for Android in hiddify-core). Without
+		// protect(fd), a core dial can re-enter its own TUN and leave the system
+		// reporting VPN connected with no usable Internet access.
+		if platformInterface != nil && platformInterface.UsePlatformAutoDetectInterfaceControl() &&
+			needsExplicitPlatformProtection(networkManager.AutoDetectInterface()) {
+			protectFunc := networkManager.ProtectFunc()
+			dialer.Control = control.Append(dialer.Control, protectFunc)
+			listenConfig.Control = control.Append(listenConfig.Control, protectFunc)
+		}
 		if options.RoutingMark == 0 && defaultOptions.RoutingMark != 0 {
 			dialer.Control = control.Append(dialer.Control, setMarkWrapper(networkManager, defaultOptions.RoutingMark, true))
 			listenConfig.Control = control.Append(listenConfig.Control, setMarkWrapper(networkManager, defaultOptions.RoutingMark, true))
@@ -249,6 +260,12 @@ func NewDefault(ctx context.Context, options option.DialerOptions) (*DefaultDial
 		fallbackNetworkType:    fallbackNetworkType,
 		networkFallbackDelay:   networkFallbackDelay,
 	}, nil
+}
+
+// Avoid double-protecting sockets when the auto-detect branch already installed
+// the same platform control. For Android, explicit protection is still required.
+func needsExplicitPlatformProtection(autoDetectInterface bool) bool {
+	return !autoDetectInterface
 }
 
 func setMarkWrapper(networkManager adapter.NetworkManager, mark uint32, isDefault bool) control.Func {

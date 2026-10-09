@@ -140,9 +140,11 @@ func TestH_MieruBuildClientConfig(t *testing.T) {
 	}
 	opts.Multiplexing = "MULTIPLEXING_HIGH"
 	opts.HandshakeMode = "no_wait"
+	opts.MTU = 1280
 	config, err := buildMieruClientConfig(opts, mieruDialer{})
 	require.NoError(t, err)
 	profile := config.Profile
+	require.Equal(t, int32(1280), profile.GetMtu())
 	require.Equal(t, "user", profile.GetUser().GetName())
 	require.Equal(t, "pass", profile.GetUser().GetPassword())
 	require.Len(t, profile.GetServers(), 1)

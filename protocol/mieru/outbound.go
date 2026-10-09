@@ -203,6 +203,9 @@ func buildMieruClientConfig(options option.MieruOutboundOptions, dialer mieruDia
 			BypassDialerDNS: true,
 		},
 	}
+	if options.MTU != 0 {
+		config.Profile.Mtu = proto.Int32(options.MTU)
+	}
 	if multiplexing, ok := mierupb.MultiplexingLevel_value[options.Multiplexing]; ok {
 		config.Profile.Multiplexing = &mierupb.MultiplexingConfig{
 			Level: mierupb.MultiplexingLevel(multiplexing).Enum(),
@@ -211,6 +214,9 @@ func buildMieruClientConfig(options option.MieruOutboundOptions, dialer mieruDia
 	return config, nil
 }
 func validateMieruOptions(options option.MieruOutboundOptions) error {
+	if options.MTU != 0 && (options.MTU < 1280 || options.MTU > 1500) {
+		return fmt.Errorf("Mieru MTU must be between 1280 and 1500")
+	}
 	if options.Server == "" {
 		return fmt.Errorf("server is empty")
 	}

@@ -54,6 +54,7 @@ type Outbound struct {
 	mu          sync.RWMutex
 	reconnectCh chan struct{}
 	psiphon     *Psiphon
+	bridge      *upstreamBridge
 }
 
 type tunnelOwner struct{ notify func() }
@@ -82,6 +83,20 @@ func NewOutbound(ctx context.Context, _ adapter.Router, logger log.ContextLogger
 	if err != nil {
 		return nil, err
 	}
+	if options.Detour != "" && options.UpstreamProxyURL != "" {
+		return nil, E.New("Psiphon detour conflicts with upstream_proxy_url")
+	}
+	if options.Detour != "" && options.ConduitPairingID != "" {
+		return nil, E.New("Conduit pairing requires a direct Psiphon transport")
+	}
+	if options.ConduitPairingID != "" {
+		if manager := service.FromContext[adapter.NetworkManager](ctx); manager != nil && manager.DefaultOptions().RoutingMark != 0 {
+			return nil, E.New("Conduit pairing does not support root routing marks")
+		}
+	}
+	if platform := service.FromContext[adapter.PlatformInterface](ctx); platform != nil && platform.UsePlatformAutoDetectInterfaceControl() {
+		config.DeviceBinder = psiphonDeviceBinder{platform}
+	}
 	psiphon, err := NewPsiphon(ctx, logger, config, tag)
 	if err != nil {
 
@@ -101,6 +116,18 @@ func NewOutbound(ctx context.Context, _ adapter.Router, logger log.ContextLogger
 
 }
 func (h *Outbound) PreStart() error {
+	// Use the bridge for ordinary Psiphon bootstrap even without a detour, so
+	// it goes through the same protected/marked dialer as other outbounds.
+	if h.psiphon.config.UpstreamProxyURL == "" && h.psiphon.config.InproxyClientPersonalCompartmentID == "" {
+		bridge, err := newUpstreamBridge(h.ctx, func(ctx context.Context, network, address string) (net.Conn, error) {
+			return h.dialer.DialContext(ctx, network, M.ParseSocksaddr(address))
+		})
+		if err != nil {
+			return err
+		}
+		h.bridge = bridge
+		h.psiphon.config.UpstreamProxyURL = bridge.url
+	}
 	return h.psiphon.PreStart()
 }
 func (h *Outbound) Start() error {
@@ -182,6 +209,9 @@ func (h *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (n
 func (h *Outbound) Close() error {
 
 	h.psiphon.Close()
+	if h.bridge != nil {
+		return h.bridge.Close()
+	}
 
 	return nil
 }
@@ -240,6 +270,7 @@ func buildConfig(options option.PsiphonOutboundOptions, timeout time.Duration) (
 	config.RemoteServerListDownloadFilename = pick(options.RemoteServerListDownloadFilename, config.RemoteServerListDownloadFilename, defaultRemoteServerListFilename)
 	config.RemoteServerListSignaturePublicKey = pick(options.RemoteServerListSignaturePublicKey, config.RemoteServerListSignaturePublicKey, defaultSignaturePublicKey)
 	config.EgressRegion = pick(options.EgressRegion, config.EgressRegion, "")
+	config.InproxyClientPersonalCompartmentID = pick(options.ConduitPairingID, config.InproxyClientPersonalCompartmentID, "")
 	config.UpstreamProxyURL = pick(options.UpstreamProxyURL, config.UpstreamProxyURL, "")
 
 	config.AllowDefaultDNSResolverWithBindToDevice = true
@@ -284,7 +315,10 @@ func durationToSecondsPtr(duration time.Duration) *int {
 }
 
 func (h *Outbound) run() {
-	h.connectOnce()
+	if err := h.connectOnce(); err != nil {
+		h.logger.Warn("Psiphon startup failed: ", err)
+		_ = h.Close()
+	}
 	// defer h.closeDataStore()
 	// for {
 	// 	if h.ctx.Err() != nil {
@@ -357,4 +391,10 @@ func (h *Outbound) IsReady() bool {
 func (h *Outbound) InterfaceUpdated(ctx context.Context) {
 	h.logger.Info("Network Changed... Restarting Psiphon Tunnel")
 	h.psiphon.NetworkChanged()
+}
+
+type psiphonDeviceBinder struct{ platform adapter.PlatformInterface }
+
+func (b psiphonDeviceBinder) BindToDevice(fd int) (string, error) {
+	return "", b.platform.AutoDetectInterfaceControl(fd)
 }

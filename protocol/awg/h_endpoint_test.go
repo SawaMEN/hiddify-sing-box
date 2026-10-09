@@ -90,8 +90,19 @@ func TestH_GenIpcConfigOmitsZeroValues(t *testing.T) {
 	require.Equal(t, "private_key="+hHex(privateKey)+"\n"+peerLine+"\n"+peerLine+"\n"+peerLine, ipc)
 }
 
+func TestH_GenIpcConfigAWG3AcceptedByDevice(t *testing.T) {
+	key := hKey(t)
+	ipc, err := genIpcConfig(option.AwgEndpointOptions{PrivateKey: hKey(t).String(), Awg: option.AwgOptions{
+		S1: 20, S2: 20, S3: 20, S4: 20, HeaderProtectionKey: key.String(), ContentPaddingAddition: "5-10", RekeyAfterTime: "90-120",
+		RandomTrailers: true, DisableCookies: true,
+	}}, nil)
+	require.NoError(t, err)
+	require.Contains(t, ipc, "header_protection_key="+hHex(key))
+	require.Contains(t, ipc, "random_trailers=true")
+	require.NoError(t, hApplyIpc(t, ipc))
+}
+
 func TestH_GenIpcConfigIPv6PeerEndpoint(t *testing.T) {
-	t.Skip("BUG: IPv6 peer endpoint is emitted unbracketed (endpoint=2001:db8::1:51820) and rejected by the device")
 	ipc, err := genIpcConfig(option.AwgEndpointOptions{
 		PrivateKey: hKey(t).String(),
 		Peers:      []option.AwgPeerOptions{{PublicKey: hKey(t).PublicKey().String(), Address: "2001:db8::1", Port: 51820}},

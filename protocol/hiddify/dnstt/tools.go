@@ -14,22 +14,24 @@ import (
 
 var (
 	//go:embed resolvers_by_country.json
-	resolvers_bytes  []byte
-	countryResolvers map[string][]string
-	resolverCountry  map[string]string
+	resolvers_bytes     []byte
+	countryResolvers    map[string][]string
+	resolverCountry     map[string]string
+	resolverTablesOnce  sync.Once
+	resolverTablesError error
 )
 
-// loadResolvers runs once: registries are built for every new context, possibly concurrently,
-// and these maps are shared. //H
-var loadResolvers = sync.OnceFunc(func() {
-	json.Unmarshal(resolvers_bytes, &countryResolvers)
-	resolverCountry = make(map[string]string)
-	for country, resolvers := range countryResolvers {
-		for _, resolver := range resolvers {
-			resolverCountry[resolver] = country
+func loadResolvers() {
+	resolverTablesOnce.Do(func() {
+		resolverTablesError = json.Unmarshal(resolvers_bytes, &countryResolvers)
+		resolverCountry = make(map[string]string)
+		for country, resolvers := range countryResolvers {
+			for _, resolver := range resolvers {
+				resolverCountry[resolver] = country
+			}
 		}
-	}
-})
+	})
+}
 
 type ResolverS struct {
 	Resolver dnstt.Resolver
@@ -37,6 +39,10 @@ type ResolverS struct {
 }
 
 func getConfigResolvers(options option.DnsttOptions) ([]ResolverS, error) {
+	loadResolvers()
+	if resolverTablesError != nil {
+		return nil, fmt.Errorf("embedded resolver table: %w", resolverTablesError)
+	}
 	resolvers := []ResolverS{}
 	for _, resolverAddr := range options.Resolvers {
 		if resolverAddr == "" || resolverAddr == "auto" {

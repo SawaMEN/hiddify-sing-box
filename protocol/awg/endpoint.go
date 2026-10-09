@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"net"
 	"net/netip"
+	"strconv"
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
@@ -143,6 +144,27 @@ func genIpcConfig(opts option.AwgEndpointOptions, resolvePeer func(domain string
 		s += "\nlisten_port=" + format.ToString(opts.ListenPort)
 	}
 	awg := opts.Awg
+	if awg.HeaderProtectionKey != "" {
+		key, err := base64.StdEncoding.DecodeString(awg.HeaderProtectionKey)
+		if err != nil || len(key) != 32 {
+			return "", E.New("invalid AWG header protection key")
+		}
+		s += "\nheader_protection_key=" + hex.EncodeToString(key)
+	}
+	for _, field := range []struct{ name, value string }{
+		{"content_padding_addition", awg.ContentPaddingAddition}, {"rekey_after_time", awg.RekeyAfterTime}, {"rekey_timeout", awg.RekeyTimeout},
+		{"reject_after_time", awg.RejectAfterTime}, {"keepalive_timeout", awg.KeepaliveTimeout}, {"max_handshake_attempts", awg.MaxHandshakeAttempts},
+	} {
+		if field.value != "" {
+			s += "\n" + field.name + "=" + field.value
+		}
+	}
+	if awg.RandomTrailers {
+		s += "\nrandom_trailers=true"
+	}
+	if awg.DisableCookies {
+		s += "\ndisable_cookies=true"
+	}
 	if awg.Jc != 0 {
 		s += "\njc=" + format.ToString(awg.Jc)
 	}
@@ -219,7 +241,7 @@ func genIpcConfig(opts option.AwgEndpointOptions, resolvePeer func(domain string
 				}
 				endpointAddr = resolvedAddr.String()
 			}
-			s += "\nendpoint=" + endpointAddr + ":" + format.ToString(peer.Port)
+			s += "\nendpoint=" + net.JoinHostPort(endpointAddr, strconv.Itoa(int(peer.Port)))
 		}
 		if peer.PersistentKeepaliveInterval != 0 {
 			s += "\npersistent_keepalive_interval=" + format.ToString(peer.PersistentKeepaliveInterval)

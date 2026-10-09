@@ -107,7 +107,7 @@ func (m *OutboundMonitoring) Reload() error {
 		return err
 	}
 	m.registry.Store(registry)
-	if m.started {
+	if m.started.Load() {
 		for tag, grp := range registry.groups {
 			if _, existed := previous.groups[tag]; !existed {
 				m.schedulerWG.Add(1)
@@ -121,7 +121,7 @@ func (m *OutboundMonitoring) Reload() error {
 		}
 	}
 	m.logger.Info("reloaded ", len(registry.outbounds), " outbounds and ", len(registry.groups), " groups for monitoring")
-	if m.started {
+	if m.started.Load() {
 		groupTags := make([]string, 0, len(registry.groups))
 		for tag := range registry.groups {
 			groupTags = append(groupTags, tag)

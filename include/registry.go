@@ -23,6 +23,7 @@ import (
 	"github.com/sagernet/sing-box/protocol/block"
 	"github.com/sagernet/sing-box/protocol/bridge"
 	"github.com/sagernet/sing-box/protocol/direct"
+	"github.com/sagernet/sing-box/protocol/fptn"
 	"github.com/sagernet/sing-box/protocol/group"
 	"github.com/sagernet/sing-box/protocol/group/balancer"
 	"github.com/sagernet/sing-box/protocol/hiddify/dnstt"
@@ -34,6 +35,8 @@ import (
 	"github.com/sagernet/sing-box/protocol/mieru"
 	"github.com/sagernet/sing-box/protocol/mixed"
 	"github.com/sagernet/sing-box/protocol/naive"
+	"github.com/sagernet/sing-box/protocol/openflux"
+	"github.com/sagernet/sing-box/protocol/pingtunnel"
 	"github.com/sagernet/sing-box/protocol/psiphon"
 	"github.com/sagernet/sing-box/protocol/redirect"
 	"github.com/sagernet/sing-box/protocol/shadowsocks"
@@ -41,6 +44,7 @@ import (
 	snellprotocol "github.com/sagernet/sing-box/protocol/snell"
 	"github.com/sagernet/sing-box/protocol/socks"
 	"github.com/sagernet/sing-box/protocol/ssh"
+	"github.com/sagernet/sing-box/protocol/sudoku"
 	"github.com/sagernet/sing-box/protocol/tor"
 	"github.com/sagernet/sing-box/protocol/trojan"
 	"github.com/sagernet/sing-box/protocol/trusttunnel"
@@ -118,6 +122,10 @@ func OutboundRegistry() *outbound.Registry {
 	anytls.RegisterOutbound(registry)
 	psiphon.RegisterOutbound(registry)
 	mieru.RegisterOutbound(registry)
+	sudoku.RegisterOutbound(registry)
+	openflux.RegisterOutbound(registry)
+	fptn.RegisterOutbound(registry)
+	pingtunnel.RegisterOutbound(registry)
 	hinvalid.RegisterOutbound(registry)
 	xray.RegisterOutbound(registry)
 	dnstt.RegisterOutbound(registry)

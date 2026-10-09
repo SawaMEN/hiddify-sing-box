@@ -296,7 +296,12 @@ func (s *StartedService) StartOrReloadService(ctx context.Context, profileConten
 	s.serviceAccess.Lock()
 	s.instance = instance
 	s.serviceAccess.Unlock()
+	stopStartupCancellation := context.AfterFunc(ctx, instance.cancel)
 	err = instance.Start()
+	stopStartupCancellation()
+	if ctx.Err() != nil {
+		err = ctx.Err()
+	}
 	s.serviceAccess.Lock()
 	if s.startInterrupted {
 		s.startInterrupted = false
@@ -304,7 +309,7 @@ func (s *StartedService) StartOrReloadService(ctx context.Context, profileConten
 		s.serviceAccess.Unlock()
 		_ = instance.Close()
 		runtimeDebug.FreeOSMemory()
-		return nil
+		return context.Canceled
 	}
 	if err != nil {
 		s.instance = nil
@@ -345,15 +350,16 @@ func (s *StartedService) CloseService() error {
 	s.instance = nil
 	s.updateStatus(ServiceStatus_STOPPING)
 	s.serviceAccess.Unlock()
+	var closeErr error
 	if instance != nil {
-		_ = instance.Close()
+		closeErr = instance.Close()
 	}
 	s.serviceAccess.Lock()
 	s.startedAt = time.Time{}
 	s.updateStatus(ServiceStatus_IDLE)
 	s.serviceAccess.Unlock()
 	runtimeDebug.FreeOSMemory()
-	return nil
+	return closeErr
 }
 
 func (s *StartedService) SetError(err error) {

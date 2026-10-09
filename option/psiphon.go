@@ -10,6 +10,7 @@ type PsiphonOutboundOptions struct {
 
 	DataDirectory                           string             `json:"data_directory,omitempty"`
 	EgressRegion                            string             `json:"egress_region,omitempty"`
+	ConduitPairingID                        string             `json:"conduit_pairing_id,omitempty"`
 	PropagationChannelID                    string             `json:"propagation_channel_id,omitempty"`
 	SponsorID                               string             `json:"sponsor_id,omitempty"`
 	NetworkID                               string             `json:"network_id,omitempty"`

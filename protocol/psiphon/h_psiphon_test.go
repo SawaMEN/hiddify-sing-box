@@ -3,6 +3,7 @@ package psiphon
 import (
 	"context"
 	"encoding/base64"
+	"net"
 	"path/filepath"
 	"testing"
 	"time"
@@ -47,6 +48,7 @@ func TestH_PsiphonBuildConfigOverrides(t *testing.T) {
 	options := option.PsiphonOutboundOptions{
 		DataDirectory:                           "/tmp/psi",
 		EgressRegion:                            "DE",
+		ConduitPairingID:                        "pair",
 		PropagationChannelID:                    "PC",
 		SponsorID:                               "SP",
 		NetworkID:                               "NET",
@@ -62,6 +64,7 @@ func TestH_PsiphonBuildConfigOverrides(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "/tmp/psi", config.DataRootDirectory)
 	require.Equal(t, "DE", config.EgressRegion)
+	require.Equal(t, "pair", config.InproxyClientPersonalCompartmentID)
 	require.Equal(t, "PC", config.PropagationChannelId)
 	require.Equal(t, "SP", config.SponsorId)
 	require.Equal(t, "NET", config.NetworkID)
@@ -245,4 +248,22 @@ func TestH_PsiphonEncryptedConfigWrongKey(t *testing.T) {
 	// not decryptable with this build's key: treated as plain base64, which is not a JSON config
 	_, err = buildConfig(option.PsiphonOutboundOptions{Config: encrypted}, defaultEstablishTunnelTimeout)
 	require.ErrorContains(t, err, "parse psiphon config")
+}
+
+func TestH_PsiphonCloseIsIdempotentAndPreventsLateStart(t *testing.T) {
+	out := newTestOutbound(t, option.PsiphonOutboundOptions{})
+	require.NoError(t, out.Close())
+	require.NoError(t, out.Close())
+	require.ErrorIs(t, out.psiphon.Start(), net.ErrClosed)
+	require.False(t, out.IsReady())
+}
+
+func TestH_PsiphonRejectsDetourConflicts(t *testing.T) {
+	for _, options := range []option.PsiphonOutboundOptions{
+		{DialerOptions: option.DialerOptions{Detour: "main"}, UpstreamProxyURL: "http://127.0.0.1:1080"},
+		{DialerOptions: option.DialerOptions{Detour: "main"}, ConduitPairingID: "pair"},
+	} {
+		_, err := NewOutbound(context.Background(), nil, log.NewNOPFactory().Logger(), "stage", options)
+		require.Error(t, err)
+	}
 }

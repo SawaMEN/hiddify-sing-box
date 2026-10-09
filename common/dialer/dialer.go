@@ -175,3 +175,46 @@ type ParallelNetworkDialer interface {
 type PacketDialerWithDestination interface {
 	ListenPacketWithDestination(ctx context.Context, destination M.Socksaddr) (net.PacketConn, netip.Addr, error)
 }
+
+func NewDNSQueryOptions(ctx context.Context, domainResolver *option.DomainResolveOptions, newDialer bool) (adapter.DNSQueryOptions, error) {
+	dnsTransport := service.FromContext[adapter.DNSTransportManager](ctx)
+	if domainResolver != nil && domainResolver.Server != "" {
+		transport, loaded := dnsTransport.Transport(domainResolver.Server)
+		if !loaded {
+			return adapter.DNSQueryOptions{}, E.New("domain resolver not found: ", domainResolver.Server)
+		}
+		dnsQueryOptions := domainResolveQueryOptions(domainResolver)
+		dnsQueryOptions.Transport = transport
+		return dnsQueryOptions, nil
+	}
+	defaultOptions := service.FromContext[adapter.NetworkManager](ctx).DefaultOptions()
+	if defaultOptions.DomainResolver != "" {
+		transport, loaded := dnsTransport.Transport(defaultOptions.DomainResolver)
+		if !loaded {
+			return adapter.DNSQueryOptions{}, E.New("default domain resolver not found: ", defaultOptions.DomainResolver)
+		}
+		dnsQueryOptions := defaultOptions.DomainResolveOptions
+		dnsQueryOptions.Transport = transport
+		return dnsQueryOptions, nil
+	}
+	if len(dnsTransport.Transports()) < 2 {
+		return adapter.DNSQueryOptions{Transport: dnsTransport.Default()}, nil
+	}
+	if newDialer {
+		return adapter.DNSQueryOptions{}, E.New("missing domain resolver for domain server address")
+	}
+	deprecated.Report(ctx, deprecated.OptionMissingDomainResolver)
+	return adapter.DNSQueryOptions{}, nil
+}
+
+func domainResolveQueryOptions(domainResolver *option.DomainResolveOptions) adapter.DNSQueryOptions {
+	return adapter.DNSQueryOptions{
+		Strategy:               C.DomainStrategy(domainResolver.Strategy),
+		Timeout:                time.Duration(domainResolver.Timeout),
+		DisableCache:           domainResolver.DisableCache,
+		DisableOptimisticCache: domainResolver.DisableOptimisticCache,
+		RewriteTTL:             domainResolver.RewriteTTL,
+		ClientSubnet:           domainResolver.ClientSubnet.Build(netip.Prefix{}),
+	}
+}
+

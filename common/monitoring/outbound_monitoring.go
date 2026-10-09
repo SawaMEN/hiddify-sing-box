@@ -64,7 +64,7 @@ type OutboundMonitoring struct {
 	tag              string
 	pause            pause.Manager
 	pauseCallback    *list.Element[pause.Callback]
-	started          bool
+	started          atomic.Bool
 	urls             []string
 	currentLinkIndex atomic.Uint32
 	access           sync.Mutex
@@ -251,7 +251,6 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 		cancel:          cancel,
 		urls:            cloned,
 		pause:           service.FromContext[pause.Manager](ctx),
-		started:         false,
 		logger:          logger,
 		outboundManager: service.FromContext[adapter.OutboundManager](ctx),
 		endpointManager: service.FromContext[adapter.EndpointManager](ctx),
@@ -295,7 +294,7 @@ func (m *OutboundMonitoring) Start(stage adapter.StartStage) error {
 			go m.groupNotifierLoop(grp)
 		}
 
-		m.started = true
+		m.started.Store(true)
 		m.Touch()
 	}
 
@@ -375,7 +374,7 @@ func (m *OutboundMonitoring) testNow(outboundTag string, priority bool) error {
 
 		task := &testTask{
 			outboundTag: outboundTag,
-			cycleID:     m.cycleSeq,
+			cycleID:     atomic.LoadUint64(&m.cycleSeq),
 			priority:    priority,
 		}
 
@@ -413,7 +412,7 @@ func (m *OutboundMonitoring) InvalidateTest(outboundTag string) error {
 
 	m.enqueueTask(&testTask{
 		outboundTag: outboundTag,
-		cycleID:     m.cycleSeq,
+		cycleID:     atomic.LoadUint64(&m.cycleSeq),
 		priority:    true,
 	})
 
@@ -437,6 +436,8 @@ func (m *OutboundMonitoring) UnsubscribeGroup(groupTag string, observer <-chan G
 
 func (m *OutboundMonitoring) Close() error {
 	m.closerOnce.Do(func() {
+		m.started.Store(false)
+		m.cancel()
 		m.stopTimerWorkers()
 
 		// close(m.priorityQueue)
@@ -704,6 +705,7 @@ func (m *OutboundMonitoring) enqueueTask(task *testTask) bool {
 	}
 	state.mu.Lock()
 	defer state.mu.Unlock()
+	previousCycle, previouslyQueued := state.enqueuedCycle, state.queued
 
 	if task.priority {
 		if state.priorityQueued {
@@ -722,6 +724,7 @@ func (m *OutboundMonitoring) enqueueTask(task *testTask) bool {
 		case m.priorityQueue <- task:
 			return true
 		default:
+			state.priorityQueued = false
 			return false
 		}
 
@@ -730,6 +733,8 @@ func (m *OutboundMonitoring) enqueueTask(task *testTask) bool {
 		case m.normalQueue <- task:
 			return true
 		default:
+			state.enqueuedCycle = previousCycle
+			state.queued = previouslyQueued
 			return false
 		}
 	}
@@ -763,10 +768,11 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 	if outcome.history.IpInfo != nil {
 		state.history.IpInfo = outcome.history.IpInfo
 	}
-	m.history.StoreURLTestHistory(outcome.outboundTag, &state.history)
+	snapshot := state.history
+	m.history.StoreURLTestHistory(outcome.outboundTag, &snapshot)
 
 	m.emitGroupEvent(state.groupTags)
-	return &state.history
+	return &snapshot
 }
 
 func mergeIpInfo(old, new *ipinfo.IpInfo) *ipinfo.IpInfo {
@@ -815,11 +821,14 @@ func (m *OutboundMonitoring) collectCycleTargets() []string {
 }
 
 func (m *OutboundMonitoring) Touch() {
-	if !m.started {
+	if !m.started.Load() {
 		return
 	}
 	m.access.Lock()
 	defer m.access.Unlock()
+	if m.ctx.Err() != nil || !m.started.Load() {
+		return
+	}
 	if m.mainTicker != nil {
 		m.lastActive.Store(time.Now())
 		return

@@ -8,12 +8,13 @@ import (
 	"net"
 	"net/netip"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
 	"time"
 
-	"github.com/amnezia-vpn/amneziawg-go/conn"
+	"github.com/amnezia-vpn/amneziawg-go/v3/conn"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
@@ -200,9 +201,17 @@ func hStartTunnelPairWithRelay(t *testing.T, ctx context.Context, obfuscation st
 }
 
 func TestH_DeviceLoopbackTunnel(t *testing.T) {
+	hLoopbackTunnel(t, hObfuscation)
+}
+
+func TestH_DeviceAWG3LoopbackTunnel(t *testing.T) {
+	hLoopbackTunnel(t, hObfuscation+"\ns3=20\ns4=20\nheader_protection_key="+strings.Repeat("11", 32)+"\ncontent_padding_addition=5-10")
+}
+
+func hLoopbackTunnel(t *testing.T, obfuscation string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	server, client, serverAddress := hStartTunnelPair(t, ctx, hObfuscation)
+	server, client, serverAddress := hStartTunnelPair(t, ctx, obfuscation)
 
 	tcpConn, err := client.DialContext(ctx, N.NetworkTCP, M.SocksaddrFrom(serverAddress.Addr(), 8080))
 	require.NoError(t, err)

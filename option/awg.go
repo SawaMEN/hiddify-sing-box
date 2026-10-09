@@ -18,27 +18,39 @@ type AwgEndpointOptions struct {
 }
 
 type AwgOptions struct {
-	Jc   int    `json:"jc,omitempty"`
-	Jmin int    `json:"jmin,omitempty"`
-	Jmax int    `json:"jmax,omitempty"`
-	S1   int    `json:"s1,omitempty"`
-	S2   int    `json:"s2,omitempty"`
-	S3   int    `json:"s3,omitempty"`
-	S4   int    `json:"s4,omitempty"`
-	H1   string `json:"h1,omitempty"`
-	H2   string `json:"h2,omitempty"`
-	H3   string `json:"h3,omitempty"`
-	H4   string `json:"h4,omitempty"`
-	I1   string `json:"i1,omitempty"`
-	I2   string `json:"i2,omitempty"`
-	I3   string `json:"i3,omitempty"`
-	I4   string `json:"i4,omitempty"`
-	I5   string `json:"i5,omitempty"`
+	Jc                     int    `json:"jc,omitempty"`
+	Jmin                   int    `json:"jmin,omitempty"`
+	Jmax                   int    `json:"jmax,omitempty"`
+	S1                     int    `json:"s1,omitempty"`
+	S2                     int    `json:"s2,omitempty"`
+	S3                     int    `json:"s3,omitempty"`
+	S4                     int    `json:"s4,omitempty"`
+	H1                     string `json:"h1,omitempty"`
+	H2                     string `json:"h2,omitempty"`
+	H3                     string `json:"h3,omitempty"`
+	H4                     string `json:"h4,omitempty"`
+	I1                     string `json:"i1,omitempty"`
+	I2                     string `json:"i2,omitempty"`
+	I3                     string `json:"i3,omitempty"`
+	I4                     string `json:"i4,omitempty"`
+	I5                     string `json:"i5,omitempty"`
+	HeaderProtectionKey    string `json:"header_protection_key,omitempty"`
+	ContentPaddingAddition string `json:"content_padding_addition,omitempty"`
+	RekeyAfterTime         string `json:"rekey_after_time,omitempty"`
+	RekeyTimeout           string `json:"rekey_timeout,omitempty"`
+	RejectAfterTime        string `json:"reject_after_time,omitempty"`
+	KeepaliveTimeout       string `json:"keepalive_timeout,omitempty"`
+	MaxHandshakeAttempts   string `json:"max_handshake_attempts,omitempty"`
+	RandomTrailers         bool   `json:"random_trailers,omitempty"`
+	DisableCookies         bool   `json:"disable_cookies,omitempty"`
 }
 
 func (o *AwgOptions) IsAvailble() bool {
 	if o == nil {
 		return false
+	}
+	if o.HeaderProtectionKey != "" || o.ContentPaddingAddition != "" || o.RekeyAfterTime != "" || o.RekeyTimeout != "" || o.RejectAfterTime != "" || o.KeepaliveTimeout != "" || o.MaxHandshakeAttempts != "" || o.RandomTrailers || o.DisableCookies {
+		return true
 	}
 	return o.Jc != 0 || o.Jmin != 0 || o.Jmax != 0 || o.S1 != 0 || o.S2 != 0 || o.S3 != 0 || o.S4 != 0 || o.H1 != "" || o.H2 != "" || o.H3 != "" || o.H4 != "" || o.I1 != "" || o.I2 != "" || o.I3 != "" || o.I4 != "" || o.I5 != ""
 }

@@ -7,6 +7,7 @@ type MieruOutboundOptions struct {
 	PortBindings  []MieruPortBinding `json:"portBindings,omitempty"`
 	UserName      string             `json:"username,omitempty"`
 	Password      string             `json:"password,omitempty"`
+	MTU           int32              `json:"mtu,omitempty"`
 	Multiplexing  string             `json:"multiplexing,omitempty"`
 	HandshakeMode string             `json:"handshake_mode,omitempty"`
 }

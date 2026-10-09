@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"sync/atomic"
+	"sync"
 
 	"github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon"
 	"github.com/sagernet/sing-box/common/monitoring"
@@ -58,25 +58,44 @@ type NoticeEvent struct {
 }
 
 type Psiphon struct {
-	controller      atomic.Pointer[psiphon.Controller] // set by the async start; read from other goroutines
+	mu              sync.RWMutex
+	closeMu         sync.Mutex
+	controller      *psiphon.Controller
 	logger          logger.ContextLogger
 	config          *psiphon.Config
 	ctx             context.Context
 	cancel          context.CancelFunc
 	dataStoreOpened bool
 	connected       bool
+	closed          bool
+	startDone       chan struct{}
+	runDone         chan struct{}
 	tag             string
 }
 
 func (p *Psiphon) Dial(address string, conn net.Conn) (net.Conn, error) {
-	if ctl := p.controller.Load(); ctl != nil {
-		return ctl.Dial(address, conn)
+	p.mu.RLock()
+	controller, closed := p.controller, p.closed
+	p.mu.RUnlock()
+	if closed {
+		return nil, net.ErrClosed
 	}
-	return nil, errors.New("controller not initialized")
+	if controller == nil {
+		return nil, errors.New("controller not initialized")
+	}
+	return controller.Dial(address, conn)
 }
 
 func (p *Psiphon) PreStart() error {
-	if err := os.MkdirAll(p.config.DataRootDirectory, 0o755); err != nil {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return net.ErrClosed
+	}
+	if p.dataStoreOpened {
+		return nil
+	}
+	if err := os.MkdirAll(p.config.DataRootDirectory, 0o700); err != nil {
 		return err
 	}
 	if err := p.config.Commit(true); err != nil {
@@ -87,137 +106,152 @@ func (p *Psiphon) PreStart() error {
 	}
 	p.dataStoreOpened = true
 	if err := psiphon.ImportEmbeddedServerEntries(p.ctx, p.config, "", ""); err != nil {
-		p.closeDataStore()
+		psiphon.CloseDataStore()
+		p.dataStoreOpened = false
 		return err
 	}
 	return nil
 }
-func (p *Psiphon) closeDataStore() {
-	if p.dataStoreOpened {
-		psiphon.CloseDataStore()
-		p.dataStoreOpened = false
-	}
-}
 
 func (p *Psiphon) State() string {
-	if p.controller.Load() == nil || !p.connected {
-		return "connecting..."
+	if p.IsConnected() {
+		return "connected"
 	}
-
-	return "connected"
+	return "connecting..."
 }
+
 func (p *Psiphon) IsConnected() bool {
-	if p.controller.Load() == nil || !p.connected {
-		return false
-	}
-	return true
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return !p.closed && p.controller != nil && p.connected
 }
 
-// NetworkChanged tells the running controller that the network changed.
-// It is a no-op before the controller exists (still starting, or start failed).
 func (p *Psiphon) NetworkChanged() {
-	if ctl := p.controller.Load(); ctl != nil {
-		ctl.NetworkChanged()
+	p.mu.RLock()
+	controller, closed := p.controller, p.closed
+	p.mu.RUnlock()
+	if controller != nil && !closed {
+		controller.NetworkChanged()
 	}
 }
 
 func (p *Psiphon) Close() error {
-	p.controller.Store(nil)
-	p.connected = false
-	psiphon.ResetNoticeWriter()
-	if p.cancel != nil { // nil until Start runs
-		p.cancel()
+	p.closeMu.Lock()
+	defer p.closeMu.Unlock()
+	p.mu.Lock()
+	p.closed, p.connected = true, false
+	p.cancel()
+	startDone := p.startDone
+	p.mu.Unlock()
+	// Cancellation releases Start's wait before data-store shutdown. It also
+	// prevents a controller being published after Close has already returned.
+	if startDone != nil {
+		<-startDone
 	}
-	p.closeDataStore()
+	p.mu.RLock()
+	runDone := p.runDone
+	p.mu.RUnlock()
+	if runDone != nil {
+		<-runDone
+	}
+	p.mu.Lock()
+	if p.dataStoreOpened {
+		psiphon.ResetNoticeWriter()
+		psiphon.CloseDataStore()
+		p.dataStoreOpened = false
+	}
+	p.controller = nil
+	p.mu.Unlock()
 	return nil
 }
-func NewPsiphon(ctx context.Context, l logger.ContextLogger, config *psiphon.Config, tag string) (*Psiphon, error) {
-	p := Psiphon{
-		logger: l,
-		config: config,
-		ctx:    ctx,
-		tag:    tag,
-	}
-	return &p, nil
-}
-func (p *Psiphon) Start() error {
 
-	ctx, cancel := context.WithCancel(p.ctx)
-	p.cancel = cancel
-	// config.Commit must be called before calling config.SetParameters
-	// or attempting to connect.
-	if err := p.config.Commit(true); err != nil {
-		return errors.New("config.Commit failed")
+func NewPsiphon(ctx context.Context, l logger.ContextLogger, config *psiphon.Config, tag string) (*Psiphon, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	return &Psiphon{logger: l, config: config, ctx: ctx, cancel: cancel, tag: tag}, nil
+}
+
+func (p *Psiphon) Start() error {
+	p.mu.Lock()
+	if p.closed {
+		p.mu.Unlock()
+		return net.ErrClosed
 	}
+	if p.startDone != nil {
+		p.mu.Unlock()
+		return errors.New("Psiphon already started")
+	}
+	if !p.dataStoreOpened {
+		p.mu.Unlock()
+		return errors.New("Psiphon not prepared")
+	}
+	p.startDone = make(chan struct{})
+	startDone := p.startDone
+	p.mu.Unlock()
+	defer close(startDone)
 
 	connected := make(chan struct{}, 1)
 	errored := make(chan error, 1)
-
 	psiphon.SetNoticeWriter(psiphon.NewNoticeReceiver(func(notice []byte) {
 		var event NoticeEvent
-		if err := json.Unmarshal(notice, &event); err != nil {
+		if json.Unmarshal(notice, &event) != nil {
 			return
 		}
-
-		go func(event NoticeEvent) {
-			p.logger.Debug(fmt.Sprint("Notic ", event.Type, " data ", event.Data))
-			switch event.Type {
-			case "EstablishTunnelTimeout":
+		switch event.Type {
+		case "EstablishTunnelTimeout":
+			select {
+			case errored <- errors.New("Psiphon tunnel establishment timeout"):
+			default:
+			}
+		case "Tunnels":
+			count, ok := event.Data["count"].(float64)
+			if !ok {
+				return
+			}
+			p.mu.Lock()
+			p.connected = count > 0 && !p.closed
+			ready := p.connected
+			p.mu.Unlock()
+			if ready {
 				select {
-				case errored <- errors.New("clientlib: tunnel establishment timeout"):
+				case connected <- struct{}{}:
 				default:
 				}
-			case "Tunnels":
-				if event.Data["count"].(float64) > 0 {
-					select {
-					case connected <- struct{}{}:
-						p.connected = true
-						monitoring.Get(p.ctx).TestNow(p.tag)
-					default:
-					}
+				if monitor := monitoring.Get(p.ctx); monitor != nil {
+					monitor.TestNow(p.tag)
 				}
 			}
-		}(event)
+		}
 	}))
-
-	if err := psiphon.OpenDataStore(p.config); err != nil {
-		return errors.New("failed to open data store")
-	}
-
-	if err := psiphon.ImportEmbeddedServerEntries(ctx, p.config, "", ""); err != nil {
-		return err
-	}
-
 	controller, err := psiphon.NewController(p.config)
-
 	if err != nil {
-		return errors.New("psiphon.NewController failed")
+		return fmt.Errorf("Psiphon controller: %w", err)
 	}
-	p.controller.Store(controller)
-
+	runDone := make(chan struct{})
+	p.mu.Lock()
+	p.controller, p.runDone = controller, runDone
+	p.mu.Unlock()
 	go func() {
-		controller.Run(ctx) // Run will block until the controller is stopped
-
+		defer close(runDone)
+		controller.Run(p.ctx)
+		p.mu.Lock()
+		p.connected = false
+		p.mu.Unlock()
 		select {
-		case errored <- errors.New("controller.Run exited unexpectedly"):
+		case errored <- errors.New("Psiphon controller stopped"):
 		default:
 		}
 	}()
-	p.logger.Debug("Waiting for success or failure of tunnel connection...")
 	select {
-	case <-ctx.Done():
-		p.logger.Debug("Context done while waiting for success or failure of tunnel connection")
-		p.Close()
-		return ctx.Err()
+	case <-p.ctx.Done():
+		return p.ctx.Err()
 	case <-connected:
-		p.logger.Debug("Tunnel connection established")
+		if err := p.ctx.Err(); err != nil {
+			return err
+		}
 		return nil
 	case err := <-errored:
-		p.logger.Debug("Tunnel connection failed: ", err)
-		p.Close()
 		return err
 	}
-
 }
 
 // func RunPsiphon(ctx context.Context, l logger.ContextLogger, wgBind netip.AddrPort, dir string, localSocksAddr netip.AddrPort, country string) error {

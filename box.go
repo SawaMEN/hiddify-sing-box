@@ -735,7 +735,14 @@ func (s *Box) closeWithTimeout(name string, timeout time.Duration, closeFn func(
 	done := make(chan error, 1)
 
 	go func() {
-		done <- closeFn()
+		var closeErr error
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				closeErr = fmt.Errorf("close %s panic: %v", name, recovered)
+			}
+			done <- closeErr
+		}()
+		closeErr = closeFn()
 	}()
 
 	select {
