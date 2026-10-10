@@ -3,6 +3,8 @@ package psiphon
 import (
 	"context"
 	"encoding/base64"
+	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing/service"
 	"net"
 	"path/filepath"
 	"testing"
@@ -266,4 +268,36 @@ func TestH_PsiphonRejectsDetourConflicts(t *testing.T) {
 		_, err := NewOutbound(context.Background(), nil, log.NewNOPFactory().Logger(), "stage", options)
 		require.Error(t, err)
 	}
+}
+
+type hProtectedAndroidPlatform struct{ adapter.PlatformInterface }
+
+func (*hProtectedAndroidPlatform) UsePlatformAutoDetectInterfaceControl() bool { return true }
+func (*hProtectedAndroidPlatform) AutoDetectInterfaceControl(int) error        { return nil }
+func TestH_PsiphonDirectAndroidBootstrapDoesNotForceHTTPProxy(t *testing.T) {
+	ctx := service.ContextWith[adapter.PlatformInterface](context.Background(), &hProtectedAndroidPlatform{})
+	out, err := NewOutbound(ctx, nil, log.NewNOPFactory().Logger(), "free-psiphon", option.PsiphonOutboundOptions{DataDirectory: t.TempDir()})
+	require.NoError(t, err)
+	h := out.(*Outbound)
+	defer h.Close()
+	require.NotNil(t, h.psiphon.config.DeviceBinder)
+	require.NoError(t, h.PreStart())
+	require.Nil(t, h.bridge)
+	require.Empty(t, h.psiphon.config.UpstreamProxyURL, "direct bootstrap must retain UDP/QUIC and inproxy choices")
+}
+
+type hPsiphonOutboundManager struct{ adapter.OutboundManager }
+
+func TestH_PsiphonExplicitAndroidDetourKeepsProtectedBridge(t *testing.T) {
+	ctx := service.ContextWith[adapter.PlatformInterface](context.Background(), &hProtectedAndroidPlatform{})
+	ctx = service.ContextWith[adapter.OutboundManager](ctx, &hPsiphonOutboundManager{})
+	out, err := NewOutbound(ctx, nil, log.NewNOPFactory().Logger(), "chain-psiphon", option.PsiphonOutboundOptions{
+		DataDirectory: t.TempDir(), DialerOptions: option.DialerOptions{Detour: "proxy"},
+	})
+	require.NoError(t, err)
+	h := out.(*Outbound)
+	defer h.Close()
+	require.NoError(t, h.PreStart())
+	require.NotNil(t, h.bridge)
+	require.NotEmpty(t, h.psiphon.config.UpstreamProxyURL)
 }
