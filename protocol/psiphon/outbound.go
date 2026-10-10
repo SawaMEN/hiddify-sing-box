@@ -49,7 +49,8 @@ type Outbound struct {
 	logger    logger.ContextLogger
 	dialer    N.Dialer
 
-	ctx context.Context
+	ctx               context.Context
+	useUpstreamBridge bool
 
 	mu          sync.RWMutex
 	reconnectCh chan struct{}
@@ -103,22 +104,24 @@ func NewOutbound(ctx context.Context, _ adapter.Router, logger log.ContextLogger
 		return nil, err
 	}
 	outbound := &Outbound{
-		Adapter:     outbound.NewAdapterWithDialerOptions(C.TypePsiphon, tag, []string{N.NetworkTCP}, options.DialerOptions),
-		dialer:      outboundDialer,
-		psiphon:     psiphon,
-		logger:      logger,
-		ctx:         ctx,
-		dnsRouter:   service.FromContext[adapter.DNSRouter](ctx),
-		reconnectCh: make(chan struct{}, 1),
+		Adapter:           outbound.NewAdapterWithDialerOptions(C.TypePsiphon, tag, []string{N.NetworkTCP}, options.DialerOptions),
+		dialer:            outboundDialer,
+		psiphon:           psiphon,
+		logger:            logger,
+		ctx:               ctx,
+		dnsRouter:         service.FromContext[adapter.DNSRouter](ctx),
+		reconnectCh:       make(chan struct{}, 1),
+		useUpstreamBridge: options.Detour != "" || config.DeviceBinder == nil,
 	}
 
 	return outbound, nil
 
 }
 func (h *Outbound) PreStart() error {
-	// Use the bridge for ordinary Psiphon bootstrap even without a detour, so
-	// it goes through the same protected/marked dialer as other outbounds.
-	if h.psiphon.config.UpstreamProxyURL == "" && h.psiphon.config.InproxyClientPersonalCompartmentID == "" {
+	// Direct Android sockets are already protected by DeviceBinder. An upstream
+	// HTTP proxy disables Psiphon QUIC/inproxy transports and filters server entries.
+	// Retain the bridge for explicit detours and platforms requiring the core dialer.
+	if h.useUpstreamBridge && h.psiphon.config.UpstreamProxyURL == "" && h.psiphon.config.InproxyClientPersonalCompartmentID == "" {
 		bridge, err := newUpstreamBridge(h.ctx, func(ctx context.Context, network, address string) (net.Conn, error) {
 			return h.dialer.DialContext(ctx, network, M.ParseSocksaddr(address))
 		})

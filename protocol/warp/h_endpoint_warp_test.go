@@ -164,7 +164,6 @@ func TestH_GetWarpProfileFallsBackToAllOutbounds(t *testing.T) {
 }
 
 func TestH_GetWarpProfileWithoutOutboundManagerReturnsError(t *testing.T) {
-	t.Skip("BUG: GetWarpProfile returns (nil, nil) on failure when no OutboundManager is in ctx, so startHandler then dereferences a nil profile")
 	profile, err := GetWarpProfile(hTestContext(t), &option.WARPProfile{PrivateKey: "not-a-key"})
 	require.Error(t, err)
 	require.Nil(t, profile)
@@ -185,7 +184,8 @@ func TestH_NewWARPEndpointMetadata(t *testing.T) {
 	require.Equal(t, []string{N.NetworkTCP, N.NetworkUDP}, ep.Network())
 	require.Equal(t, []string{"wg-out", "profile-out"}, ep.Dependencies())
 	require.NoError(t, ep.Start(adapter.StartStateStart))
-	require.False(t, ep.mtx.TryLock(), "endpoint stays locked until the start handler runs")
+	require.False(t, ep.IsReady(), "readiness must return before bootstrap starts")
+	require.NoError(t, ep.Close())
 }
 
 func TestH_WARPStartFailureLeavesEndpointUninitialized(t *testing.T) {
@@ -249,7 +249,6 @@ func TestH_WARPMalformedCachedConfig(t *testing.T) {
 }
 
 func TestH_WARPConfigWithoutPortsDoesNotPanic(t *testing.T) {
-	t.Skip("BUG: startHandler calls rand.Intn(len(peer.Endpoint.Ports)) and Peers[0] unchecked; a WARP config with no ports/peers panics the goroutine")
 	options := option.WARPEndpointOptions{WARPConfig: hWARPConfig(t, `{"private_key":"x","peers":[{"endpoint":{"host":"h:1"}}]}`)}
 	options.Detour = "missing-detour"
 	options.ServerPort = 2408
@@ -263,4 +262,74 @@ func TestH_RegisterWARPEndpoint(t *testing.T) {
 	options, loaded := registry.CreateOptions(C.TypeWARP)
 	require.True(t, loaded)
 	require.IsType(t, &option.WARPEndpointOptions{}, options)
+}
+
+// Simulate Cloudflare registration that only returns when cancelled. Readiness,
+// dialing and Close must remain responsive, even if another WARP hop depends on it.
+type hBlockingProfileDialer struct {
+	adapter.Outbound
+	entered chan struct{}
+	once    sync.Once
+}
+
+func (d *hBlockingProfileDialer) DialContext(ctx context.Context, _ string, _ M.Socksaddr) (net.Conn, error) {
+	d.once.Do(func() { close(d.entered) })
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+func TestH_WARPReadinessAndCloseDuringBlockedRegistration(t *testing.T) {
+	detour := &hBlockingProfileDialer{entered: make(chan struct{})}
+	ctx := service.ContextWith[adapter.OutboundManager](context.Background(), &hBlockingProfileManager{detour: detour})
+	ep := hNewWARP(t, ctx, option.WARPEndpointOptions{Profile: option.WARPProfile{Detour: "bootstrap"}})
+	defer ep.Close()
+	require.NoError(t, ep.Start(adapter.StartStatePostStart))
+	select {
+	case <-detour.entered:
+	case <-time.After(time.Second):
+		t.Fatal("registration did not start")
+	}
+	checked := make(chan struct{})
+	go func() {
+		defer close(checked)
+		if ep.IsReady() {
+			t.Error("pending registration cannot be ready")
+		}
+		_, err := ep.DialContext(context.Background(), N.NetworkTCP, M.ParseSocksaddr("1.1.1.1:80"))
+		if err == nil {
+			t.Error("uninitialized endpoint must reject a dial")
+		}
+		_ = ep.DisplayType()
+	}()
+	select {
+	case <-checked:
+	case <-time.After(time.Second):
+		t.Fatal("readiness/dial blocked behind registration")
+	}
+	closed := make(chan error, 1)
+	go func() { closed <- ep.Close() }()
+	select {
+	case err := <-closed:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("Close did not cancel registration")
+	}
+	require.False(t, ep.IsReady())
+	require.ErrorIs(t, ep.Start(adapter.StartStatePostStart), net.ErrClosed)
+}
+
+type hBlockingProfileManager struct {
+	adapter.OutboundManager
+	detour *hBlockingProfileDialer
+}
+
+func (m *hBlockingProfileManager) Outbound(tag string) (adapter.Outbound, bool) {
+	return m.detour, tag == "bootstrap"
+}
+func (m *hBlockingProfileManager) Outbounds() []adapter.Outbound { return []adapter.Outbound{m.detour} }
+func TestH_WARPCloseBeforeBootstrapPreventsLateStart(t *testing.T) {
+	ep := hNewWARP(t, context.Background(), option.WARPEndpointOptions{WARPConfig: hWARPConfig(t, hWARPConfigJSON)})
+	require.NoError(t, ep.Close())
+	require.NotPanics(t, ep.startHandler)
+	require.False(t, ep.IsReady())
+	require.NoError(t, ep.Close())
 }
