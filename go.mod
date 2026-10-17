@@ -46,6 +46,7 @@ require (
 	github.com/miekg/dns v1.1.72
 	github.com/net2share/vaydns v0.2.8
 	github.com/openai/openai-go/v3 v3.26.0
+	github.com/openlibrecommunity/olcrtc v0.0.0-20260930093851-f3ad8fb7c0d0
 	github.com/oschwald/geoip2-golang v1.13.0
 	github.com/oschwald/maxminddb-golang v1.13.1
 	github.com/pierrec/lz4/v4 v4.1.26
