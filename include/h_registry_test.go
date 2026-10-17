@@ -45,6 +45,7 @@ func TestH_OutboundRegistryHiddifyTypes(t *testing.T) {
 		C.TypeXray:            &option.XrayOutboundOptions{},
 		C.TypeDNSTT:           &option.DnsttOptions{},
 		C.TypeGooseRelay:      &option.GooseRelayOptions{},
+		C.TypeOlcRTC:          &option.OlcRTCOutboundOptions{},
 		C.TypeBalancer:        &option.BalancerOutboundOptions{},
 		C.TypeMASQUE:          &option.MASQUEOutboundOptions{},
 		C.TypeLegacyWireGuard: &option.LegacyWireGuardOutboundOptions{},
