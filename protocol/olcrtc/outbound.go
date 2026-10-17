@@ -11,6 +11,7 @@ import (
     "fmt"
     "net"
     "net/netip"
+    goruntime "runtime"
     "sync"
     "syscall"
 
@@ -142,13 +143,17 @@ func NewOutbound(ctx context.Context, _ adapter.Router, _ log.ContextLogger, tag
     }
 
     network := service.FromContext[adapter.NetworkManager](ctx)
+    var protect control.Func
     if network != nil {
-        protect := network.ProtectFunc()
+        protect = network.ProtectFunc()
         if protect == nil && network.AutoDetectInterface() { protect = network.AutoDetectInterfaceFunc() }
-        if protect != nil {
-            runtime.SetProtector(ProtectFunc{protect: protect})
-        }
     }
+    // An Android VPN is unsafe if signaling or ICE sockets can recursively
+    // enter the tunnel. Do not silently start without socket protection.
+    if goruntime.GOOS == "android" && protect == nil {
+        return nil, errors.New("olcrtc: Android VPN socket protector is unavailable")
+    }
+    if protect != nil { runtime.SetProtector(ProtectFunc{protect: protect}) }
     // Loopback sockets are reachable by other Android applications. Authenticate
     // every local SOCKS session with freshly generated, unguessable credentials.
     tokens := make([]byte, 32)
