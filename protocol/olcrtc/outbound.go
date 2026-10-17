@@ -11,6 +11,7 @@ import (
     "fmt"
     "net"
     "net/netip"
+    "strconv"
     goruntime "runtime"
     "sync"
     "syscall"
@@ -99,6 +100,10 @@ func validate(o option.OlcRTCOutboundOptions) error {
     if o.DNSServer != "" {
         host, port, err := net.SplitHostPort(o.DNSServer)
         if err != nil || host == "" || port == "" { return errors.New("olcrtc: invalid DNS server") }
+        numericPort, parseErr := strconv.Atoi(port)
+        if parseErr != nil || numericPort < 1 || numericPort > 65535 {
+            return errors.New("olcrtc: invalid DNS server port")
+        }
     }
     return nil
 }
