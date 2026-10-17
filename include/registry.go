@@ -35,6 +35,7 @@ import (
 	"github.com/sagernet/sing-box/protocol/mieru"
 	"github.com/sagernet/sing-box/protocol/mixed"
 	"github.com/sagernet/sing-box/protocol/naive"
+	"github.com/sagernet/sing-box/protocol/olcrtc"
 	"github.com/sagernet/sing-box/protocol/openflux"
 	"github.com/sagernet/sing-box/protocol/pingtunnel"
 	"github.com/sagernet/sing-box/protocol/psiphon"
@@ -124,6 +125,7 @@ func OutboundRegistry() *outbound.Registry {
 	mieru.RegisterOutbound(registry)
 	sudoku.RegisterOutbound(registry)
 	openflux.RegisterOutbound(registry)
+	olcrtc.RegisterOutbound(registry)
 	fptn.RegisterOutbound(registry)
 	pingtunnel.RegisterOutbound(registry)
 	hinvalid.RegisterOutbound(registry)
