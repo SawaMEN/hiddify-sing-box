@@ -12,7 +12,6 @@ import (
     "net/netip"
     "sync"
     "syscall"
-    "time"
 
     upstream "github.com/openlibrecommunity/olcrtc/mobile"
     "github.com/sagernet/sing-box/adapter"
@@ -219,6 +218,3 @@ func (h *Outbound) Close() error {
     return h.runtime.Stop(connectionStopMS)
 }
 
-// Explicitly retain the compile-time context dependency for Go versions before
-// Go 1.26's structured asynchronous cancellation API.
-var _ = time.Second
