@@ -5,6 +5,7 @@ package olcrtc
 
 import (
     "context"
+    "crypto/rand"
     "encoding/hex"
     "errors"
     "fmt"
@@ -69,6 +70,8 @@ type Outbound struct {
     closed bool
     provider string
     transport string
+    username string
+    password string
 }
 
 func validate(o option.OlcRTCOutboundOptions) error {
@@ -84,7 +87,8 @@ func validate(o option.OlcRTCOutboundOptions) error {
         (o.Provider == "wbstream" && o.Transport == "datachannel" && o.ProviderToken == "") {
         return errors.New("olcrtc: transport cannot operate with this provider without additional credentials")
     }
-    if o.Provider != "none" && (o.RoomID == "" || len(o.RoomID) > 2048) {
+    if o.Provider == "none" { return errors.New("olcrtc: direct engine provider requires an explicit service configuration") }
+    if o.RoomID == "" || len(o.RoomID) > 2048 {
         return errors.New("olcrtc: invalid room identifier")
     }
     key, err := hex.DecodeString(o.Key)
@@ -145,11 +149,19 @@ func NewOutbound(ctx context.Context, _ adapter.Router, _ log.ContextLogger, tag
             runtime.SetProtector(ProtectFunc{protect: protect})
         }
     }
+    // Loopback sockets are reachable by other Android applications. Authenticate
+    // every local SOCKS session with freshly generated, unguessable credentials.
+    tokens := make([]byte, 32)
+    if _, err := rand.Read(tokens); err != nil { return nil, errors.New("olcrtc: unable to create SOCKS credentials") }
+    username := hex.EncodeToString(tokens[:16])
+    password := hex.EncodeToString(tokens[16:])
+    if err := runtime.SetSocksCredentials(username, password); err != nil { return nil, err }
     life, cancel := context.WithCancel(ctx)
     return &Outbound{
         Adapter: outbound.NewAdapter(C.TypeOlcRTC, tag, []string{N.NetworkTCP, N.NetworkUDP}, nil),
         runtime: runtime, context: life, cancel: cancel,
         provider: options.Provider, transport: options.Transport,
+        username: username, password: password,
     }, nil
 }
 
@@ -166,7 +178,7 @@ func (h *Outbound) startLocked() error {
     _ = listener.Close()
     if err := h.runtime.SetSocksPort(port); err != nil { return err }
     if err := h.runtime.Start(); err != nil { return fmt.Errorf("olcrtc: startup failed: %w", err) }
-    h.socks = socks.NewClient(loopbackDialer{}, M.SocksaddrFrom(netip.MustParseAddr("127.0.0.1"), uint16(port)), socks.Version5, "", "")
+    h.socks = socks.NewClient(loopbackDialer{}, M.SocksaddrFrom(netip.MustParseAddr("127.0.0.1"), uint16(port)), socks.Version5, h.username, h.password)
     return nil
 }
 
