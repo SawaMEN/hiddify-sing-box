@@ -2,6 +2,7 @@ package olcrtc
 
 import (
     "strings"
+    "context"
     "testing"
 
     "github.com/sagernet/sing-box/option"
@@ -38,5 +39,23 @@ func TestInvalidOlcRtcOutbound(t *testing.T) {
         err := validate(o)
         if err == nil { t.Fatal("accepted invalid configuration") }
         if strings.Contains(err.Error(), o.Key) { t.Fatal("credential leaked in error") }
+    }
+}
+
+func TestOlcRTCConstructorDefaultsAndPrivateLoopbackAuth(t *testing.T) {
+    for _, transport := range []string{"datachannel", "vp8channel", "seichannel", "videochannel"} {
+        result, err := NewOutbound(context.Background(), nil, nil, "olcrtc-test", option.OlcRTCOutboundOptions{
+            Provider: "jitsi", Transport: transport, RoomID: "https://meet.jit.si/test-room", Key: fixtureKey,
+        })
+        if err != nil { t.Fatalf("%s constructor failed: %v", transport, err) }
+        outbound, ok := result.(*Outbound)
+        if !ok || len(outbound.username) != 32 || len(outbound.password) != 32 || outbound.username == outbound.password {
+            t.Fatalf("%s did not generate isolated SOCKS credentials", transport)
+        }
+        if outbound.runtime.IsRunning() {
+            t.Fatalf("%s constructor unexpectedly started WebRTC traffic", transport)
+        }
+        if err := outbound.Close(); err != nil { t.Fatalf("close %s: %v", transport, err) }
+        if err := outbound.Close(); err != nil { t.Fatalf("idempotent close %s: %v", transport, err) }
     }
 }
