@@ -62,3 +62,20 @@ func TestSnellV5QUICProxyRejectsNonQUIC(t *testing.T) {
 		t.Fatal("non-QUIC initial accepted")
 	}
 }
+
+func TestSnellQUICProxyUserIdentity(t *testing.T) {
+	single := &quicProxyServer{users: map[string]string{"key-a":"alice"}}
+	if name, ok := single.matchQUICUser(""); !ok || name != "alice" {
+		t.Fatalf("single-user Surge fallback should be accounted as alice: %q, %v", name, ok)
+	}
+	multi := &quicProxyServer{users: map[string]string{"key-a":"alice","key-b":"bob"}}
+	if _, ok := multi.matchQUICUser(""); ok {
+		t.Fatal("PSK-only QUIC bypassed multi-user authentication")
+	}
+	if name, ok := multi.matchQUICUser("key-b"); !ok || name != "bob" {
+		t.Fatalf("authenticated QUIC user mismatch: %q, %v", name, ok)
+	}
+	if _, ok := multi.matchQUICUser("unknown"); ok {
+		t.Fatal("unrecognized QUIC user was accepted")
+	}
+}

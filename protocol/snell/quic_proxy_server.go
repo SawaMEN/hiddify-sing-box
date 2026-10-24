@@ -134,14 +134,8 @@ func (s *quicProxyServer) handle(packet *buf.Buffer, source M.Socksaddr) {
 	s.mu.Unlock()
 	dest, userKey, initial, err := decodeQUICProxyPacket(s.psk, data)
 	if err != nil { return }
-	name := ""
-	if len(s.users) > 0 {
-		var ok bool
-		name, ok = s.users[userKey]
-		// Multi-user QUIC must never silently fall back to PSK-only access:
-		// doing so would bypass panel user policy and traffic accounting.
-		if !ok { return }
-	}
+	name, allowed := s.matchQUICUser(userKey)
+	if !allowed { return }
 	flow := &quicProxySession{server:s, key:key, source:source, destination:dest, input:make(chan []byte, 64), done:make(chan struct{})}
 	flow.lastSeen.Store(time.Now().UnixNano())
 	s.mu.Lock()
@@ -157,6 +151,24 @@ func (s *quicProxyServer) handle(packet *buf.Buffer, source M.Socksaddr) {
 	metadata := adapter.InboundContext{Inbound:s.tag, InboundType:"snell", Source:source, Destination:dest, User:name}
 	ctx := log.ContextWithNewID(s.ctx)
 	go s.router.RoutePacketConnectionEx(ctx, flow, metadata, func(error) { _ = flow.Close() })
+}
+
+// A PSK-only Surge v5 client can be attributed to the sole enabled user.
+// With multiple users the userkey is mandatory to avoid bypassing quotas.
+func (s *quicProxyServer) matchQUICUser(userKey string) (string, bool) {
+	if len(s.users) == 0 {
+		return "", true
+	}
+	name, exists := s.users[userKey]
+	if exists {
+		return name, true
+	}
+	if userKey == "" && len(s.users) == 1 {
+		for _, only := range s.users {
+			return only, true
+		}
+	}
+	return "", false
 }
 
 func (s *quicProxyServer) reap() {
