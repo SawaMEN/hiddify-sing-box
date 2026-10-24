@@ -31,6 +31,9 @@ type Outbound struct {
 	client     snellClient
 	serverAddr M.Socksaddr
 	reuse      bool
+	quicProxy bool
+	quicPSK []byte
+	quicUserKey []byte
 }
 
 var (
@@ -56,7 +59,7 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 	serverAddr := options.ServerOptions.Build()
 	var client snellClient
 	switch options.Version {
-	case 4:
+	case 4, 5:
 		var obfsMode snellprotocol.ObfsMode
 		obfsMode, err = snellprotocol.ParseObfsMode(options.ObfsOptions.ObfsMode)
 		if err != nil {
@@ -100,6 +103,9 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 		client:     client,
 		serverAddr: serverAddr,
 		reuse:      options.Reuse,
+		quicProxy: options.Version == 5,
+		quicPSK: []byte(options.PSK),
+		quicUserKey: []byte(options.UserKey),
 	}
 	return outbound, nil
 }
@@ -131,6 +137,9 @@ func (h *Outbound) DialContext(ctx context.Context, network string, destination 
 }
 
 func (h *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
+	if h.quicProxy {
+		return &quicProxyLazyClient{ctx: ctx, outbound: h, destination: destination, ready: make(chan struct{})}, nil
+	}
 	ctx, metadata := adapter.ExtendContext(ctx)
 	metadata.Outbound = h.Tag()
 	metadata.Destination = destination
