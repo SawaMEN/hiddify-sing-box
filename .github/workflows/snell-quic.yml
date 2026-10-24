@@ -1,0 +1,22 @@
+name: Snell QUIC Proxy Tests
+on:
+  push:
+    paths:
+      - 'protocol/snell/**'
+      - 'option/snell.go'
+      - '.github/workflows/snell-quic.yml'
+  pull_request:
+    paths:
+      - 'protocol/snell/**'
+      - 'option/snell.go'
+      - '.github/workflows/snell-quic.yml'
+jobs:
+  snell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Run Snell and option tests
+        run: go test ./protocol/snell ./option
