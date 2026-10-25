@@ -26,13 +26,13 @@ func RegisterOutbound(registry *outbound.Registry) {
 
 type Outbound struct {
 	outbound.Adapter
-	logger     logger.ContextLogger
-	dialer     N.Dialer
-	client     snellClient
-	serverAddr M.Socksaddr
-	reuse      bool
-	quicProxy bool
-	quicPSK []byte
+	logger      logger.ContextLogger
+	dialer      N.Dialer
+	client      snellClient
+	serverAddr  M.Socksaddr
+	reuse       bool
+	quicProxy   bool
+	quicPSK     []byte
 	quicUserKey []byte
 }
 
@@ -97,14 +97,14 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 		return nil, err
 	}
 	outbound := &Outbound{
-		Adapter:    outbound.NewAdapterWithDialerOptions(C.TypeSnell, tag, options.Network.Build(), options.DialerOptions),
-		logger:     logger,
-		dialer:     outboundDialer,
-		client:     client,
-		serverAddr: serverAddr,
-		reuse:      options.Reuse,
-		quicProxy: options.Version == 5,
-		quicPSK: []byte(options.PSK),
+		Adapter:     outbound.NewAdapterWithDialerOptions(C.TypeSnell, tag, options.Network.Build(), options.DialerOptions),
+		logger:      logger,
+		dialer:      outboundDialer,
+		client:      client,
+		serverAddr:  serverAddr,
+		reuse:       options.Reuse,
+		quicProxy:   options.Version == 5,
+		quicPSK:     []byte(options.PSK),
 		quicUserKey: []byte(options.UserKey),
 	}
 	return outbound, nil
@@ -120,6 +120,9 @@ func (h *Outbound) DialContext(ctx context.Context, network string, destination 
 		h.logger.InfoContext(ctx, "outbound connection to ", destination)
 		return h.client.DialContext(ctx, destination)
 	case N.NetworkUDP:
+		if h.quicProxy {
+			return bufio.NewBindPacketConn(newQUICProxyLazyClient(ctx, h, destination), destination), nil
+		}
 		h.logger.InfoContext(ctx, "outbound packet connection to ", destination)
 		conn, err := h.dialer.DialContext(ctx, N.NetworkTCP, h.serverAddr)
 		if err != nil {
@@ -138,7 +141,7 @@ func (h *Outbound) DialContext(ctx context.Context, network string, destination 
 
 func (h *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
 	if h.quicProxy {
-		return &quicProxyLazyClient{ctx: ctx, outbound: h, destination: destination, ready: make(chan struct{})}, nil
+		return newQUICProxyLazyClient(ctx, h, destination), nil
 	}
 	ctx, metadata := adapter.ExtendContext(ctx)
 	metadata.Outbound = h.Tag()

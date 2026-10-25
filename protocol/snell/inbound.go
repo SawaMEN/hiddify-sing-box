@@ -63,6 +63,9 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 	if options.QuicProxy {
 		inbound.quicProxy = newQUICProxyServer(ctx, inbound.router, logger, tag, []byte(options.PSK), options.Users)
 	}
+	if options.QuicProxy && options.Version != 5 {
+		return nil, E.New("snell: QUIC Proxy requires version 5")
+	}
 	var err error
 	switch options.Version {
 	case 5:

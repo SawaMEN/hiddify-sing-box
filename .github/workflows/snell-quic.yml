@@ -19,8 +19,17 @@ jobs:
           submodules: recursive
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version: 1.26.9
+      - name: Fetch pinned official Snell v5 server
+        shell: bash
+        run: |
+          curl --fail --location --retry 3 https://dl.nssurge.com/snell/snell-server-v5.0.1-linux-amd64.zip -o "$RUNNER_TEMP/snell-v5.zip"
+          echo "9bea1c2b9e35b73b31634856c04d18c393072b9e5dcde6a32781d8b8f908c539  $RUNNER_TEMP/snell-v5.zip" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/snell-v5.zip" -d "$RUNNER_TEMP/snell-v5"
+          chmod +x "$RUNNER_TEMP/snell-v5/snell-server"
       - name: Run Snell and option tests
-        run: go test -race ./protocol/snell ./option -count=1 -timeout 5m
+        run: go test -race ./protocol/snell ./option -count=1 -timeout 10m
         env:
           SNELL_V6_IDLE_TEST: 130s
+          SNELL_V5_SOAK_TEST: 3m
+          SNELL_V5_SERVER: ${{ runner.temp }}/snell-v5/snell-server
