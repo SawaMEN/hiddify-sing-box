@@ -1,4 +1,4 @@
-name: Snell QUIC Proxy Tests
+name: Snell Protocol Tests
 on:
   push:
     paths:
@@ -21,4 +21,6 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Run Snell and option tests
-        run: go test ./protocol/snell ./option
+        run: go test -race ./protocol/snell ./option -count=1 -timeout 5m
+        env:
+          SNELL_V6_IDLE_TEST: 130s

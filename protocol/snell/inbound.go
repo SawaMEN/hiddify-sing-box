@@ -32,12 +32,12 @@ var _ adapter.TCPInjectableInbound = (*Inbound)(nil)
 
 type Inbound struct {
 	inbound.Adapter
-	router   adapter.ConnectionRouterEx
-	logger   logger.ContextLogger
-	listener *listener.Listener
+	router    adapter.ConnectionRouterEx
+	logger    logger.ContextLogger
+	listener  *listener.Listener
 	quicProxy *quicProxyServer
-	service  snellprotocol.Service
-	users    []option.SnellUser
+	service   snellprotocol.Service
+	users     []option.SnellUser
 }
 
 func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.SnellInboundOptions) (adapter.Inbound, error) {
@@ -203,16 +203,15 @@ func (h *Inbound) newConnection(ctx context.Context, conn net.Conn, metadata ada
 	metadata.InboundType = h.Type()
 	if len(h.users) > 0 {
 		userIndex, loaded := auth.UserFromContext[int](ctx)
-		if !loaded {
+		if !loaded || userIndex < 0 || userIndex >= len(h.users) {
 			N.CloseOnHandshakeFailure(conn, onClose, os.ErrInvalid)
 			return
 		}
 		user := h.users[userIndex].Name
 		if user == "" {
 			user = F.ToString(userIndex)
-		} else {
-			metadata.User = user
 		}
+		metadata.User = user
 		h.logger.InfoContext(ctx, "[", user, "] inbound connection to ", metadata.Destination)
 	} else {
 		h.logger.InfoContext(ctx, "inbound connection to ", metadata.Destination)
@@ -227,16 +226,15 @@ func (h *Inbound) newPacketConnection(ctx context.Context, conn N.PacketConn, me
 	metadata.UDPDisableDomainUnmapping = true
 	if len(h.users) > 0 {
 		userIndex, loaded := auth.UserFromContext[int](ctx)
-		if !loaded {
+		if !loaded || userIndex < 0 || userIndex >= len(h.users) {
 			N.CloseOnHandshakeFailure(conn, onClose, os.ErrInvalid)
 			return
 		}
 		user := h.users[userIndex].Name
 		if user == "" {
 			user = F.ToString(userIndex)
-		} else {
-			metadata.User = user
 		}
+		metadata.User = user
 		h.logger.InfoContext(ctx, "[", user, "] inbound packet connection from ", metadata.Source)
 	} else {
 		h.logger.InfoContext(ctx, "inbound packet connection from ", metadata.Source)
