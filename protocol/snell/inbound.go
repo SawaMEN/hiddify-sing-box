@@ -16,6 +16,7 @@ import (
 	"github.com/sagernet/sing-snell/snellv5"
 	"github.com/sagernet/sing-snell/snellv6"
 	"github.com/sagernet/sing/common/auth"
+	"github.com/sagernet/sing/common/buf"
 	E "github.com/sagernet/sing/common/exceptions"
 	F "github.com/sagernet/sing/common/format"
 	"github.com/sagernet/sing/common/logger"
@@ -31,11 +32,12 @@ var _ adapter.TCPInjectableInbound = (*Inbound)(nil)
 
 type Inbound struct {
 	inbound.Adapter
-	router   adapter.ConnectionRouterEx
-	logger   logger.ContextLogger
-	listener *listener.Listener
-	service  snellprotocol.Service
-	users    []option.SnellUser
+	router    adapter.ConnectionRouterEx
+	logger    logger.ContextLogger
+	listener  *listener.Listener
+	quicProxy *quicProxyServer
+	service   snellprotocol.Service
+	users     []option.SnellUser
 }
 
 func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.SnellInboundOptions) (adapter.Inbound, error) {
@@ -54,6 +56,12 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 			userList[index] = index
 			keyList[index] = []byte(user.UserKey)
 		}
+	}
+	if options.QuicProxy && options.Version != 5 {
+		return nil, E.New("snell: QUIC Proxy requires Snell v5")
+	}
+	if options.QuicProxy {
+		inbound.quicProxy = newQUICProxyServer(ctx, inbound.router, logger, tag, []byte(options.PSK), options.Users)
 	}
 	var err error
 	switch options.Version {
@@ -109,12 +117,18 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 	if err != nil {
 		return nil, err
 	}
+	listenNetworks := []string{N.NetworkTCP}
+	if inbound.quicProxy != nil {
+		listenNetworks = append(listenNetworks, N.NetworkUDP)
+	}
 	inbound.listener = listener.New(listener.Options{
-		Context:           ctx,
-		Logger:            logger,
-		Network:           []string{N.NetworkTCP},
-		Listen:            options.ListenOptions,
-		ConnectionHandler: inbound,
+		Context:                  ctx,
+		Logger:                   logger,
+		Network:                  listenNetworks,
+		Listen:                   options.ListenOptions,
+		ConnectionHandler:        inbound,
+		PacketHandler:            inbound,
+		ThreadUnsafePacketWriter: true,
 	})
 	return inbound, nil
 }
@@ -123,11 +137,31 @@ func (h *Inbound) Start(stage adapter.StartStage) error {
 	if stage != adapter.StartStateStart {
 		return nil
 	}
-	return h.listener.Start()
+	if err := h.listener.Start(); err != nil {
+		_ = h.listener.Close()
+		return err
+	}
+	if h.quicProxy != nil {
+		h.quicProxy.start(h.listener.PacketWriter())
+	}
+	return nil
 }
 
 func (h *Inbound) Close() error {
+	if h.quicProxy != nil {
+		h.quicProxy.close()
+	}
 	return h.listener.Close()
+}
+
+// NewPacket serves the optional v5 UDP/UDP QUIC Proxy path.
+// TCP and ordinary Snell UDP-over-TCP continue through sing-snell.
+func (h *Inbound) NewPacket(packet *buf.Buffer, source M.Socksaddr) {
+	if h.quicProxy == nil {
+		packet.Release()
+		return
+	}
+	h.quicProxy.handle(packet, source)
 }
 
 func (h *Inbound) NewConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
@@ -169,16 +203,15 @@ func (h *Inbound) newConnection(ctx context.Context, conn net.Conn, metadata ada
 	metadata.InboundType = h.Type()
 	if len(h.users) > 0 {
 		userIndex, loaded := auth.UserFromContext[int](ctx)
-		if !loaded {
+		if !loaded || userIndex < 0 || userIndex >= len(h.users) {
 			N.CloseOnHandshakeFailure(conn, onClose, os.ErrInvalid)
 			return
 		}
 		user := h.users[userIndex].Name
 		if user == "" {
 			user = F.ToString(userIndex)
-		} else {
-			metadata.User = user
 		}
+		metadata.User = user
 		h.logger.InfoContext(ctx, "[", user, "] inbound connection to ", metadata.Destination)
 	} else {
 		h.logger.InfoContext(ctx, "inbound connection to ", metadata.Destination)
@@ -193,16 +226,15 @@ func (h *Inbound) newPacketConnection(ctx context.Context, conn N.PacketConn, me
 	metadata.UDPDisableDomainUnmapping = true
 	if len(h.users) > 0 {
 		userIndex, loaded := auth.UserFromContext[int](ctx)
-		if !loaded {
+		if !loaded || userIndex < 0 || userIndex >= len(h.users) {
 			N.CloseOnHandshakeFailure(conn, onClose, os.ErrInvalid)
 			return
 		}
 		user := h.users[userIndex].Name
 		if user == "" {
 			user = F.ToString(userIndex)
-		} else {
-			metadata.User = user
 		}
+		metadata.User = user
 		h.logger.InfoContext(ctx, "[", user, "] inbound packet connection from ", metadata.Source)
 	} else {
 		h.logger.InfoContext(ctx, "inbound packet connection from ", metadata.Source)
