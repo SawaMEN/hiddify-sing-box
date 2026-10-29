@@ -52,6 +52,16 @@ type Inbound struct {
 }
 
 func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.VLESSInboundOptions) (adapter.Inbound, error) {
+	if options.Transport != nil && options.Transport.Type == "xdrive" {
+		if options.Decryption == "" || options.Decryption == "none" {
+			return nil, E.New("XDrive requires VLESS decryption")
+		}
+		for _, user := range options.Users {
+			if user.Flow != "" {
+				return nil, E.New("XDrive requires empty VLESS flow")
+			}
+		}
+	}
 	inbound := &Inbound{
 		Adapter: inbound.NewAdapter(C.TypeVLESS, tag),
 		ctx:     ctx,
@@ -122,6 +132,9 @@ func (h *Inbound) Start(stage adapter.StartStage) error {
 	}
 	if h.transport == nil {
 		return h.listener.Start()
+	}
+	if starter, ok := h.transport.(interface{ Start() error }); ok {
+		return starter.Start()
 	}
 	if common.Contains(h.transport.Network(), N.NetworkTCP) {
 		tcpListener, err := h.listener.ListenTCP()

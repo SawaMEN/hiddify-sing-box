@@ -16,6 +16,7 @@ import (
 )
 
 type _V2RayTransportOptions struct {
+	XDriveOptions      V2RayXDriveOptions      `json:"-"`
 	Type               string                  `json:"type" enum:"http,ws,quic,grpc,httpupgrade"`
 	HTTPOptions        V2RayHTTPOptions        `json:"-"`
 	WebsocketOptions   V2RayWebsocketOptions   `json:"-"`
@@ -32,6 +33,8 @@ type V2RayTransportOptions _V2RayTransportOptions
 func (o V2RayTransportOptions) MarshalJSON() ([]byte, error) {
 	var v any
 	switch o.Type {
+	case "xdrive":
+		v = o.XDriveOptions
 	case C.V2RayTransportTypeHTTP:
 		v = o.HTTPOptions
 	case C.V2RayTransportTypeWebsocket:
@@ -62,6 +65,8 @@ func (o *V2RayTransportOptions) UnmarshalJSON(bytes []byte) error {
 	}
 	var v any
 	switch o.Type {
+	case "xdrive":
+		v = &o.XDriveOptions
 	case C.V2RayTransportTypeHTTP:
 		v = &o.HTTPOptions
 	case C.V2RayTransportTypeWebsocket:
@@ -89,6 +94,7 @@ func (o *V2RayTransportOptions) UnmarshalJSON(bytes []byte) error {
 func (o V2RayTransportOptions) DescribeSchema(builder schema.Builder) (*schema.Node, error) {
 	return builder.Define("V2RayTransport", func() (*schema.Node, error) {
 		return schema.DiscriminatedUnion(builder, "type", true, []schema.UnionVariant{
+			{Value: "xdrive", StructType: reflect.TypeFor[V2RayXDriveOptions]()},
 			{Value: C.V2RayTransportTypeHTTP, StructType: reflect.TypeFor[V2RayHTTPOptions]()},
 			{Value: C.V2RayTransportTypeWebsocket, StructType: reflect.TypeFor[V2RayWebsocketOptions]()},
 			{Value: C.V2RayTransportTypeQUIC, StructType: reflect.TypeFor[V2RayQUICOptions]()},

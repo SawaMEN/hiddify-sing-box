@@ -44,6 +44,9 @@ type Inbound struct {
 }
 
 func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.TrojanInboundOptions) (adapter.Inbound, error) {
+	if options.Transport != nil && options.Transport.Type == "xdrive" {
+		return nil, E.New("XDrive requires VLESS")
+	}
 	inbound := &Inbound{
 		Adapter: inbound.NewAdapter(C.TypeTrojan, tag),
 		router:  router,
