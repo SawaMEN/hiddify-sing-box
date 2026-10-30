@@ -1,8 +1,9 @@
 module github.com/sagernet/sing-box
 
-go 1.26.8
+go 1.26.10
 
 require (
+	github.com/SawaMEN/VetroffProxy v0.1.1-0.20261030200246-4910d6afa077
 	filippo.io/edwards25519 v1.2.0
 	github.com/Diniboy1123/connect-ip-go v0.0.0-20260613064811-66cba32d7d33
 	github.com/Psiphon-Labs/psiphon-tunnel-core v1.0.11-0.20260126173038-c86a1497a760
