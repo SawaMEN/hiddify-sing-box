@@ -64,6 +64,7 @@ const (
 	TypeSmartDNSPool   = "smart_dns_pool"  //H — local recursive-resolver pool with AIMD throttling + recovery probing (github.com/hiddify/hmrd_multi_resolver_dns)
 	TypeTrustTunnel    = "trusttunnel"
 	TypeOlcRTC         = "olcrtc"
+	TypeVetrOFF        = "vetroff"
 )
 
 const (
@@ -169,6 +170,8 @@ func ProxyDisplayName(proxyType string) string {
 		return "TrustTunnel"
 	case TypeOlcRTC:
 		return "olcRTC"
+	case TypeVetrOFF:
+		return "VetrOFFProxy"
 	case TypeSelector:
 		return "Selector"
 	case TypeURLTest:
