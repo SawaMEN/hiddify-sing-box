@@ -53,6 +53,7 @@ import (
 	"github.com/sagernet/sing-box/protocol/tunnel"
 	"github.com/sagernet/sing-box/protocol/vless"
 	"github.com/sagernet/sing-box/protocol/vmess"
+	"github.com/sagernet/sing-box/protocol/vetroff"
 	legacyWireguard "github.com/sagernet/sing-box/protocol/wireguard"
 	"github.com/sagernet/sing-box/service/api"
 	originca "github.com/sagernet/sing-box/service/origin_ca"
@@ -126,6 +127,7 @@ func OutboundRegistry() *outbound.Registry {
 	sudoku.RegisterOutbound(registry)
 	openflux.RegisterOutbound(registry)
 	olcrtc.RegisterOutbound(registry)
+	vetroff.RegisterOutbound(registry)
 	fptn.RegisterOutbound(registry)
 	pingtunnel.RegisterOutbound(registry)
 	hinvalid.RegisterOutbound(registry)
