@@ -56,6 +56,14 @@ type Outbound struct {
 }
 
 func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.VLESSOutboundOptions) (adapter.Outbound, error) {
+	if options.Transport != nil && options.Transport.Type == "xdrive" {
+		if options.Encryption == "" || options.Encryption == "none" {
+			return nil, E.New("XDrive requires VLESS encryption")
+		}
+		if options.Flow != "" {
+			return nil, E.New("XDrive requires empty VLESS flow")
+		}
+	}
 	outboundDialer, err := dialer.New(ctx, options.DialerOptions, options.ServerIsDomain())
 	if err != nil {
 		return nil, err

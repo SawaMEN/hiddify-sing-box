@@ -11,6 +11,7 @@ import (
 	"github.com/sagernet/sing-box/transport/v2rayhttpupgrade"
 	"github.com/sagernet/sing-box/transport/v2rayraw"
 	"github.com/sagernet/sing-box/transport/v2raywebsocket"
+	xdrive "github.com/sagernet/sing-box/transport/v2rayxdrive"
 	xhttp "github.com/sagernet/sing-box/transport/v2rayxhttp"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/logger"
@@ -28,6 +29,8 @@ func NewServerTransport(ctx context.Context, logger logger.ContextLogger, option
 		return nil, nil
 	}
 	switch options.Type {
+	case "xdrive":
+		return xdrive.NewServer(ctx, logger, options.XDriveOptions, tlsConfig, handler)
 	case C.V2RayTransportTypeHTTP:
 		return v2rayhttp.NewServer(ctx, logger, options.HTTPOptions, tlsConfig, handler)
 	case C.V2RayTransportTypeWebsocket:
@@ -56,6 +59,8 @@ func NewClientTransport(ctx context.Context, dialer N.Dialer, serverAddr M.Socks
 	}
 	switch options.Type {
 
+	case "xdrive":
+		return xdrive.NewClient(ctx, dialer, serverAddr, options.XDriveOptions, tlsConfig)
 	case C.V2RayTransportTypeHTTP:
 		return v2rayhttp.NewClient(ctx, dialer, serverAddr, options.HTTPOptions, tlsConfig)
 	case C.V2RayTransportTypeGRPC:
