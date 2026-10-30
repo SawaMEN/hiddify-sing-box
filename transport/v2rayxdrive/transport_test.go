@@ -156,3 +156,33 @@ func TestNativeXDriveJSONCodec(t *testing.T) {
 		t.Fatalf("native options lost: %s", data)
 	}
 }
+
+func TestDialContextCancellationKeepsEstablishedStream(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	config := option.V2RayXDriveOptions{Service: "local", RemoteFolder: t.TempDir(), FlushIntervalMs: 1, PollIntervalMs: 2, MaxPollIntervalMs: 5}
+	server, err := NewServer(ctx, nil, config, nil, echoHandler{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = server.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	client, err := NewClient(ctx, &testDialer{}, M.Socksaddr{}, config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	dialCtx, endDial := context.WithCancel(ctx)
+	conn, err := client.DialContext(dialCtx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	endDial()
+	if _, err = conn.Write([]byte("after-dial-cancel")); err != nil {
+		t.Fatal(err)
+	}
+	expectRead(t, conn, "after-dial-cancel")
+}

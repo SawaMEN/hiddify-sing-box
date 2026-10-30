@@ -87,6 +87,10 @@ func dialSession(ctx context.Context, streamSettings *streamOptions) (net.Conn, 
 		return nil, err
 	}
 
+	lifetime := streamSettings.ctx
+	if lifetime == nil {
+		lifetime = context.Background()
+	}
 	p := paramsFromConfig(config)
 	var announce []byte
 	var r ring
@@ -107,12 +111,12 @@ func dialSession(ctx context.Context, streamSettings *streamOptions) (net.Conn, 
 
 	if ok {
 		errors.LogInfo(ctx, "opened session ", session, " in ", len(r.Up.Slots), " slots")
-		return newSlotConn(ctx, slots, r.Up, r.Down, p, func() {
+		return newSlotConn(lifetime, slots, r.Up, r.Down, p, func() {
 			storage.Close()
 		}), nil
 	}
 	errors.LogInfo(ctx, "opened session ", session)
-	return newConn(ctx, storage,
+	return newConn(lifetime, storage,
 		uplinkPrefix(session), downlinkPrefix(session), p, func() {
 			storage.Close()
 		}), nil
@@ -125,10 +129,12 @@ type Listener struct {
 	addConn func(net.Conn)
 	params
 
-	mu        sync.Mutex
-	active    map[string]bool
-	handled   map[string]time.Time
-	idleSince map[string]time.Time
+	loops       sync.WaitGroup
+	connections map[*Conn]struct{}
+	mu          sync.Mutex
+	active      map[string]bool
+	handled     map[string]time.Time
+	idleSince   map[string]time.Time
 }
 
 func listenSessions(ctx context.Context, streamSettings *streamOptions, addConn func(net.Conn)) (*Listener, error) {
@@ -144,18 +150,20 @@ func listenSessions(ctx context.Context, streamSettings *streamOptions, addConn 
 
 	listenerCtx, cancel := context.WithCancel(ctx)
 	listener := &Listener{
-		ctx:       listenerCtx,
-		cancel:    cancel,
-		storage:   storage,
-		addConn:   addConn,
-		params:    paramsFromConfig(config),
-		active:    make(map[string]bool),
-		handled:   make(map[string]time.Time),
-		idleSince: make(map[string]time.Time),
+		ctx:         listenerCtx,
+		cancel:      cancel,
+		storage:     storage,
+		addConn:     addConn,
+		params:      paramsFromConfig(config),
+		active:      make(map[string]bool),
+		connections: make(map[*Conn]struct{}),
+		handled:     make(map[string]time.Time),
+		idleSince:   make(map[string]time.Time),
 	}
 
-	go listener.acceptLoop(ctx)
-	go listener.collectLoop(ctx)
+	listener.loops.Add(2)
+	go func() { defer listener.loops.Done(); listener.acceptLoop(ctx) }()
+	go func() { defer listener.loops.Done(); listener.collectLoop(ctx) }()
 
 	return listener, nil
 }
@@ -241,20 +249,30 @@ func (l *Listener) claim(session string) bool {
 // in segments if it has none
 func (l *Listener) newSessionConn(logCtx context.Context, session string, announce []byte) *Conn {
 	storage := sessionStorage(l.storage)
+	var conn *Conn
 	onClose := func() {
 		storage.Close()
 		l.mu.Lock()
 		delete(l.active, session)
+		delete(l.connections, conn)
 		l.mu.Unlock()
 	}
 	if slots, ok := storage.(slotStore); ok {
 		if r, ok := decodeRing(announce); ok {
 			errors.LogInfo(logCtx, "accepted session ", session, " in ", len(r.Down.Slots), " slots")
-			return newSlotConn(l.ctx, slots, r.Down, r.Up, l.params, onClose)
+			conn = newSlotConn(l.ctx, slots, r.Down, r.Up, l.params, onClose)
+			l.mu.Lock()
+			l.connections[conn] = struct{}{}
+			l.mu.Unlock()
+			return conn
 		}
 	}
 	errors.LogInfo(logCtx, "accepted session ", session)
-	return newConn(l.ctx, storage, downlinkPrefix(session), uplinkPrefix(session), l.params, onClose)
+	conn = newConn(l.ctx, storage, downlinkPrefix(session), uplinkPrefix(session), l.params, onClose)
+	l.mu.Lock()
+	l.connections[conn] = struct{}{}
+	l.mu.Unlock()
+	return conn
 }
 
 func (l *Listener) collectLoop(logCtx context.Context) {
@@ -325,5 +343,15 @@ func (l *Listener) Addr() net.Addr {
 
 func (l *Listener) Close() error {
 	l.cancel()
+	l.loops.Wait()
+	l.mu.Lock()
+	connections := make([]*Conn, 0, len(l.connections))
+	for conn := range l.connections {
+		connections = append(connections, conn)
+	}
+	l.mu.Unlock()
+	for _, conn := range connections {
+		conn.Close()
+	}
 	return l.storage.Close()
 }

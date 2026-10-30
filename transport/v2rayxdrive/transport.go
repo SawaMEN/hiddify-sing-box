@@ -139,9 +139,11 @@ func (s *Server) Close() error {
 }
 
 type Client struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
-	options *streamOptions
+	ctx         context.Context
+	cancel      context.CancelFunc
+	options     *streamOptions
+	mu          sync.Mutex
+	connections map[*trackedConn]struct{}
 }
 
 var _ adapter.V2RayClientTransport = (*Client)(nil)
@@ -164,19 +166,49 @@ func (c *Client) DialContext(ctx context.Context) (net.Conn, error) {
 	// the storage announce request waits for a response.
 	ctx, cancel := context.WithCancel(ctx)
 	stop := context.AfterFunc(c.ctx, cancel)
+	defer stop()
+	defer cancel()
 	conn, err := dialSession(ctx, c.options)
 	if err != nil {
-		stop()
-		cancel()
 		return nil, err
 	}
-	return &sessionConn{Conn: conn, cancel: func() { stop(); cancel() }}, nil
+	c.mu.Lock()
+	if err = c.ctx.Err(); err != nil {
+		c.mu.Unlock()
+		conn.Close()
+		return nil, err
+	}
+	tracked := &trackedConn{Conn: conn, owner: c}
+	if c.connections == nil {
+		c.connections = map[*trackedConn]struct{}{}
+	}
+	c.connections[tracked] = struct{}{}
+	c.mu.Unlock()
+	return tracked, nil
 }
-func (c *Client) Close() error { c.cancel(); c.options.close(); return nil }
+func (c *Client) Close() error {
+	c.cancel()
+	c.mu.Lock()
+	connections := make([]*trackedConn, 0, len(c.connections))
+	for conn := range c.connections {
+		connections = append(connections, conn)
+	}
+	c.mu.Unlock()
+	for _, conn := range connections {
+		conn.Close()
+	}
+	c.options.close()
+	return nil
+}
 
-type sessionConn struct {
+type trackedConn struct {
 	net.Conn
-	cancel func()
+	owner *Client
+	once  sync.Once
+	err   error
 }
 
-func (c *sessionConn) Close() error { c.cancel(); return c.Conn.Close() }
+func (c *trackedConn) Close() error {
+	c.once.Do(func() { c.err = c.Conn.Close(); c.owner.mu.Lock(); delete(c.owner.connections, c); c.owner.mu.Unlock() })
+	return c.err
+}
