@@ -6,7 +6,6 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/sagernet/sing-box/common/interrupt"
 	"github.com/sagernet/sing-box/common/tlsspoof"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"

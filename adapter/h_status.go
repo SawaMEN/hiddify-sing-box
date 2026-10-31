@@ -67,9 +67,21 @@ func (s Status) mark(hourglass string) string {
 	return ""
 }
 
+// OutboundStatus uses an outbound's detailed state when available and falls back
+// to the upstream readiness contract for outbounds that do not implement Status.
+func OutboundStatus(outbound Outbound) Status {
+	if withStatus, ok := outbound.(interface{ Status() Status }); ok {
+		return withStatus.Status()
+	}
+	if outbound.IsReady() {
+		return StatusReady
+	}
+	return StatusConnecting
+}
+
 // IsReady reports whether outbound carries traffic.
 func IsReady(outbound Outbound) bool {
-	return outbound.Status() == StatusReady
+	return OutboundStatus(outbound) == StatusReady
 }
 
 // SplitStatus separates a display type from its status mark, which is always last; mark is

@@ -11,5 +11,5 @@ func DisplayType(outbound Outbound) string {
 	if displayer, ok := outbound.(interface{ DisplayType() string }); ok {
 		name = displayer.DisplayType()
 	}
-	return name + outbound.Status().Mark()
+	return name + OutboundStatus(outbound).Mark()
 }
