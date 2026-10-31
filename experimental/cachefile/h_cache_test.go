@@ -15,7 +15,7 @@ import (
 
 func openTestCache(t *testing.T, options option.CacheFileOptions) *CacheFile {
 	c := New(context.Background(), log.NewNOPFactory().NewLogger("cache"), options)
-	require.NoError(t, c.Start(adapter.StartStateInitialize))
+	require.NoError(t, c.Start(adapter.StartStateInitialize, adapter.NewScope(context.Background(), log.NewNOPFactory().NewLogger("cache"))))
 	return c
 }
 

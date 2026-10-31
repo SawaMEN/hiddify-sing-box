@@ -283,3 +283,11 @@ func isSameDirSymlink(f fs.DirEntry, dir string) bool {
 	target, err := os.Readlink(filepath.Join(dir, f.Name()))
 	return err == nil && !strings.Contains(target, "/")
 }
+
+ // Close releases resources when used without a lifecycle scope. //H
+ func (s *Store) Close() error {
+ 	if s.watcher != nil {
+ 		if err := s.watcher.Close(); err != nil { return err }
+ 	}
+ 	return s.closePlatform()
+ }
