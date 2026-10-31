@@ -31,7 +31,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote add upstream https://github.com/hiddify/hiddify-sing-box.git
-          git fetch --no-tags upstream v5
+          git -c fetch.recurseSubmodules=false fetch --no-recurse-submodules --no-tags upstream v5
           if ! git merge-base HEAD FETCH_HEAD; then
             echo "::error::No common ancestor with Hiddify v5: automatic merge is unsafe"
             exit 1
