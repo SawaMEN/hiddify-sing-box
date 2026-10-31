@@ -119,7 +119,7 @@ func TestSmartDNSPool_EndToEnd(t *testing.T) {
 	if err := svc.Start(adapter.StartStateStart, scope); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	defer svc.Close()
+	defer svc.(*Service).Close()
 
 	addr := "127.0.0.1:" + strconv.Itoa(int(port))
 
@@ -187,7 +187,7 @@ func TestSmartDNSPool_FailoverWithinDeadline(t *testing.T) {
 	if err := svc.Start(adapter.StartStateStart, scope); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	defer svc.Close()
+	defer svc.(*Service).Close()
 
 	addr := "127.0.0.1:" + strconv.Itoa(int(port))
 	// Warmup until the listener accepts.

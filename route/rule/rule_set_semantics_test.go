@@ -1440,7 +1440,7 @@ func addOtherItem(rule *abstractDefaultRule, item RuleItem) {
 
 func addSourceAddressItem(t *testing.T, rule *abstractDefaultRule, cidrs []string) {
 	t.Helper()
-	item, err := NewIPCIDRItem(true, parsePrefixables(cidrs))
+	item, err := NewIPCIDRItem(true, cidrs)
 	require.NoError(t, err)
 	rule.sourceAddressItems = append(rule.sourceAddressItems, item)
 	rule.allItems = append(rule.allItems, item)
@@ -1470,7 +1470,7 @@ func addDestinationRegexItem(t *testing.T, rule *abstractDefaultRule, regexes []
 
 func addDestinationIPCIDRItem(t *testing.T, rule *abstractDefaultRule, cidrs []string) {
 	t.Helper()
-	item, err := NewIPCIDRItem(false, parsePrefixables(cidrs))
+	item, err := NewIPCIDRItem(false, cidrs)
 	require.NoError(t, err)
 	rule.destinationIPCIDRItems = append(rule.destinationIPCIDRItems, item)
 	rule.allItems = append(rule.allItems, item)

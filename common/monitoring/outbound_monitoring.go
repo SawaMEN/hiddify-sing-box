@@ -1050,3 +1050,10 @@ func (m *OutboundMonitoring) loadHistory() *History {
 	}
 	return history
 }
+
+ // tested tells whether a completed URL test has recorded a timestamp. //H
+ func (s *outboundState) tested() bool {
+ 	s.mu.Lock()
+ 	defer s.mu.Unlock()
+ 	return !s.history.Time.IsZero()
+ }
