@@ -178,8 +178,8 @@ type systemUsage struct {
 }
 
 type interfaceCounters struct {
-	inPackets  uint32
-	outPackets uint32
-	inBytes    uint32
-	outBytes   uint32
+	inPackets  uint64 //H
+	outPackets uint64 //H
+	inBytes    uint64 //H
+	outBytes   uint64 //H
 }
