@@ -6,6 +6,7 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/ipset"
+	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 
 	"go4.org/netipx"
@@ -19,10 +20,18 @@ type IPCIDRItem struct {
 	description string
 }
 
-func NewIPCIDRItem(isSource bool, prefixables []*badoption.Prefixable) (*IPCIDRItem, error) {
+func NewIPCIDRItem(isSource bool, prefixables []string) (*IPCIDRItem, error) {
 	var builder netipx.IPSetBuilder
-	for _, prefixable := range prefixables {
-		builder.AddPrefix(prefixable.Build(netip.Prefix{}))
+	for _, value := range prefixables {
+		prefix, err := netip.ParsePrefix(value)
+		if err != nil {
+			addr, addrErr := netip.ParseAddr(value)
+			if addrErr != nil {
+				return nil, E.Cause(err, "invalid IP CIDR: ", value)
+			}
+			prefix = netip.PrefixFrom(addr, addr.BitLen())
+		}
+		builder.AddPrefix(prefix.Masked())
 	}
 	var description string
 	if isSource {
@@ -30,8 +39,8 @@ func NewIPCIDRItem(isSource bool, prefixables []*badoption.Prefixable) (*IPCIDRI
 	} else {
 		description = "ip_cidr="
 	}
-	prefixString := func(it *badoption.Prefixable) string {
-		return it.Build(netip.Prefix{}).String()
+	prefixString := func(it string) string {
+		return it
 	}
 	if prefixCount := len(prefixables); prefixCount == 1 {
 		description += prefixString(prefixables[0])

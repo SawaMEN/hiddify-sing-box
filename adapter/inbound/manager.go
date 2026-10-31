@@ -117,5 +117,3 @@ func (m *Manager) Create(ctx context.Context, router adapter.Router, logger log.
 	}
 	return nil
 }
-
-}
