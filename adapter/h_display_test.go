@@ -26,6 +26,26 @@ func (o *hDisplayOutbound) Status() adapter.Status {
 	return adapter.StatusConnecting
 }
 
+// A v5 outbound only needs the standard IsReady method.
+type hReadyOnlyOutbound struct {
+	outbound.Adapter
+	N.Dialer
+	ready bool
+}
+
+func (o *hReadyOnlyOutbound) IsReady() bool { return o.ready }
+
+func TestH_DisplayTypeWithoutStatusMethod(t *testing.T) {
+	legacy := &hReadyOnlyOutbound{Adapter: outbound.NewAdapter(C.TypeSSH, "legacy", nil, nil)}
+	require.Equal(t, adapter.StatusConnecting, adapter.OutboundStatus(legacy))
+	require.False(t, adapter.IsReady(legacy))
+	hRequireConnecting(t, "SSH", adapter.DisplayType(legacy))
+	legacy.ready = true
+	require.Equal(t, adapter.StatusReady, adapter.OutboundStatus(legacy))
+	require.True(t, adapter.IsReady(legacy))
+	require.Equal(t, "SSH", adapter.DisplayType(legacy))
+}
+
 type hNamedOutbound struct {
 	hDisplayOutbound
 }
