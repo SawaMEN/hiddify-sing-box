@@ -170,7 +170,7 @@ func TestH_HTTPObfsServerRejectsInvalidRequest(t *testing.T) {
 			server := NewHTTPObfsServer(rawServer)
 			writeErr := hWriteAsync(rawClient, []byte(request))
 			_, err := server.Read(make([]byte, 64))
-			require.ErrorIs(t, err, io.EOF)
+			require.ErrorIs(t, err, ErrNotObfs)
 			require.NoError(t, <-writeErr)
 		})
 	}
