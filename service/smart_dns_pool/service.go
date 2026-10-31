@@ -89,7 +89,7 @@ func NewService(ctx context.Context, logger log.ContextLogger, tag string, opts 
 // Start brings up the smart pool and binds the local DNS listener. It runs
 // at the StartStart stage so dnstt outbounds (which start later) find a
 // listener already accepting queries on their first request.
-func (s *Service) Start(stage adapter.StartStage) error {
+func (s *Service) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage != adapter.StartStateStart {
 		return nil
 	}
@@ -131,6 +131,7 @@ func (s *Service) Start(stage adapter.StartStage) error {
 
 	s.mgr = mgr
 	s.server = srv
+	scope.Add(s.Close)
 	s.logger.Info("smart_dns_pool: listening on ", s.listenAddr, " (udp+tcp), ", len(s.opts.Upstreams), " upstream(s)")
 	return nil
 }
