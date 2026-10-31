@@ -28,6 +28,7 @@ type URLTestHistory struct {
 	Delay       uint16         `json:"delay"`
 	IpInfo      *ipinfo.IpInfo `json:"ipinfo"`
 	IsFromCache bool           `json:"from_cache"`
+	IpInfoFromCache bool      `json:"ipinfo_from_cache,omitempty"` //H
 }
 
 type URLTestHistoryStorage interface {

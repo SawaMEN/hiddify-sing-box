@@ -221,3 +221,15 @@ func GetIpInfo(logger log.Logger, ctx context.Context, detour N.Dialer) (*IpInfo
 
 // 	os.Exit(0)
 // }
+
+// GetIpInfoFromURL retrieves IP information from a custom provider through the outbound. //H
+func GetIpInfoFromURL(ctx context.Context, detour N.Dialer, url string) (*IpInfo, uint16, error) {
+	data, elapsed, err := (&BaseProvider{URL: url}).fetchData(ctx, detour)
+	if err != nil { return nil, elapsed, err }
+	raw, err := json.Marshal(data)
+	if err != nil { return nil, elapsed, err }
+	var info IpInfo
+	if err = json.Unmarshal(raw, &info); err != nil { return nil, elapsed, err }
+	if info.IP == "" { return nil, elapsed, fmt.Errorf("IP provider %s did not supply an IP", url) }
+	return &info, elapsed, nil
+}

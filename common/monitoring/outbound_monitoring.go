@@ -66,6 +66,7 @@ type OutboundMonitoring struct {
 	pauseCallback    *list.Element[pause.Callback]
 	started          atomic.Bool
 	urls             []string
+	ipInfoURL        string //H
 	currentLinkIndex atomic.Uint32
 	access           sync.Mutex
 	idleTimeout      time.Duration
@@ -142,6 +143,7 @@ func (m *OutboundMonitoring) getUrlTest(outboundTag string) *adapter.URLTestHist
 	state.mu.Lock()
 	his := state.history
 	his.IsFromCache = state.from_cache
+	his.IpInfoFromCache = state.ipInfoFromCache //H
 	state.mu.Unlock()
 	return &his
 
@@ -250,6 +252,7 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 		ctx:             ctx,
 		cancel:          cancel,
 		urls:            cloned,
+		ipInfoURL:       options.IpInfoURL, //H
 		pause:           service.FromContext[pause.Manager](ctx),
 		logger:          logger,
 		outboundManager: service.FromContext[adapter.OutboundManager](ctx),
@@ -594,12 +597,19 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 		return his, parent.Err()
 	default:
 	}
-	if out.history.IpInfo == nil || out.from_cache {
+	if out.history.IpInfo == nil || out.ipInfoFromCache { //H
 
 		ctx, cancel2 := context.WithTimeout(parent, m.urlTestTimeout)
 		defer cancel2()
 
-		newip, t, err := ipinfo.GetIpInfo(m.logger, ctx, out.outbound)
+		var newip *ipinfo.IpInfo //H
+		var t uint16 //H
+		var err error //H
+		if m.ipInfoURL != "" { //H
+			newip, t, err = ipinfo.GetIpInfoFromURL(ctx, out.outbound, m.ipInfoURL)
+		} else {
+			newip, t, err = ipinfo.GetIpInfo(m.logger, ctx, out.outbound)
+		}
 		if err == nil {
 			his.IpInfo = mergeIpInfo(out.history.IpInfo, newip)
 			if t < his.Delay {
@@ -766,6 +776,7 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 	state.history.Time = outcome.history.Time
 	state.from_cache = false
 	if outcome.history.IpInfo != nil {
+		state.ipInfoFromCache = false //H
 		state.history.IpInfo = outcome.history.IpInfo
 	}
 	snapshot := state.history
@@ -972,7 +983,7 @@ type outboundState struct {
 	testing        bool
 	enqueuedCycle  uint64
 	from_cache     bool
-
+	ipInfoFromCache bool //H
 	history adapter.URLTestHistory
 }
 
@@ -1045,6 +1056,7 @@ func (m *OutboundMonitoring) loadHistory() *History {
 			state.mu.Lock()
 			state.history = *his
 			state.from_cache = true
+			state.ipInfoFromCache = his.IpInfo != nil //H
 			state.mu.Unlock()
 		}
 	}
