@@ -64,6 +64,9 @@ jobs:
               git diff --name-only --diff-filter=U
               exit 1
             fi
+            # The GitHub Actions token lacks permission to update workflow files.
+            # Preserve the existing fork workflows; merge runtime code separately.
+            git restore --source=HEAD --staged --worktree -- .github/workflows
             git commit --no-edit
           fi
           # Upstream carries Markdown and patch-file whitespace; defer full diff lint to CI.
