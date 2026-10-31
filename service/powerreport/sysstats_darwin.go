@@ -113,16 +113,20 @@ func readInterfaceCounters() map[string]interfaceCounters {
 		if messageLength < 4 || messageLength > len(table) {
 			break
 		}
-		name := C.GoString(entry.ifa_name)
-		if !strings.HasPrefix(name, "en") && !strings.HasPrefix(name, "pdp_ip") {
-			continue
-		}
-		data := (*C.struct_if_data)(entry.ifa_data)
-		result[name] = interfaceCounters{
-			inPackets:  uint32(data.ifi_ipackets),
-			outPackets: uint32(data.ifi_opackets),
-			inBytes:    uint32(data.ifi_ibytes),
-			outBytes:   uint32(data.ifi_obytes),
+		if table[3] == syscall.RTM_IFINFO2 && messageLength >= messageSize {
+			copy(messageBytes, table[:messageSize])
+			var nameBuffer [C.IF_NAMESIZE]C.char
+			if C.if_indextoname(C.uint(message.ifm_index), &nameBuffer[0]) != nil {
+				name := C.GoString(&nameBuffer[0])
+				if strings.HasPrefix(name, "en") || strings.HasPrefix(name, "pdp_ip") {
+					result[name] = interfaceCounters{
+						inPackets:  uint64(message.ifm_data.ifi_ipackets),
+						outPackets: uint64(message.ifm_data.ifi_opackets),
+						inBytes:    uint64(message.ifm_data.ifi_ibytes),
+						outBytes:   uint64(message.ifm_data.ifi_obytes),
+					}
+				}
+			}
 		}
 		table = table[messageLength:]
 	}
