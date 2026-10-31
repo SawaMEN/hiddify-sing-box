@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding"
 	stdjson "encoding/json"
+	xbadoption "github.com/sagernet/sing-box/common/xray/json/badoption"
+	hiddify "github.com/sagernet/wireguard-go/hiddify"
 	"net/netip"
 	"reflect"
 	"slices"
@@ -257,8 +259,8 @@ func (g *generator) FlattenStruct(node *Node, structType reflect.Type) error {
 		g.path = append(g.path, structType.Name()+"."+tagName)
 		var fieldNode *Node
 		var err error
-		if enumTag != "" || examplesTag != "" || referenceTag != "" || schemaTag != "" {
-			fieldNode, err = g.taggedFieldNode(fieldType, enumTag, examplesTag, referenceTag, schemaTag)
+		if enumTag != "" || examplesTag != "" || referenceTag != "" {
+			fieldNode, err = g.taggedFieldNode(fieldType, enumTag, examplesTag, referenceTag)
 		} else {
 			fieldNode, err = g.Describe(fieldType)
 		}
@@ -271,7 +273,7 @@ func (g *generator) FlattenStruct(node *Node, structType reflect.Type) error {
 	return nil
 }
 
-func (g *generator) taggedFieldNode(fieldType reflect.Type, enumTag string, examplesTag string, referenceTag string, schemaTag string) (*Node, error) {
+func (g *generator) taggedFieldNode(fieldType reflect.Type, enumTag string, examplesTag string, referenceTag string) (*Node, error) {
 	elementType := fieldType
 	for elementType.Kind() == reflect.Pointer {
 		elementType = elementType.Elem()
@@ -285,17 +287,9 @@ func (g *generator) taggedFieldNode(fieldType reflect.Type, enumTag string, exam
 	}
 	var element *Node
 	var err error
-	switch {
-	case enumTag != "":
+	if enumTag != "" {
 		element, err = taggedValueNode(elementType, strings.Split(enumTag, ","))
-	case schemaTag == "prefixable":
-		if elementType.Kind() != reflect.String {
-			return nil, E.New("prefixable schema tags require a string field, got ", fieldType.String())
-		}
-		element, err = g.Describe(prefixableType)
-	case schemaTag != "":
-		return nil, E.New("unknown schema tag ", schemaTag, " on ", fieldType.String())
-	default:
+	} else {
 		element, err = g.Describe(elementType)
 	}
 	if err != nil {
