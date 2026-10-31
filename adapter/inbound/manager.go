@@ -91,48 +91,31 @@ func (m *Manager) Remove(tag string) error {
 
 func (m *Manager) Create(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, outboundType string, options any) error {
 	inbound, err := m.registry.Create(ctx, router, logger, tag, outboundType, options)
-	if err != nil {
-		return err
+	if err != nil { return err }
+	m.access.Lock()
+	started, scope := m.started, m.scope
+	m.access.Unlock()
+	if started {
+		if err = adapter.StartLate(scope, "inbound/"+inbound.Type()+"["+inbound.Tag()+"]", inbound); err != nil { return err }
 	}
 	m.access.Lock()
-	started := m.started
-	m.access.Unlock()
-	if started { // H: hot reload
-		err = adapter.StartLate(m.scope, "inbound/"+inbound.Type()+"["+inbound.Tag()+"]", inbound)
-		if err != nil {
-			return err
-		}
-	}
-	var replaced bool
-	if existsInbound, loaded := m.inboundByTag[tag]; loaded {
-		if m.started {
-			err = existsInbound.Close()
-			if err != nil {
-				return E.Cause(err, "close inbound/", existsInbound.Type(), "[", existsInbound.Tag(), "]")
-			}
-		}
-		existsIndex := common.Index(m.inbounds, func(it adapter.Inbound) bool {
-			return it == existsInbound
-		})
-		if existsIndex == -1 {
-			panic("invalid inbound index")
-		}
-		// H: the replacement takes the old one's place (callers rely on the order, e.g. the main group
-		// comes first); a copy, so a slice already handed out never changes
+	old, replaced := m.inboundByTag[tag]
+	if replaced {
+		index := slices.Index(m.inbounds, old)
+		if index < 0 { m.access.Unlock(); return E.New("invalid inbound index: ", tag) }
 		m.inbounds = slices.Clone(m.inbounds)
-		m.inbounds[existsIndex] = inbound
-		replaced = true
-	}
-	if !replaced {
-		m.inbounds = append(m.inbounds, inbound)
+		m.inbounds[index] = inbound
+	} else {
+		m.inbounds = append(slices.Clone(m.inbounds), inbound)
 	}
 	m.inboundByTag[tag] = inbound
 	m.access.Unlock()
 	if replaced {
-		err = adapter.CloseLate(m.scope, existsInbound)
-		if err != nil {
-			return E.Cause(err, "close inbound/", existsInbound.Type(), "[", existsInbound.Tag(), "]")
+		if err = adapter.CloseLate(scope, old); err != nil {
+			return E.Cause(err, "close inbound/", old.Type(), "[", old.Tag(), "]")
 		}
 	}
 	return nil
+}
+
 }

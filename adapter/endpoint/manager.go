@@ -92,48 +92,31 @@ func (m *Manager) Remove(tag string) error {
 
 func (m *Manager) Create(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, outboundType string, options any) error {
 	endpoint, err := m.registry.Create(ctx, router, logger, tag, outboundType, options)
-	if err != nil {
-		return err
+	if err != nil { return err }
+	m.access.Lock()
+	started, scope := m.started, m.scope
+	m.access.Unlock()
+	if started {
+		if err = adapter.StartLate(scope, "endpoint/"+endpoint.Type()+"["+endpoint.Tag()+"]", endpoint); err != nil { return err }
 	}
 	m.access.Lock()
-	started := m.started
-	m.access.Unlock()
-	if started { // H: hot reload; started outside the lock, as starting may look up other endpoints
-		err = adapter.StartLate(m.scope, "endpoint/"+endpoint.Type()+"["+endpoint.Tag()+"]", endpoint)
-		if err != nil {
-			return err
-		}
-	}
-	var replaced bool
-	if existsEndpoint, loaded := m.endpointByTag[tag]; loaded {
-		if m.started {
-			err = existsEndpoint.Close()
-			if err != nil {
-				return E.Cause(err, "close endpoint/", existsEndpoint.Type(), "[", existsEndpoint.Tag(), "]")
-			}
-		}
-		existsIndex := common.Index(m.endpoints, func(it adapter.Endpoint) bool {
-			return it == existsEndpoint
-		})
-		if existsIndex == -1 {
-			panic("invalid endpoint index")
-		}
-		// H: the replacement takes the old one's place (callers rely on the order, e.g. the main group
-		// comes first); a copy, so a slice already handed out never changes
+	old, replaced := m.endpointByTag[tag]
+	if replaced {
+		index := slices.Index(m.endpoints, old)
+		if index < 0 { m.access.Unlock(); return E.New("invalid endpoint index: ", tag) }
 		m.endpoints = slices.Clone(m.endpoints)
-		m.endpoints[existsIndex] = endpoint
-		replaced = true
-	}
-	if !replaced {
-		m.endpoints = append(m.endpoints, endpoint)
+		m.endpoints[index] = endpoint
+	} else {
+		m.endpoints = append(slices.Clone(m.endpoints), endpoint)
 	}
 	m.endpointByTag[tag] = endpoint
 	m.access.Unlock()
 	if replaced {
-		err = adapter.CloseLate(m.scope, existsEndpoint)
-		if err != nil {
-			return E.Cause(err, "close endpoint/", existsEndpoint.Type(), "[", existsEndpoint.Tag(), "]")
+		if err = adapter.CloseLate(scope, old); err != nil {
+			return E.Cause(err, "close endpoint/", old.Type(), "[", old.Tag(), "]")
 		}
 	}
 	return nil
+}
+
 }
