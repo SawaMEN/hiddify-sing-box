@@ -388,15 +388,13 @@ func NewSTDServer(ctx context.Context, logger log.ContextLogger, options option.
 		tlsConfig.MaxVersion = maxVersion
 	}
 	if options.CipherSuites != nil {
-	find:
-		for _, cipherSuite := range options.CipherSuites {
-			for _, tlsCipherSuite := range tls.CipherSuites() {
-				if cipherSuite == tlsCipherSuite.Name {
-					tlsConfig.CipherSuites = append(tlsConfig.CipherSuites, tlsCipherSuite.ID)
-					continue find
-				}
-			}
-			return nil, E.New("unknown cipher_suite: ", cipherSuite)
+		ids, legacy, err := resolveCipherSuites(options.CipherSuites)
+		if err != nil {
+			return nil, err
+		}
+		tlsConfig.CipherSuites = ids
+		if len(legacy) > 0 {
+			logger.Warn("Explicitly enabled legacy TLS cipher suites (weaker security): ", strings.Join(legacy, ", "))
 		}
 	}
 	for _, curveID := range options.CurvePreferences {
