@@ -10,3 +10,23 @@
 [submodule "replace/wireguard-go"]
 	path = replace/wireguard-go
 	url = https://github.com/hiddify/wireguard-go.git
+[submodule "replace/sing-vmess"]
+	path = replace/sing-vmess
+	url = https://github.com/hiddify/sing-vmess.git
+	branch = dev
+[submodule "replace/sing-tun"]
+	path = replace/sing-tun
+	url = https://github.com/hiddify/sing-tun.git
+	branch = dev
+[submodule "replace/gvisor"]
+	path = replace/gvisor
+	url = https://github.com/hiddify/gvisor.git
+	branch = go
+[submodule "replace/amneziawg-go"]
+	path = replace/amneziawg-go
+	url = https://github.com/hiddify/amneziawg-go.git
+	branch = v5
+[submodule "replace/sing-mux"]
+	path = replace/sing-mux
+	url = https://github.com/hiddify/sing-mux.git
+	branch = v5
