@@ -112,7 +112,7 @@ func TestH_ServiceStartOtherStagesAndCloseIdle(t *testing.T) {
 	require.NoError(t, err)
 	service := instance.(*Service)
 	for _, stage := range []adapter.StartStage{adapter.StartStateInitialize, adapter.StartStatePostStart, adapter.StartStateStarted} {
-		require.NoError(t, service.Start(stage))
+		require.NoError(t, service.Start(stage, nil))
 	}
 	require.Nil(t, service.mgr)
 	require.Nil(t, service.server)
