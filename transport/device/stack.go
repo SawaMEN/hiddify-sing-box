@@ -36,8 +36,10 @@ func newStackDevice(options Options) (*stackDevice, error) {
 	device.memoryTun = tun.NewMemoryTun(tun.MemoryTunOptions{
 		MTU:       int(options.MTU),
 		Headroom:  options.PacketHeadroom,
-		RearSpace: systemDevicePacketRearSpace,
-		Outbound:  device.writeOutbound,
+		RearSpace: 0, //H: the current MemoryTun has its own inbound rear-space management
+		Outbound: func(packets []*buf.Buffer) { //H: MemoryTun uses an ownership-taking callback without a return value
+			_ = device.writeOutbound(packets)
+		},
 	})
 	var err error
 	device.stack, err = newStack(options, device.memoryTun)
@@ -61,6 +63,14 @@ func (d *stackDevice) UpdateConfiguration(configuration Configuration) error {
 	d.options.Configuration = configuration
 	d.inet4Address, d.inet6Address = firstAddresses(configuration.Address)
 	return nil
+}
+
+func (d *stackDevice) WaitWriteInboundBuffers(packetBuffers []*buf.Buffer) error { //H
+	return d.memoryTun.WaitWritePackets(common.Map(packetBuffers, (*buf.Buffer).Bytes))
+}
+
+func (d *stackDevice) NewOutboundQueue(handler func(packetBuffers []*buf.Buffer)) *tun.OutboundQueue { //H
+	return d.memoryTun.NewOutboundQueue(handler)
 }
 
 func (d *stackDevice) WriteInboundBuffers(packetBuffers []*buf.Buffer) error {

@@ -23,6 +23,7 @@ import (
 )
 
 const systemDeviceReadBufferSize = 65535 + tun.PacketOffset
+const systemDevicePacketRearSpace = 0 //H: legacy fixed rear padding was removed by sing-tun v5
 
 type systemDevice struct {
 	baseDevice
@@ -138,7 +139,8 @@ func (d *systemDevice) readLoop(tunInterface tun.Tun, mtu int) {
 	for {
 		packetBuffer.Reset()
 		packetBuffer.Resize(d.packetHeadroom, 0)
-		readN, err := tunInterface.Read(packetBuffer.FreeBytes()[:systemDeviceReadBufferSize])
+		readData := packetBuffer.FreeBytes()[:systemDeviceReadBufferSize] //H
+		readN, err := tunInterface.Read(readData)
 		if err != nil {
 			if E.IsClosed(err) {
 				return
@@ -149,12 +151,14 @@ func (d *systemDevice) readLoop(tunInterface tun.Tun, mtu int) {
 		if readN <= tun.PacketOffset {
 			continue
 		}
-		packet := readBuffer[tun.PacketOffset:readN]
+		packet := packetBuffer.FreeBytes()[:0] //H: see read bytes from the preallocated buffer
+		_ = packet
+		packet = readData[tun.PacketOffset:readN]
 		if d.blockIPv6Enabled() && header.IPVersion(packet) == header.IPv6Version {
 			continue
 		}
-		packetBuffer := buf.NewSize(frontHeadroom + len(packet) + rearHeadroom)
-		packetBuffer.Resize(frontHeadroom, 0)
+		packetBuffer := buf.NewSize(d.packetHeadroom + len(packet)) //H
+		packetBuffer.Resize(d.packetHeadroom, 0) //H
 		common.Must1(packetBuffer.Write(packet))
 		err = d.writeOutbound([]*buf.Buffer{packetBuffer})
 		if err != nil {
@@ -164,8 +168,8 @@ func (d *systemDevice) readLoop(tunInterface tun.Tun, mtu int) {
 }
 
 func (d *systemDevice) readLoopLinux(tunInterface tun.LinuxTUN, batchSize int, mtu int) {
-	frontHeadroom := d.options.PacketFrontHeadroom
-	packetSize := frontHeadroom + mtu + d.options.PacketRearHeadroom
+	frontHeadroom := d.options.PacketHeadroom //H
+	packetSize := frontHeadroom + mtu + systemDevicePacketRearSpace //H
 	packetBuffers := make([]*buf.Buffer, batchSize)
 	readBuffers := make([][]byte, batchSize)
 	packetSizes := make([]int, batchSize)
@@ -209,8 +213,8 @@ func (d *systemDevice) readLoopLinux(tunInterface tun.LinuxTUN, batchSize int, m
 }
 
 func (d *systemDevice) readLoopDarwin(tunInterface tun.DarwinTUN) {
-	frontHeadroom := d.options.PacketFrontHeadroom
-	rearHeadroom := d.options.PacketRearHeadroom
+	frontHeadroom := d.options.PacketHeadroom //H
+	rearHeadroom := systemDevicePacketRearSpace //H
 	for {
 		packetBuffers, readErr := tunInterface.BatchRead(frontHeadroom, rearHeadroom)
 		outboundBuffers := packetBuffers[:0]

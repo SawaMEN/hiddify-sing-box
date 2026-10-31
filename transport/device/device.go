@@ -89,6 +89,8 @@ type baseDevice struct {
 	returnState    atomic.Pointer[returnPathState]
 }
 
+func (d *baseDevice) UpstreamPort() any { return nil } //H: stack-only devices have no system port
+
 func (d *baseDevice) SetPacketWriter(writer PacketWriter) {
 	d.packetWriter = writer
 }
