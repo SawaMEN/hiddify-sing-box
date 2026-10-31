@@ -338,6 +338,15 @@ func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		if sessionId != "" { // if not stream-one
 			conn.reader = currentSession.uploadQueue
 		}
+		// Unblock NewConnectionEx if the client disconnects before sending any uplink
+		// data. Otherwise it may wait forever on the session upload queue.
+		go func() {
+			select {
+			case <-request.Context().Done():
+			case <-httpSC.Wait():
+			}
+			conn.Close()
+		}()
 		s.handler.NewConnectionEx(request.Context(), &conn, sHttp.SourceAddress(request), M.Socksaddr{}, func(it error) {})
 		// "A ResponseWriter may not be used after [Handler.ServeHTTP] has returned."
 		select {

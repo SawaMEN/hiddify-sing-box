@@ -1,36 +1,58 @@
-name: Finalize VetrOFFProxy Go outbound
+name: Validate VetrOFFProxy integration
 
 on:
   push:
-    branches: [feat/vetroffproxy-client]
+    branches: [main, feat/vetroffproxy-client]
+    paths:
+      - 'protocol/vetroff/**'
+      - 'option/vetroff.go'
+      - 'constant/proxy.go'
+      - 'include/registry.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.gitmodules'
+      - '.github/workflows/vetroff-integration-validate.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'protocol/vetroff/**'
+      - 'option/vetroff.go'
+      - 'constant/proxy.go'
+      - 'include/registry.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.gitmodules'
+      - '.github/workflows/vetroff-integration-validate.yml'
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  format-and-dependencies:
-    if: github.repository == 'SawaMEN/hiddify-sing-box'
+  verify:
+    name: VetrOFFProxy unit and integration checks
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
-          ref: feat/vetroffproxy-client
-          persist-credentials: true
-      - uses: actions/setup-go@v5
+          submodules: recursive
+      - uses: actions/setup-go@v7.0.0
         with:
-          go-version: '1.26.10'
-      - name: Format and resolve dependencies
+          go-version-file: go.mod
+          cache: true
+      - name: Verify vendored fork submodules
+        shell: bash
         run: |
-          gofmt -w protocol/vetroff/outbound.go option/vetroff.go constant/proxy.go include/registry.go
-          go mod tidy
-          go test -mod=mod ./protocol/vetroff ./option ./include
-      - name: Commit validated module metadata
+          set -euo pipefail
+          for module in replace/tailscale replace/psiphon-quic-go replace/psiphon-tls replace/wireguard-go; do
+            test -f "$module/go.mod" || { echo "::error::Missing submodule $module"; exit 1; }
+          done
+      - name: Check changed Go file formatting
+        shell: bash
         run: |
-          if ! git diff --quiet; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add protocol/vetroff/outbound.go option/vetroff.go constant/proxy.go include/registry.go go.mod go.sum
-            git commit -m "build: gofmt and tidy VetrOFFProxy dependency"
-            git push origin HEAD:feat/vetroffproxy-client
-          fi
+          set -euo pipefail
+          output="$(gofmt -l protocol/vetroff/outbound.go option/vetroff.go)"
+          if [ -n "$output" ]; then echo "$output"; exit 1; fi
+      - name: Test VetrOFFProxy and shared integration
+        run: go test -mod=mod -count=1 ./protocol/vetroff ./option ./include

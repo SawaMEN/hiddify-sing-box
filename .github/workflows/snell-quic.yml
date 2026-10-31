@@ -19,7 +19,7 @@ jobs:
           submodules: recursive
       - uses: actions/setup-go@v6
         with:
-          go-version: 1.26.9
+          go-version-file: go.mod
       - name: Fetch pinned official Snell v5 server
         shell: bash
         run: |
