@@ -166,7 +166,7 @@ func writeRule(writer varbin.Writer, rule option.HeadlessRule, generateVersion u
 	case C.RuleTypeLogical:
 		return writeLogicalRule(writer, rule.LogicalOptions, generateVersion, mmap)
 	default:
-		panic("unknown rule type: " + rule.Type)
+		return E.New("unknown rule type: ", rule.Type)
 	}
 }
 
@@ -218,7 +218,9 @@ func readDefaultRule(reader varbin.Reader, recover bool, mmap *mmapReader) (rule
 				return
 			}
 			if recover {
-				rule.SourceIPCIDR = common.Map(rule.SourceIPSet.Prefixes(), netip.Prefix.String)
+				rule.SourceIPCIDR = common.Map(rule.SourceIPSet.Prefixes(), func(it netip.Prefix) *badoption.Prefixable {
+					return common.Ptr(badoption.Prefixable(it))
+				})
 			}
 		case ruleItemIPCIDR:
 			if mmap != nil {
@@ -230,7 +232,9 @@ func readDefaultRule(reader varbin.Reader, recover bool, mmap *mmapReader) (rule
 				return
 			}
 			if recover {
-				rule.IPCIDR = common.Map(rule.IPSet.Prefixes(), netip.Prefix.String)
+				rule.IPCIDR = common.Map(rule.IPSet.Prefixes(), func(it netip.Prefix) *badoption.Prefixable {
+					return common.Ptr(badoption.Prefixable(it))
+				})
 			}
 		case ruleItemSourcePort:
 			rule.SourcePort, err = varbin.ReadSlice[uint16](reader, binary.BigEndian)
@@ -746,7 +750,7 @@ func writeLogicalRule(writer varbin.Writer, logicalRule option.LogicalHeadlessRu
 	case C.LogicalTypeOr:
 		err = binary.Write(writer, binary.BigEndian, uint8(1))
 	default:
-		panic("unknown logical mode: " + logicalRule.Mode)
+		return E.New("unknown logical mode: ", logicalRule.Mode)
 	}
 	if err != nil {
 		return err

@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net"
+	"slices"
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
@@ -60,6 +61,11 @@ func NewSelector(ctx context.Context, router adapter.Router, logger log.ContextL
 	if len(outbound.tags) == 0 {
 		return nil, E.New("missing tags")
 	}
+	for i, tag := range outbound.tags {
+		if slices.Contains(outbound.tags[:i], tag) {
+			return nil, E.New("duplicate tag: ", tag)
+		}
+	}
 	return outbound, nil
 }
 
@@ -71,7 +77,10 @@ func (s *Selector) Network() []string {
 	return selected.Network()
 }
 
-func (s *Selector) Start() error {
+func (s *Selector) Start(stage adapter.StartStage, scope *adapter.Scope) error {
+	if stage != adapter.StartStateStart {
+		return nil
+	}
 	for i, tag := range s.tags {
 		detour, loaded := s.outbound.Outbound(tag)
 		if !loaded {

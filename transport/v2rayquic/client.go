@@ -69,13 +69,13 @@ func NewClient(ctx context.Context, dialer N.Dialer, serverAddr M.Socksaddr, opt
 
 func (c *Client) offer() (*clientConnection, error) {
 	conn := c.conn.Load()
-	if conn != nil && !common.Done(conn.Context()) {
+	if conn != nil && conn.active() {
 		return conn, nil
 	}
 	c.connAccess.Lock()
 	defer c.connAccess.Unlock()
 	conn = c.conn.Load()
-	if conn != nil && !common.Done(conn.Context()) {
+	if conn != nil && conn.active() {
 		return conn, nil
 	}
 	conn, err := c.offerNew()
@@ -108,9 +108,21 @@ func (c *Client) offerNew() (*clientConnection, error) {
 }
 
 func (c *Client) DialContext(ctx context.Context) (net.Conn, error) {
-	conn, err := c.offer()
-	if err != nil {
-		return nil, err
+	for {
+		conn, err := c.offer()
+		if err != nil {
+			return nil, err
+		}
+		if !conn.acquireStream() {
+			continue
+		}
+		stream, err := conn.OpenStream()
+		if err != nil {
+			conn.releaseStream(false)
+			return nil, err
+		}
+		keepSession := adapter.KeepSessionFromContext(ctx)
+		return &StreamWrapper{Conn: conn.Conn, Stream: stream, onClose: func() { conn.releaseStream(keepSession) }}, nil
 	}
 	conn.access.Lock()
 	conn.streams++

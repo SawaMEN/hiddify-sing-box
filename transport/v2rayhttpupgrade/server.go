@@ -2,6 +2,8 @@ package v2rayhttpupgrade
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/base64"
 	"net"
 	"net/http"
 	"os"
@@ -15,6 +17,8 @@ import (
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/transport/v2rayhttp"
 	"github.com/sagernet/sing/common"
+	"github.com/sagernet/sing/common/buf"
+	"github.com/sagernet/sing/common/bufio"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
@@ -89,12 +93,13 @@ func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		s.invalidRequest(writer, request, http.StatusNotFound, E.New("not a websocket request"))
 		return
 	}
-	if request.Header.Get("Sec-WebSocket-Key") != "" {
-		s.invalidRequest(writer, request, http.StatusNotFound, E.New("real websocket request received"))
-		return
-	}
 	writer.Header().Set("Connection", "upgrade")
 	writer.Header().Set("Upgrade", "websocket")
+	// Xray clients send a Sec-WebSocket-Key to look like a real websocket handshake; answer it
+	// with a valid Sec-WebSocket-Accept, as the Xray server does
+	if wsKey := request.Header.Get("Sec-WebSocket-Key"); wsKey != "" {
+		writer.Header().Set("Sec-WebSocket-Accept", secWebSocketAccept(wsKey))
+	}
 	writer.WriteHeader(http.StatusSwitchingProtocols)
 	if flusher, isFlusher := writer.(httpFlusher); isFlusher {
 		err := flusher.FlushError()
@@ -107,7 +112,7 @@ func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		s.invalidRequest(writer, request, http.StatusInternalServerError, E.New("invalid connection, maybe HTTP/2"))
 		return
 	}
-	conn, _, err := hijacker.Hijack()
+	conn, reader, err := hijacker.Hijack()
 	if err != nil {
 		s.invalidRequest(writer, request, http.StatusInternalServerError, E.Cause(err, "hijack failed"))
 		return

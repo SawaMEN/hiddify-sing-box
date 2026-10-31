@@ -31,6 +31,7 @@ func newSystemStackDevice(options DeviceOptions) (*systemStackDevice, error) {
 	stackDevice.memoryTun = tun.NewMemoryTun(tun.MemoryTunOptions{MTU: int(options.MTU), Outbound: stackDevice.inputPackets})
 	stackDevice.stack, err = newStack(options, stackDevice.memoryTun)
 	if err != nil {
+		router.close()
 		return nil, err
 	}
 	return stackDevice, nil

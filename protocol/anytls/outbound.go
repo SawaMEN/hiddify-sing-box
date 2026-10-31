@@ -83,7 +83,7 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 	return outbound, nil
 }
 
-func (h *Outbound) Start(stage adapter.StartStage) error {
+func (h *Outbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage != adapter.StartStateInitialize {
 		return nil
 	}
@@ -150,8 +150,4 @@ func (h *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (n
 	metadata.Destination = destination
 	h.logger.InfoContext(ctx, "outbound UoT packet connection to ", destination)
 	return h.uotClient.ListenPacket(ctx, destination)
-}
-
-func (h *Outbound) Close() error {
-	return common.Close(common.PtrOrNil(h.client))
 }

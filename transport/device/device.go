@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/sagernet/sing-tun"
+	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/control"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -21,12 +22,15 @@ type Device interface {
 	Start() error
 	UpdateConfiguration(configuration Configuration) error
 	WriteInboundBuffers(packetBuffers []*buf.Buffer) error
+	WaitWriteInboundBuffers(packetBuffers []*buf.Buffer) error
 	SetPacketWriter(writer PacketWriter)
 	PortAddresses() (netip.Addr, netip.Addr)
 	PortMTU() uint32
 	AttachReturn(returnPath tun.Return) error
 	DetachReturn(returnPath tun.Return) error
-	ReturnPath() (tun.Return, int)
+	UpstreamPort() any
+	FrontHeadroom() int
+	NewOutboundQueue(handler func(packetBuffers []*buf.Buffer)) *tun.OutboundQueue
 	Close() error
 }
 
@@ -106,7 +110,18 @@ func (d *baseDevice) processInboundBuffers(packetBuffers []*buf.Buffer, writeBuf
 		return writeBuffers(packetBuffers)
 	}
 	packets := make([][]byte, len(packetBuffers))
+	var temporaryBuffers []*buf.Buffer
+	defer func() {
+		buf.ReleaseMulti(temporaryBuffers)
+	}()
 	for i, packetBuffer := range packetBuffers {
+		if packetBuffer.Start() < state.headroom {
+			temporaryBuffer := buf.NewSize(state.headroom + packetBuffer.Len())
+			temporaryBuffer.Resize(state.headroom, 0)
+			common.Must1(temporaryBuffer.Write(packetBuffer.Bytes()))
+			temporaryBuffers = append(temporaryBuffers, temporaryBuffer)
+			packetBuffer = temporaryBuffer
+		}
 		packetBuffer.ExtendHeader(state.headroom)
 		packets[i] = packetBuffer.Bytes()
 	}
@@ -130,7 +145,7 @@ func (d *baseDevice) AttachReturn(returnPath tun.Return) error {
 	}
 	newState := &returnPathState{
 		returnPath: returnPath,
-		headroom:   headroom,
+		headroom:   returnPath.ReturnHeadroom(),
 	}
 	for {
 		currentState := d.returnState.Load()
@@ -154,12 +169,12 @@ func (d *baseDevice) DetachReturn(returnPath tun.Return) error {
 	return nil
 }
 
-func (d *baseDevice) ReturnPath() (tun.Return, int) {
+func (d *baseDevice) FrontHeadroom() int {
 	state := d.returnState.Load()
 	if state == nil {
-		return nil, 0
+		return 0
 	}
-	return state.returnPath, state.headroom
+	return state.headroom
 }
 
 type returnPathState struct {

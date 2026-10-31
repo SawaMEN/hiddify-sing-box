@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding"
 	stdjson "encoding/json"
+	xbadoption "github.com/sagernet/sing-box/common/xray/json/badoption"
+	hiddify "github.com/sagernet/wireguard-go/hiddify"
 	"net/netip"
 	"reflect"
 	"slices"
@@ -31,6 +33,9 @@ var (
 	httpHeaderType         = reflect.TypeFor[badoption.HTTPHeader]()
 	memoryBytesType        = reflect.TypeFor[byteformats.MemoryBytes]()
 	networkBytesCompatType = reflect.TypeFor[byteformats.NetworkBytesCompat]()
+	rawMessageType         = reflect.TypeFor[json.RawMessage]()
+	// H: Hiddify ranges, written as a number, "min-max" or {"from", "to"}
+	rangeTypes = []reflect.Type{reflect.TypeFor[hiddify.Range](), reflect.TypeFor[xbadoption.Range]()} //H: any JSON value, such as finalmask settings
 )
 
 type generator struct {
@@ -98,7 +103,14 @@ func (g *generator) Describe(valueType reflect.Type) (*Node, error) {
 		})
 	case memoryBytesType, networkBytesCompatType:
 		return AnyOf(UnsignedNode(64), StringNode()), nil
+	case rawMessageType: //H
+		return &Node{}, nil //H
 	}
+	if slices.Contains(rangeTypes, valueType) { //H
+		return g.Define("Range", func() (*Node, error) { //H
+			return AnyOf(IntegerNode(), StringNode(), &Node{Type: "object"}), nil //H
+		}) //H
+	} //H
 	if isListable(valueType) {
 		elementNode, err := g.Describe(valueType.Elem())
 		if err != nil {
@@ -116,6 +128,9 @@ func (g *generator) Describe(valueType reflect.Type) (*Node, error) {
 	if pointerType.Implements(textUnmarshalerType) {
 		return StringNode(), nil
 	}
+	if valueType.Kind() == reflect.Interface { //H: an untyped value, any JSON
+		return &Node{}, nil //H
+	} //H
 	switch valueType.Kind() {
 	case reflect.Struct:
 		if valueType.Name() == "" {
@@ -225,6 +240,9 @@ func (g *generator) FlattenStruct(node *Node, structType reflect.Type) error {
 		if schemaTag == "omit" {
 			continue
 		}
+		if schemaTag != "" {
+			return E.New("unknown schema tag ", schemaTag, " on ", structType.Name(), ".", field.Name)
+		}
 		if field.Anonymous && tagName == "" {
 			err := g.FlattenStruct(node, fieldType)
 			if err != nil {
@@ -241,8 +259,8 @@ func (g *generator) FlattenStruct(node *Node, structType reflect.Type) error {
 		g.path = append(g.path, structType.Name()+"."+tagName)
 		var fieldNode *Node
 		var err error
-		if enumTag != "" || examplesTag != "" || referenceTag != "" || schemaTag != "" {
-			fieldNode, err = g.taggedFieldNode(fieldType, enumTag, examplesTag, referenceTag, schemaTag)
+		if enumTag != "" || examplesTag != "" || referenceTag != "" {
+			fieldNode, err = g.taggedFieldNode(fieldType, enumTag, examplesTag, referenceTag)
 		} else {
 			fieldNode, err = g.Describe(fieldType)
 		}
@@ -255,7 +273,7 @@ func (g *generator) FlattenStruct(node *Node, structType reflect.Type) error {
 	return nil
 }
 
-func (g *generator) taggedFieldNode(fieldType reflect.Type, enumTag string, examplesTag string, referenceTag string, schemaTag string) (*Node, error) {
+func (g *generator) taggedFieldNode(fieldType reflect.Type, enumTag string, examplesTag string, referenceTag string) (*Node, error) {
 	elementType := fieldType
 	for elementType.Kind() == reflect.Pointer {
 		elementType = elementType.Elem()
@@ -269,17 +287,9 @@ func (g *generator) taggedFieldNode(fieldType reflect.Type, enumTag string, exam
 	}
 	var element *Node
 	var err error
-	switch {
-	case enumTag != "":
+	if enumTag != "" {
 		element, err = taggedValueNode(elementType, strings.Split(enumTag, ","))
-	case schemaTag == "prefixable":
-		if elementType.Kind() != reflect.String {
-			return nil, E.New("prefixable schema tags require a string field, got ", fieldType.String())
-		}
-		element, err = g.Describe(prefixableType)
-	case schemaTag != "":
-		return nil, E.New("unknown schema tag ", schemaTag, " on ", fieldType.String())
-	default:
+	} else {
 		element, err = g.Describe(elementType)
 	}
 	if err != nil {

@@ -24,6 +24,7 @@ require (
 	github.com/esrrhs/gohome v0.0.0-20260919145331-036124786531
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/go-chi/render v1.0.3
+	github.com/gobwas/ws v1.4.0
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/gofrs/uuid/v5 v5.5.1
 	github.com/google/uuid v1.6.0
@@ -56,10 +57,10 @@ require (
 	github.com/sagernet/asc-go v0.0.0-20260914163356-9e3d45a797c1
 	github.com/sagernet/bbolt v0.0.0-20260915102804-500ee1e84832
 	github.com/sagernet/cors v1.2.1
-	github.com/sagernet/cronet-go v0.0.0-20260912104727-0d28acc44093
-	github.com/sagernet/cronet-go/all v0.0.0-20260912104727-0d28acc44093
+	github.com/sagernet/cronet-go v0.0.0-20261023060337-b3c2ed82ac97
+	github.com/sagernet/cronet-go/all v0.0.0-20261023060337-b3c2ed82ac97
 	github.com/sagernet/fswatch v0.1.2
-	github.com/sagernet/gliderssh v0.3.4-0.20260531100337-2194faca5648
+	github.com/sagernet/gliderssh v0.3.4-0.20261023092853-e0cad6d28647
 	github.com/sagernet/gomobile v0.1.12
 	github.com/sagernet/gvisor v0.0.0-20260727.0-sing-box-mod.3
 	github.com/sagernet/netlink v0.0.0-20260814022025-64455d367bbf
@@ -68,7 +69,7 @@ require (
 	github.com/sagernet/sing v0.9.6-0.20260922013359-4ca3bebe0b8e
 	github.com/sagernet/sing-anytls v0.0.0-20260904135308-cec2d74334be
 	github.com/sagernet/sing-cloudflared v0.1.3-0.20260706062323-d9787e794aa3
-	github.com/sagernet/sing-mux v0.3.9-0.20260919141002-baf887b90a62
+	github.com/sagernet/sing-mux v0.3.10-0.20260929204512-caf09fe32475
 	github.com/sagernet/sing-openconnect v0.0.0-20260903200519-8b89c968949d
 	github.com/sagernet/sing-openvpn v0.0.0-20260903200517-e060dda5b1f1
 	github.com/sagernet/sing-quic v0.7.1-0.20260904135313-497364e8ee3e
@@ -76,9 +77,9 @@ require (
 	github.com/sagernet/sing-shadowsocks2 v0.2.1
 	github.com/sagernet/sing-shadowtls v0.2.1
 	github.com/sagernet/sing-snell v0.0.0-20260904135315-bc5a12ac736f
-	github.com/sagernet/sing-tun v0.9.6-0.20260923054625-041629c89d77
+	github.com/sagernet/sing-tun v0.9.7-0.20261023115453-611d83b7a57b
 	github.com/sagernet/sing-usbip v0.0.0-20260817040617-28bd42667eca
-	github.com/sagernet/sing-vmess v0.2.8
+	github.com/sagernet/sing-vmess v0.2.9-0.20261019223527-a0c58542bd9d
 	github.com/sagernet/smux v1.5.50-sing-box-mod.1
 	github.com/sagernet/tailscale v1.102.1-sing-box-1.14-mod.5.0.20260916060041-a8fbeb4b0838
 	github.com/sagernet/wireguard-go v0.0.8-0.20260917055437-bc6039037038
@@ -132,6 +133,7 @@ require (
 	github.com/ajg/form v1.5.1 // indirect
 	github.com/akutz/memconn v0.1.0 // indirect
 	github.com/alexbrainman/sspi v0.0.0-20231016080023-1a75b4708caa // indirect
+	github.com/ameshkov/dnsstamps v1.0.3
 	github.com/anchore/go-lzo v0.1.0 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
@@ -183,7 +185,7 @@ require (
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/cel-go v0.28.1 // indirect
 	github.com/google/certificate-transparency-go v1.3.2 // indirect
-	github.com/google/go-cmp v0.7.0 // indirect
+	github.com/google/go-cmp v0.7.0
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/gopacket v1.1.19 // indirect
 	github.com/google/nftables v0.2.1-0.20240414091927-5e242ec57806 // indirect
@@ -345,7 +347,7 @@ require (
 	zombiezen.com/go/capnproto2 v2.18.2+incompatible // indirect
 )
 
-replace github.com/sagernet/sing-vmess => github.com/starifly/sing-vmess v0.2.7-mod.9
+replace github.com/sagernet/sing-vmess => ./replace/sing-vmess
 
 replace github.com/Diniboy1123/connect-ip-go => github.com/shtorm-7/connect-ip-go v1.0.0-extended-1.1.1
 
@@ -366,3 +368,9 @@ replace github.com/net2share/vaydns => github.com/hiddify/vaydns v0.0.0-20260401
 replace github.com/kianmhz/GooseRelayVPN => github.com/hiddify/GooseRelayVPN v0.0.0-20260429125124-0e68c2a3ae4c
 
 replace github.com/amnezia-vpn/amneziawg-go => github.com/hiddifydeveloper/amneziawg-go v0.0.0-20261001141816-70b344f2f78b
+
+replace github.com/amnezia-vpn/amneziawg-go/v3 => ./replace/amneziawg-go
+replace github.com/sagernet/sing-tun => ./replace/sing-tun
+replace github.com/sagernet/gvisor => ./replace/gvisor
+replace github.com/sagernet/sing-mux => ./replace/sing-mux
+replace github.com/metacubex/utls => github.com/Leadaxe/utls-lx v1.8.8-0.20261011005638-ad69b191e2f8

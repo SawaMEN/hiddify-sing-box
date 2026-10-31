@@ -194,8 +194,6 @@ BBR 拥塞控制算法配置，可选 `conservative` `standard` `aggressive`。
 
 将此入站注册到 Hysteria Realm 会合服务，以启用 NAT 穿透。
 
-入站通过 STUN 发现自己的公网地址并注册到 realm，借助 UDP 打洞接受客户端连接，无需可公网直达的监听地址。
-
 会合服务参阅 [Hysteria Realm](/zh/configuration/service/hysteria-realm/)。
 
 #### realm.server_url

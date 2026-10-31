@@ -12,6 +12,7 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/compatible"
+	"github.com/sagernet/sing-box/common/interrupt"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -296,31 +297,36 @@ func (c *Client) beginExchange(ctx context.Context, transport adapter.DNSTranspo
 		disableCache:    disableCache,
 	}
 	if !disableCache {
-		cacheKey := c.newCacheKey(transport, question, message, options)
-		operation.cacheKey = cacheKey
-		exchangeKey := dnsExchangeKey{dnsCacheKey: cacheKey, timeout: options.Timeout}
-		cond, loaded := c.cacheLock.LoadOrStore(exchangeKey, make(chan struct{}))
-		if !loaded {
-			operation.releaseCond = func() {
-				c.cacheLock.Delete(exchangeKey)
-				close(cond)
-			}
-		}
 		for {
+			// H: each wait ends by rejoining here, so after a failed query the waiters share one
+			// new query (under the current environment) instead of each sending their own
+			cacheKey := c.newCacheKey(transport, question, message, options)               //H
+			operation.cacheKey = cacheKey                                                  //H
+			exchangeKey := dnsExchangeKey{dnsCacheKey: cacheKey, timeout: options.Timeout} //H
+			cond, loaded := c.cacheLock.LoadOrStore(exchangeKey, make(chan struct{}))      //H
+			if !loaded {                                                                   //H
+				operation.releaseCond = func() { //H
+					c.cacheLock.Delete(exchangeKey) //H
+					close(cond)                     //H
+				} //H
+			} //H
 			response, ttl, isStale := c.loadResponse(cacheKey)
-			if response != nil {
-				if isStale && !options.DisableOptimisticCache {
+			if response != nil && (!isStale || !options.DisableOptimisticCache) {
+				operation.release()
+				if isStale {
 					c.backgroundRefreshDNS(transport, cacheKey, message.Copy(), options, responseChecker)
-					logOptimisticResponse(c.logger, ctx, response)
-					response.Id = message.Id
-					operation.release()
-					return nil, response, exchangeDone, nil
-				} else if !isStale {
-					logCachedResponse(c.logger, ctx, response, ttl)
-					response.Id = message.Id
-					operation.release()
-					return nil, response, exchangeDone, nil
 				}
+				if responseChecker != nil && !responseChecker(response) {
+					logRejectedResponse(c.logger, ctx, response)
+					return nil, nil, exchangeDone, ErrResponseRejectedCached
+				}
+				if isStale {
+					logOptimisticResponse(c.logger, ctx, response)
+				} else {
+					logCachedResponse(c.logger, ctx, response, ttl)
+				}
+				response.Id = message.Id
+				return nil, response, exchangeDone, nil
 			}
 			if !loaded {
 				break
@@ -337,9 +343,6 @@ func (c *Client) beginExchange(ctx context.Context, transport adapter.DNSTranspo
 			if err != nil {
 				return nil, nil, exchangeDone, err
 			}
-			cacheKey = c.newCacheKey(transport, question, message, options)
-			operation.cacheKey = cacheKey
-			loaded = false
 		}
 	}
 
@@ -348,7 +351,7 @@ func (c *Client) beginExchange(ctx context.Context, transport adapter.DNSTranspo
 		operation.release()
 		return nil, nil, exchangeDone, E.New("DNS query loopback in transport[", contextTransport, "]")
 	}
-	operation.ctx = adapter.ContextWithDNSTransportTag(ctx, transport.Tag())
+	operation.ctx = adapter.ContextWithDNSTransportTag(interrupt.ContextWithIsExternalConnection(ctx, false), transport.Tag())
 	if !disableCache && responseChecker != nil && c.rdrc != nil {
 		rejected := c.rdrc.LoadRDRC(transport.Tag(), question.Name, question.Qtype)
 		if rejected {
@@ -471,6 +474,13 @@ func (c *Client) Lookup(ctx context.Context, transport adapter.DNSTransport, dom
 	}
 	var response4 []netip.Addr
 	var response6 []netip.Addr
+	// H: either family is enough to connect, so once one answers, the other question is waited
+	// for only one more second when it is the preferred family (IPv6 with prefer_ipv6, IPv4
+	// otherwise), and not at all otherwise; on a filtered network it can wait until the timeout
+	// on servers that never answer
+	lookupCtx, stopLookup := context.WithCancel(ctx)
+	defer stopLookup()
+	var stopTimer4, stopTimer6 *time.Timer
 	var group task.Group
 	group.Append("exchange4", func(ctx context.Context) error {
 		response, err := c.lookupToExchange(ctx, transport, dnsName, dns.TypeA, lookupOptions, responseChecker)
@@ -478,6 +488,13 @@ func (c *Client) Lookup(ctx context.Context, transport adapter.DNSTransport, dom
 			return err
 		}
 		response4 = response
+		if len(response) > 0 { //H
+			if strategy == C.DomainStrategyPreferIPv6 {
+				stopTimer4 = time.AfterFunc(time.Second, stopLookup)
+			} else {
+				stopLookup()
+			}
+		}
 		return nil
 	})
 	group.Append("exchange6", func(ctx context.Context) error {
@@ -486,9 +503,21 @@ func (c *Client) Lookup(ctx context.Context, transport adapter.DNSTransport, dom
 			return err
 		}
 		response6 = response
+		if len(response) > 0 { //H
+			if strategy == C.DomainStrategyPreferIPv6 {
+				stopLookup()
+			} else {
+				stopTimer6 = time.AfterFunc(time.Second, stopLookup)
+			}
+		}
 		return nil
 	})
-	err := group.Run(ctx)
+	err := group.Run(lookupCtx)
+	for _, stopTimer := range []*time.Timer{stopTimer4, stopTimer6} {
+		if stopTimer != nil {
+			stopTimer.Stop()
+		}
+	}
 	if len(response4) == 0 && len(response6) == 0 {
 		return nil, err
 	}
@@ -578,6 +607,12 @@ func (c *Client) questionCache(ctx context.Context, transport adapter.DNSTranspo
 			return nil, ErrNotCached
 		}
 		c.backgroundRefreshDNS(transport, cacheKey, c.prepareExchangeMessage(message.Copy(), options), options, responseChecker)
+	}
+	if responseChecker != nil && !responseChecker(response) {
+		logRejectedResponse(c.logger, ctx, response)
+		return nil, ErrResponseRejectedCached
+	}
+	if isStale {
 		logOptimisticResponse(c.logger, ctx, response)
 	}
 	if response.Rcode != dns.RcodeSuccess {

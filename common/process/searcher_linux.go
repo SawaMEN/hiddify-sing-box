@@ -15,6 +15,7 @@ import (
 	"unicode"
 
 	"github.com/sagernet/sing-box/adapter"
+	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
@@ -88,6 +89,10 @@ func (s *linuxSearcher) FindProcessInfo(ctx context.Context, network string, sou
 	processPaths, err := s.findProcessPaths(inode, uid)
 	if err != nil {
 		s.logger.DebugContext(ctx, "find process path: ", err)
+	} else if C.IsAndroid {
+		processInfo.ProcessPaths = common.Filter(processPaths, func(processPath string) bool {
+			return !strings.HasPrefix(processPath, "/system/bin/app_process")
+		})
 	} else {
 		processInfo.ProcessPaths = processPaths
 	}

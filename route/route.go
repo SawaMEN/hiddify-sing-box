@@ -228,6 +228,7 @@ func (r *Router) RoutePacketConnection(ctx context.Context, conn N.PacketConn, m
 		} else {
 			r.logger.ErrorContext(ctx, err)
 		}
+		return nil //H: nothing will close done after a failed route; waiting leaked until shutdown
 	}
 	select {
 	case <-done:
@@ -480,6 +481,9 @@ func applyRouteOptionsOverride(metadata *adapter.InboundContext, routeOptions *R
 	if routeOptions.UDPTimeout > 0 {
 		metadata.UDPTimeout = routeOptions.UDPTimeout
 	}
+	if routeOptions.OverrideTunnelDestination != "" { //H: parsed but never applied, so a tunnel had no destination
+		metadata.TunnelDestination = routeOptions.OverrideTunnelDestination //H
+	} //H
 }
 
 func (r *Router) preMatchFlow(ctx context.Context, metadata *adapter.InboundContext, packetDestination M.Socksaddr, matchedRule adapter.Rule, outboundTag string) adapter.PreMatchResult {
@@ -567,7 +571,7 @@ func (r *Router) preMatchFlow(ctx context.Context, metadata *adapter.InboundCont
 		if len(flowTrackers) == 1 {
 			return flowTrackers[0]
 		}
-		return multiFlowTracker(flowTrackers)
+		return &multiFlowTracker{trackers: flowTrackers}
 	}
 	return result
 }
@@ -841,7 +845,6 @@ func (r *Router) actionSniff(
 			}
 			goto finally
 		}
-		packetBuffers = inputPacketBuffers
 		for {
 			var (
 				sniffBuffer = buf.NewPacket()

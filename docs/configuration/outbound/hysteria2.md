@@ -191,15 +191,13 @@ maximums.
 !!! warning ""
 
     Chrome does not declare support for Ed25519, so a server using an Ed25519 certificate will fail the
-    handshake. Use an ECDSA or RSA certificate instead; certificates issued by ACME are unaffected.
+    handshake. Use an ECDSA or RSA certificate instead.
 
 #### realm
 
 !!! question "Since sing-box 1.14.0"
 
 Connect to a Hysteria2 server through a Hysteria Realm rendezvous service.
-
-The outbound queries the realm for the server's current public addresses, performs UDP hole-punching, and proceeds with the normal QUIC handshake.
 
 Conflicts with `server`, `server_port` and `server_ports`.
 

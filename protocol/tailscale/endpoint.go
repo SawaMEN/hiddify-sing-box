@@ -92,12 +92,10 @@ type Endpoint struct {
 	wgEngine          wgengine.ExportedUserspaceEngine
 	onReconfigHook    wgengine.ReconfigListener
 
-	cfg           *wgcfg.Config
-	routerCfg     *router.Config
-	dnsCfg        *tsDNS.Config
-	routeDomains  common.TypedValue[map[string]bool]
-	routeSuffixes common.TypedValue[[]string]
-	searchDomains atomic.Bool
+	cfg       *wgcfg.Config
+	routerCfg *router.Config
+	dnsCfg    *tsDNS.Config
+	domains   atomic.Pointer[tailnetDomains]
 
 	acceptRoutes               bool
 	exitNode                   string
@@ -128,9 +126,7 @@ type Endpoint struct {
 	systemInterfaceMTU  uint32
 	serverStarted       bool
 	started             atomic.Bool
-	systemTun           tun.Tun
 	systemDialer        *dialer.DefaultDialer
-	fallbackTCPCloser   func()
 }
 
 func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.TailscaleEndpointOptions) (adapter.Endpoint, error) {
@@ -269,7 +265,14 @@ func (t *Endpoint) References() []string {
 	return []string{t.detour}
 }
 
-func (t *Endpoint) Start(stage adapter.StartStage) error {
+func (t *Endpoint) References() []string {
+	if t.detour == "" {
+		return nil
+	}
+	return []string{t.detour}
+}
+
+func (t *Endpoint) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	switch stage {
 	case adapter.StartStateInitialize:
 		t.server.NetstackMemoryPressure = oomkiller.MemoryPressure(t.ctx)
@@ -285,9 +288,9 @@ func (t *Endpoint) Start(stage adapter.StartStage) error {
 		}
 		t.server.PeerDNSQueryHandler = (*peerDNSQueryHandler)(t)
 	case adapter.StartStateStart:
-		return t.start()
+		return t.start(scope)
 	case adapter.StartStatePostStart:
-		return t.postStart()
+		return t.postStart(scope)
 	}
 	return nil
 }
@@ -322,14 +325,13 @@ func (t *Endpoint) start() error {
 		if err != nil {
 			return err
 		}
+		scope.Add(systemTun.Close)
 		err = systemTun.Start()
 		if err != nil {
-			_ = systemTun.Close()
 			return err
 		}
 		wgTunDevice, err := newTunDeviceAdapter(systemTun, int(mtu), t.logger)
 		if err != nil {
-			_ = systemTun.Close()
 			return err
 		}
 		systemDialer, err := dialer.NewDefault(t.ctx, option.DialerOptions{
@@ -338,10 +340,8 @@ func (t *Endpoint) start() error {
 			},
 		})
 		if err != nil {
-			_ = systemTun.Close()
 			return err
 		}
-		t.systemTun = systemTun
 		t.systemDialer = systemDialer
 		t.server.TunDevice = wgTunDevice
 	}
@@ -361,9 +361,6 @@ func (t *Endpoint) start() error {
 func (t *Endpoint) postStart() error {
 	err := t.server.Start()
 	if err != nil {
-		if t.systemTun != nil {
-			_ = t.systemTun.Close()
-		}
 		return err
 	}
 	t.serverStarted = true
@@ -373,6 +370,10 @@ func (t *Endpoint) postStart() error {
 	t.localBackend.Store(localBackend)
 	if !version.IsAppleTV() {
 		registerTaildropEndpoint(localBackend, t)
+		scope.Add(func() error {
+			unregisterTaildropEndpoint(localBackend)
+			return nil
+		})
 		go t.taildrop.start()
 	}
 	t.stack = t.server.ExportNetstack().ExportIPStack()
@@ -400,15 +401,20 @@ func (t *Endpoint) postStart() error {
 		if err != nil {
 			return E.Cause(err, "start SSH server")
 		}
+		scope.Add(sshServer.Close)
 		t.sshReconfigHook = sshServer.OnReconfig
 		t.sshServerInstance = sshServer
 	}
-	go t.watchState()
+	go t.watchState(scope.Context())
 	t.started.Store(true)
+	scope.Add(func() error {
+		t.started.Store(false)
+		return nil
+	})
 	return nil
 }
 
-func (t *Endpoint) watchState() {
+func (t *Endpoint) watchState(ctx context.Context) {
 	localBackend := t.server.ExportLocalBackend()
 	var reportedAuthURL string
 	exitNodePending := t.exitNode != ""
@@ -469,7 +475,7 @@ func (t *Endpoint) watchState() {
 			}
 			return true
 		})
-		if t.ctx.Err() != nil {
+		if ctx.Err() != nil {
 			return
 		}
 		if busError != "" {
@@ -478,7 +484,7 @@ func (t *Endpoint) watchState() {
 			t.logger.Warn("state watcher stopped unexpectedly, restarting")
 		}
 		select {
-		case <-t.ctx.Done():
+		case <-ctx.Done():
 			return
 		case <-time.After(time.Second):
 		}
@@ -943,26 +949,19 @@ func (t *Endpoint) NewPacketConnectionEx(_ context.Context, conn N.PacketConn, s
 }
 
 func (t *Endpoint) PreferredDomain(metadata *adapter.InboundContext, domain string) bool {
-	routeDomains := t.routeDomains.Load()
-	if routeDomains == nil {
+	domains := t.domains.Load()
+	if domains == nil {
 		return false
 	}
-	domain = strings.ToLower(domain)
-	if routeDomains[domain] {
+	canonicalDomain := mDNS.CanonicalName(domain)
+	if slices.Contains(domains.searchDomains, canonicalDomain) {
 		return true
 	}
+	var magicHosts nDNSResolver.MagicDNSHosts
 	if t.started.Load() {
-		magicHosts := t.server.ExportLocalBackend().ExportMagicDNSHosts()
-		if _, found := lookupHosts(nil, magicHosts, domain); found {
-			return true
-		}
+		magicHosts = t.server.ExportLocalBackend().ExportMagicDNSHosts()
 	}
-	for _, suffix := range t.routeSuffixes.Load() {
-		if matchDomainSuffix(domain, suffix) {
-			return true
-		}
-	}
-	return !strings.Contains(domain, ".") && t.searchDomains.Load()
+	return domains.match(magicHosts, canonicalDomain, !strings.Contains(domain, "."))
 }
 
 func (t *Endpoint) PreferredAddress(metadata *adapter.InboundContext, address netip.Addr) bool {
@@ -996,20 +995,8 @@ func (t *Endpoint) onReconfig(cfg *wgcfg.Config, routerCfg *router.Config, dnsCf
 	t.routerCfg = routerCfg
 	t.dnsCfg = dnsCfg
 
-	routeDomains := make(map[string]bool)
-	for fqdn := range dnsCfg.Hosts {
-		routeDomains[fqdn.WithoutTrailingDot()] = true
-	}
-	for _, fqdn := range dnsCfg.SearchDomains {
-		routeDomains[fqdn.WithoutTrailingDot()] = true
-	}
-	routeSuffixes := make([]string, 0, len(dnsCfg.Routes))
-	for fqdn := range dnsCfg.Routes {
-		routeSuffixes = append(routeSuffixes, strings.ToLower(fqdn.WithoutTrailingDot()))
-	}
-	t.routeDomains.Store(routeDomains)
-	t.routeSuffixes.Store(routeSuffixes)
-	t.searchDomains.Store(len(dnsCfg.SearchDomains) > 0)
+	domains := newTailnetDomains(dnsCfg)
+	t.domains.Store(&domains)
 
 	if t.onReconfigHook != nil {
 		t.onReconfigHook(cfg, routerCfg, dnsCfg)
@@ -1081,5 +1068,7 @@ func (t *peerDNSQueryHandler) HandlePeerDNSQuery(ctx context.Context, query []by
 		}
 		return nil, err
 	}
-	return response.Pack()
+	compressedResponse := *response
+	compressedResponse.Compress = true
+	return compressedResponse.Pack()
 }

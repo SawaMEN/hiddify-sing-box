@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/common/grpcname" //H
 	"github.com/sagernet/sing-box/common/tls"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
@@ -60,14 +61,14 @@ func NewClient(ctx context.Context, dialer N.Dialer, serverAddr M.Socksaddr, opt
 		url: &url.URL{
 			Scheme:  "https",
 			Host:    serverAddr.String(),
-			Path:    "/" + options.ServiceName + "/Tun",
-			RawPath: "/" + url.PathEscape(options.ServiceName) + "/Tun",
+			Path:    grpcname.UnescapedPath(options.ServiceName), //H: Xray's custom paths
+			RawPath: grpcname.Path(options.ServiceName),          //H
 		},
 		host: host,
 	}
 	if tlsConfig == nil {
 		client.transport.DialTLSContext = func(ctx context.Context, network, addr string, cfg *tls.STDConfig) (net.Conn, error) {
-			return dialer.DialContext(ctx, network, M.ParseSocksaddr(addr))
+			return dialer.DialContext(adapter.ContextForMultiplexSession(ctx), network, M.ParseSocksaddr(addr))
 		}
 	} else {
 		if len(tlsConfig.NextProtos()) == 0 {
@@ -75,7 +76,7 @@ func NewClient(ctx context.Context, dialer N.Dialer, serverAddr M.Socksaddr, opt
 		}
 		tlsDialer := tls.NewDialer(dialer, tlsConfig)
 		client.transport.DialTLSContext = func(ctx context.Context, network, addr string, cfg *tls.STDConfig) (net.Conn, error) {
-			return tlsDialer.DialTLSContext(ctx, M.ParseSocksaddr(addr))
+			return tlsDialer.DialTLSContext(adapter.ContextForMultiplexSession(ctx), M.ParseSocksaddr(addr))
 		}
 	}
 

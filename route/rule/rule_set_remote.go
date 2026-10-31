@@ -129,7 +129,6 @@ func (s *RemoteRuleSet) StartContext(ctx context.Context, startContext *adapter.
 			}
 		}
 	}
-	var loadedFromInitialPath bool
 	if s.lastUpdated.IsZero() && s.initialPath != "" {
 		var content []byte
 		content, err = filemanager.ReadFile(s.ctx, s.initialPath)

@@ -54,6 +54,12 @@ type Endpoint struct {
 }
 
 func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.WireGuardEndpointOptions) (adapter.Endpoint, error) {
+	if options.AWG.IsAvailble() { //H: it was ignored, so the endpoint ran plain WireGuard
+		return nil, E.New(`the awg block is not read by "type": "wireguard", use "type": "awg"`) //H
+	} //H
+	if err := options.Noise.FakePacket.Validate(); err != nil { //H: a bad template fails the config, not the handshake
+		return nil, E.Cause(err, "wireguard") //H
+	} //H
 	ep := &Endpoint{
 		Adapter:        endpoint.NewAdapterWithDialerOptions(C.TypeWireGuard, tag, []string{N.NetworkTCP, N.NetworkUDP, N.NetworkICMP}, options.DialerOptions),
 		ctx:            ctx,
@@ -69,6 +75,9 @@ func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextL
 	if options.Detour != "" && options.ListenPort != 0 {
 		return nil, E.New("`listen_port` is conflict with `detour`")
 	}
+	// H: let the kernel fragment WireGuard's UDP, as official WireGuard does; with DF a packet
+	// larger than the path MTU (a tunnel inside another tunnel) is dropped
+	options.UDPFragmentDefault = true //H
 	outboundDialer, err := dialer.NewWithOptions(dialer.Options{
 		Context: ctx,
 		Options: options.DialerOptions,
@@ -86,6 +95,10 @@ func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextL
 	} else {
 		udpTimeout = C.UDPTimeout
 	}
+	fallback, err := peerFallback(options) //H
+	if err != nil {                        //H
+		return nil, err //H
+	} //H
 	networkManager := service.FromContext[adapter.NetworkManager](ctx)
 	wgEndpoint, err := wireguard.NewEndpoint(wireguard.EndpointOptions{
 		Context:         ctx,
@@ -143,7 +156,7 @@ func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextL
 	return ep, nil
 }
 
-func (w *Endpoint) Start(stage adapter.StartStage) error {
+func (w *Endpoint) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	switch stage {
 	case adapter.StartStateInitialize:
 		return w.endpoint.Initialize(oomkiller.MemoryPressure(w.ctx))
@@ -155,15 +168,18 @@ func (w *Endpoint) Start(stage adapter.StartStage) error {
 			return err
 		}
 		w.started.Store(true)
+		scope.Add(func() error {
+			w.bindAccess.Lock()
+			w.started.Store(false)
+			w.bindAccess.Unlock()
+			return nil
+		})
 	}
 	return nil
 }
 
-func (w *Endpoint) Close() error {
-	w.bindAccess.Lock()
-	w.started.Store(false)
-	w.bindAccess.Unlock()
-	return w.endpoint.Close()
+func (w *Endpoint) MultiplexEnabled() bool {
+	return true
 }
 
 func (w *Endpoint) InterfaceUpdated(ctx context.Context) {
@@ -203,6 +219,10 @@ func (w *Endpoint) PortAddresses() (netip.Addr, netip.Addr) {
 
 func (w *Endpoint) PortMTU() uint32 {
 	return w.endpoint.PortMTU()
+}
+
+func (w *Endpoint) UpstreamPort() any {
+	return w.endpoint
 }
 
 func (w *Endpoint) AttachReturn(returnPath tun.Return) error {
@@ -356,4 +376,9 @@ func (w *Endpoint) PreferredAddress(metadata *adapter.InboundContext, address ne
 		return false
 	}
 	return w.endpoint.Lookup(address) != nil
+}
+
+// IpcGet returns the device's state in the UAPI format; WARP reads handshakes and traffic from it. //H
+func (w *Endpoint) IpcGet() (string, error) {
+	return w.endpoint.IpcGet()
 }

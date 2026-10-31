@@ -433,30 +433,14 @@ func (e *Endpoint) Start(stage adapter.StartStage) error {
 	if stage != adapter.StartStatePostStart {
 		return nil
 	}
-	err := e.client.Start()
-	if err != nil {
-		return err
-	}
-	e.stateAccess.Lock()
-	e.updateState(func(state *clientState) {
-		state.started = true
-	})
-	e.readLoopDone = make(chan struct{})
-	e.authFormLoopDone = make(chan struct{})
-	e.activeTransportLoopDone = make(chan struct{})
-	e.stateAccess.Unlock()
-	go e.readLoop()
-	go e.watchAuthForms()
-	go e.watchActiveTransport()
 	return nil
 }
 
-func (e *Endpoint) readLoop() {
-	defer close(e.readLoopDone)
+func (e *Endpoint) readLoop(ctx context.Context) {
 	for {
-		packetBuffers, err := e.client.ReadDataPackets(e.loopContext)
+		packetBuffers, err := e.client.ReadDataPackets(ctx)
 		if err != nil {
-			if E.IsClosedOrCanceled(err) || e.loopContext.Err() != nil {
+			if E.IsClosedOrCanceled(err) || ctx.Err() != nil {
 				return
 			}
 			e.logger.Error(E.Cause(err, "client terminated"))
@@ -555,6 +539,10 @@ func (e *Endpoint) PortAddresses() (netip.Addr, netip.Addr) {
 
 func (e *Endpoint) PortMTU() uint32 {
 	return e.device.PortMTU()
+}
+
+func (e *Endpoint) UpstreamPort() any {
+	return e.device
 }
 
 func (e *Endpoint) AttachReturn(returnPath tun.Return) error {

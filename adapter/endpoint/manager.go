@@ -7,79 +7,52 @@ import (
 	"sync"
 
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/taskmonitor"
-	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
-	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 )
 
 var _ adapter.EndpointManager = (*Manager)(nil)
 
 type Manager struct {
-	logger        log.ContextLogger
 	registry      adapter.EndpointRegistry
 	access        sync.Mutex
-	started       bool
-	stage         adapter.StartStage
+	scope         *adapter.Scope
+	started       bool // H: components created from now on are started right away (hot reload)
 	endpoints     []adapter.Endpoint
 	endpointByTag map[string]adapter.Endpoint
 }
 
-func NewManager(logger log.ContextLogger, registry adapter.EndpointRegistry) *Manager {
+func NewManager(registry adapter.EndpointRegistry) *Manager {
 	return &Manager{
-		logger:        logger,
 		registry:      registry,
 		endpointByTag: make(map[string]adapter.Endpoint),
 	}
 }
 
-func (m *Manager) Start(stage adapter.StartStage) error {
+func (m *Manager) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	m.access.Lock()
 	defer m.access.Unlock()
-	if m.started && m.stage >= stage {
-		panic("already started")
+	if stage == adapter.StartStateInitialize {
+		m.scope = scope
 	}
-	m.started = true
-	m.stage = stage
 	if stage == adapter.StartStateStart {
-		// started with outbound manager
 		return nil
 	}
 	for _, endpoint := range m.endpoints {
 		name := "endpoint/" + endpoint.Type() + "[" + endpoint.Tag() + "]"
-		done := adapter.LogElapsed(m.logger, stage, " ", name)
-		err := adapter.LegacyStart(endpoint, stage)
-		done()
+		err := scope.Start(name, endpoint, stage)
 		if err != nil {
-			return E.Cause(err, stage, " ", name)
+			return err
 		}
+	}
+	if stage == adapter.StartStateStarted {
+		m.started = true
 	}
 	return nil
 }
 
-func (m *Manager) Close() error {
-	m.access.Lock()
-	defer m.access.Unlock()
-	if !m.started {
-		return nil
-	}
-	m.started = false
-	endpoints := m.endpoints
-	m.endpoints = nil
-	monitor := taskmonitor.New(m.logger, C.StopTimeout)
-	var err error
-	for _, endpoint := range endpoints {
-		name := "endpoint/" + endpoint.Type() + "[" + endpoint.Tag() + "]"
-		done := adapter.LogElapsed(m.logger, "close ", name)
-		monitor.Start("close ", name)
-		err = E.Append(err, endpoint.Close(), func(err error) error {
-			return E.Cause(err, "close ", name)
-		})
-		monitor.Finish()
-		done()
-	}
-	return nil
+func (m *Manager) StartEndpoint(endpoint adapter.Endpoint) error {
+	return m.scope.Start("endpoint/"+endpoint.Type()+"["+endpoint.Tag()+"]", endpoint, adapter.StartStateStart)
 }
 
 func (m *Manager) Endpoints() []adapter.Endpoint {
@@ -95,6 +68,7 @@ func (m *Manager) Get(tag string) (adapter.Endpoint, bool) {
 	return endpoint, found
 }
 
+// Remove removes and closes an endpoint; used by hot reload. //H
 func (m *Manager) Remove(tag string) error {
 	m.access.Lock()
 	endpoint, found := m.endpointByTag[tag]
@@ -103,9 +77,7 @@ func (m *Manager) Remove(tag string) error {
 		return os.ErrInvalid
 	}
 	delete(m.endpointByTag, tag)
-	index := common.Index(m.endpoints, func(it adapter.Endpoint) bool {
-		return it == endpoint
-	})
+	index := slices.Index(m.endpoints, endpoint)
 	if index == -1 {
 		panic("invalid endpoint index")
 	}
@@ -113,7 +85,7 @@ func (m *Manager) Remove(tag string) error {
 	started := m.started
 	m.access.Unlock()
 	if started {
-		return endpoint.Close()
+		return adapter.CloseLate(m.scope, endpoint)
 	}
 	return nil
 }
@@ -124,16 +96,12 @@ func (m *Manager) Create(ctx context.Context, router adapter.Router, logger log.
 		return err
 	}
 	m.access.Lock()
-	defer m.access.Unlock()
-	if m.started {
-		name := "endpoint/" + endpoint.Type() + "[" + endpoint.Tag() + "]"
-		for _, stage := range adapter.ListStartStages {
-			done := adapter.LogElapsed(m.logger, stage, " ", name)
-			err = adapter.LegacyStart(endpoint, stage)
-			done()
-			if err != nil {
-				return E.Cause(err, stage, " ", name)
-			}
+	started := m.started
+	m.access.Unlock()
+	if started { // H: hot reload; started outside the lock, as starting may look up other endpoints
+		err = adapter.StartLate(m.scope, "endpoint/"+endpoint.Type()+"["+endpoint.Tag()+"]", endpoint)
+		if err != nil {
+			return err
 		}
 	}
 	var replaced bool
@@ -160,5 +128,12 @@ func (m *Manager) Create(ctx context.Context, router adapter.Router, logger log.
 		m.endpoints = append(m.endpoints, endpoint)
 	}
 	m.endpointByTag[tag] = endpoint
+	m.access.Unlock()
+	if replaced {
+		err = adapter.CloseLate(m.scope, existsEndpoint)
+		if err != nil {
+			return E.Cause(err, "close endpoint/", existsEndpoint.Type(), "[", existsEndpoint.Tag(), "]")
+		}
+	}
 	return nil
 }

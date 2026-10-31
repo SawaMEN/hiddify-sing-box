@@ -404,7 +404,6 @@ func buildClientDataChannelOptions(options option.OpenVPNClientEndpointOptions) 
 		AllowCompression: options.AllowCompression,
 		ReplayWindow:     options.ReplayWindow,
 		ReplayWindowTime: time.Duration(options.ReplayWindowTime),
-		PacketHeadroom:   ovpntransport.PacketHeadroom,
 	}
 }
 
@@ -615,28 +614,14 @@ func (c *ClientEndpoint) Start(stage adapter.StartStage) error {
 	if stage != adapter.StartStatePostStart {
 		return nil
 	}
-	err := c.client.Start()
-	if err != nil {
-		return err
-	}
-	c.stateAccess.Lock()
-	c.updateState(func(state *clientState) {
-		state.started = true
-	})
-	c.readLoopDone = make(chan struct{})
-	c.challengeLoopDone = make(chan struct{})
-	c.stateAccess.Unlock()
-	go c.readLoop()
-	go c.watchChallenges()
 	return nil
 }
 
-func (c *ClientEndpoint) readLoop() {
-	defer close(c.readLoopDone)
+func (c *ClientEndpoint) readLoop(ctx context.Context) {
 	for {
-		packetBuffers, err := c.client.ReadDataPackets(c.loopContext)
+		packetBuffers, err := c.client.ReadDataPackets(ctx)
 		if err != nil {
-			if E.IsClosedOrCanceled(err) || c.loopContext.Err() != nil {
+			if E.IsClosedOrCanceled(err) || ctx.Err() != nil {
 				return
 			}
 			c.logger.Error(E.Cause(err, "client terminated"))
@@ -731,6 +716,10 @@ func (c *ClientEndpoint) PortAddresses() (netip.Addr, netip.Addr) {
 
 func (c *ClientEndpoint) PortMTU() uint32 {
 	return c.device.PortMTU()
+}
+
+func (c *ClientEndpoint) UpstreamPort() any {
+	return c.device
 }
 
 func (c *ClientEndpoint) AttachReturn(returnPath tun.Return) error {

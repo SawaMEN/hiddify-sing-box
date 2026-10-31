@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -26,23 +27,33 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/common/x/list"
+	"github.com/sagernet/sing/service"
 )
 
 var _ adapter.ConnectionManager = (*ConnectionManager)(nil)
 
 type ConnectionManager struct {
-	logger      logger.ContextLogger
-	access      sync.Mutex
-	connections list.List[io.Closer]
+	logger         logger.ContextLogger
+	urlTestHistory *urltest.HistoryStorage
+	access         sync.Mutex
+	connections    list.List[io.Closer]
 }
 
-func NewConnectionManager(logger logger.ContextLogger) *ConnectionManager {
+func NewConnectionManager(ctx context.Context, logger logger.ContextLogger) *ConnectionManager {
 	return &ConnectionManager{
-		logger: logger,
+		logger:         logger,
+		urlTestHistory: service.PtrFromContext[urltest.HistoryStorage](ctx),
 	}
 }
 
-func (m *ConnectionManager) Start(stage adapter.StartStage) error {
+func (m *ConnectionManager) Start(stage adapter.StartStage, scope *adapter.Scope) error {
+	if stage != adapter.StartStateInitialize {
+		return nil
+	}
+	scope.Add(func() error {
+		m.CloseAll()
+		return nil
+	})
 	return nil
 }
 
@@ -65,11 +76,6 @@ func (m *ConnectionManager) CloseAll() {
 	for _, closer := range closers {
 		common.Close(closer)
 	}
-}
-
-func (m *ConnectionManager) Close() error {
-	m.CloseAll()
-	return nil
 }
 
 func (m *ConnectionManager) TrackConn(conn net.Conn) net.Conn {
@@ -122,6 +128,7 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 			}
 		}
 		err = E.Cause(err, "open connection to ", remoteString, dialerString)
+		m.deleteURLTestHistory(metadata.OutboundChain)
 		N.CloseOnHandshakeFailure(conn, onClose, err)
 		m.logger.ErrorContext(ctx, err)
 		return
@@ -201,6 +208,7 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 				}
 			}
 			err = E.Cause(err, "open packet connection to ", remoteString, dialerString)
+			m.deleteURLTestHistory(metadata.OutboundChain)
 			N.CloseOnHandshakeFailure(conn, onClose, err)
 			m.logger.ErrorContext(ctx, err)
 			return
@@ -234,9 +242,22 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 	}
 	err = N.ReportPacketConnHandshakeSuccess(conn, remotePacketConn)
 	if err != nil {
-		conn.Close()
+		err = E.Cause(err, "report handshake success")
 		remotePacketConn.Close()
-		m.logger.ErrorContext(ctx, "report handshake success: ", err)
+		N.CloseOnHandshakeFailure(conn, onClose, err)
+		m.logger.ErrorContext(ctx, err)
+		return
+	}
+	udpTimeout := packetTimeout(&metadata)
+	var (
+		spliceRemote any = remotePacketConn
+		spliced      bool
+	)
+	if remoteConn != nil {
+		spliceRemote = remoteConn
+	}
+	conn, spliced = m.splicePacketConnection(ctx, conn, spliceRemote, &metadata, destinationAddress, udpTimeout, onClose)
+	if spliced {
 		return
 	}
 	udpTimeout := packetTimeout(&metadata)
@@ -282,6 +303,15 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 	var done atomic.Bool
 	go m.packetConnectionCopy(ctx, conn, destination, false, &done, onClose)
 	go m.packetConnectionCopy(ctx, destination, conn, true, &done, onClose)
+}
+
+func (m *ConnectionManager) deleteURLTestHistory(chain []adapter.Outbound) {
+	if slices.ContainsFunc(chain, func(it adapter.Outbound) bool {
+		_, isURLTestGroup := it.(adapter.URLTestGroup)
+		return isURLTestGroup
+	}) {
+		m.urlTestHistory.DeleteURLTestHistory(chain[len(chain)-1].Tag())
+	}
 }
 
 func (m *ConnectionManager) connectionCopy(ctx context.Context, source net.Conn, destination net.Conn, direction bool, done *atomic.Bool, onClose N.CloseHandlerFunc) {

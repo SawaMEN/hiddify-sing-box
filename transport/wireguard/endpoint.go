@@ -83,7 +83,10 @@ func NewEndpoint(options EndpointOptions) (*Endpoint, error) {
 		if err != nil {
 			return nil, E.Cause(err, "decode public key for peer ", peerIndex)
 		}
-		peer.publicKeyHex = hex.EncodeToString(publicKeyBytes)
+		if len(publicKeyBytes) != device.NoisePublicKeySize {
+			return nil, E.New("invalid public key for peer ", peerIndex, ", required ", device.NoisePublicKeySize, " bytes, got ", len(publicKeyBytes))
+		}
+		peer.publicKey = device.NoisePublicKey(publicKeyBytes)
 		if rawPeer.PreSharedKey != "" {
 			preSharedKeyBytes, err := base64.StdEncoding.DecodeString(rawPeer.PreSharedKey)
 			if err != nil {
@@ -96,7 +99,7 @@ func NewEndpoint(options EndpointOptions) (*Endpoint, error) {
 		}
 		if len(rawPeer.Reserved) > 0 {
 			if len(rawPeer.Reserved) != 3 {
-				return nil, E.New("invalid reserved value for peer ", peerIndex, ", required 3 bytes, got ", len(peer.reserved))
+				return nil, E.New("invalid reserved value for peer ", peerIndex, ", required 3 bytes, got ", len(rawPeer.Reserved))
 			}
 			copy(peer.reserved[:], rawPeer.Reserved[:])
 		}
@@ -205,7 +208,9 @@ func (e *Endpoint) Start(postStart bool) error {
 				connectAddr = e.peers[0].endpoint
 			}
 		}
-		bind = NewClientBind(e.options.Context, e.options.Logger, e.options.Dialer, isConnect, connectAddr, reserved)
+		clientBind := NewClientBind(e.options.Context, e.options.Logger, e.options.Dialer, isConnect, connectAddr, reserved) //H
+		clientBind.onReconnect = e.pathChanged                                                                               //H: MTU discovery, fallback
+		bind = clientBind                                                                                                    //H
 	}
 	if isUDPListener || len(e.peers) > 1 {
 		for _, peer := range e.peers {
@@ -226,21 +231,16 @@ func (e *Endpoint) Start(postStart bool) error {
 			e.options.Logger.Error(fmt.Sprintf(strings.ToLower(format), args...))
 		},
 	}
+	e.setupMTUDiscovery()                 //H
+	e.fallback = newPeerFallback(e, bind) //H
 	wgDevice := device.NewDevice(e.options.Context, e.returnDevice, bind, logger, e.options.Workers)
 	wgDevice.HNoise = e.options.Noise //H
 	e.tunDevice.SetDevice(wgDevice)
 	domainPeers := make(map[device.NoisePublicKey]*peerConfig)
 	for peerIndex, peer := range e.peers {
-		if !peer.destination.IsDomain() {
-			continue
+		if peer.destination.IsDomain() {
+			domainPeers[peer.publicKey] = &e.peers[peerIndex]
 		}
-		var publicKey device.NoisePublicKey
-		err = publicKey.FromHex(peer.publicKeyHex)
-		if err != nil {
-			wgDevice.Close()
-			return E.Cause(err, "decode public key for peer ", peerIndex)
-		}
-		domainPeers[publicKey] = &e.peers[peerIndex]
 	}
 	var ipcConf strings.Builder
 	ipcConf.WriteString(e.ipcConf)
@@ -285,6 +285,8 @@ func (e *Endpoint) Start(postStart bool) error {
 		e.pauseCallback = e.pause.RegisterCallback(e.onPauseUpdated)
 	}
 	e.allowedIPs = wgDevice.AllowedIPs()
+	e.mtuProbe.start()                  //H
+	e.fallback.Start(e.options.Context) //H
 	return nil
 }
 
@@ -486,7 +488,7 @@ func (e *Endpoint) onPauseUpdated(event int) {
 type peerConfig struct {
 	destination     M.Socksaddr
 	endpoint        netip.AddrPort
-	publicKeyHex    string
+	publicKey       device.NoisePublicKey
 	preSharedKeyHex string
 	allowedIPs      []netip.Prefix
 	keepalive       uint16
@@ -495,7 +497,7 @@ type peerConfig struct {
 
 func (c peerConfig) GenerateIpcLines() string {
 	var ipcLines strings.Builder
-	ipcLines.WriteString("\npublic_key=" + c.publicKeyHex)
+	ipcLines.WriteString("\npublic_key=" + hex.EncodeToString(c.publicKey[:]))
 	if c.endpoint.IsValid() {
 		ipcLines.WriteString("\nendpoint=" + c.endpoint.String())
 	}
@@ -509,4 +511,13 @@ func (c peerConfig) GenerateIpcLines() string {
 		ipcLines.WriteString("\npersistent_keepalive_interval=" + F.ToString(c.keepalive))
 	}
 	return ipcLines.String()
+}
+
+// IpcGet returns the device's state in the UAPI format (peers, handshakes, traffic). //H
+func (e *Endpoint) IpcGet() (string, error) {
+	wgDevice := e.device.Load()
+	if wgDevice == nil {
+		return "", os.ErrInvalid
+	}
+	return wgDevice.IpcGet()
 }

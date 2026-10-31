@@ -216,7 +216,7 @@ type GroupDNSServerOptions struct {
 
 type FakeIPDNSServerOptions struct {
 	Inet4Range *badoption.Prefix `json:"inet4_range,omitempty" examples:"198.18.0.0/15"`
-	Inet6Range *badoption.Prefix `json:"inet6_range,omitempty" examples:"fc00::/18"`
+	Inet6Range *badoption.Prefix `json:"inet6_range,omitempty" examples:"2001:2::/48"`
 }
 
 type DHCPDNSServerOptions struct {

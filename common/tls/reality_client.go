@@ -28,12 +28,13 @@ import (
 	"unsafe"
 
 	"github.com/sagernet/sing-box/adapter"
+	tf "github.com/sagernet/sing-box/common/tlsfragment" //H
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/debug"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/logger"
+	M "github.com/sagernet/sing/common/metadata"
 	"github.com/sagernet/sing/common/ntp"
 	aTLS "github.com/sagernet/sing/common/tls"
 
@@ -49,6 +50,7 @@ type RealityClientConfig struct {
 	uClient   *UTLSClientConfig
 	publicKey []byte
 	shortID   [8]byte
+	classical bool //H: key_share "classical", no X25519MLKEM768
 }
 
 func NewRealityClient(ctx context.Context, logger logger.ContextLogger, serverAddress string, options option.OutboundTLSOptions) (Config, error) {
@@ -78,6 +80,9 @@ func newRealityClient(ctx context.Context, logger logger.ContextLogger, serverAd
 	if len(publicKey) != 32 {
 		return nil, E.New("invalid public_key")
 	}
+	if len(options.Reality.ShortID) > 16 { //H: hex.Decode panics when the input does not fit in 8 bytes
+		return nil, E.New("invalid short_id: longer than 16 hex digits") //H
+	} //H
 	var shortID [8]byte
 	decodedLen, err := hex.Decode(shortID[:], []byte(options.Reality.ShortID))
 	if err != nil {
@@ -87,7 +92,15 @@ func newRealityClient(ctx context.Context, logger logger.ContextLogger, serverAd
 		return nil, E.New("invalid short_id")
 	}
 
-	var config Config = &RealityClientConfig{ctx, uClient.(*UTLSClientConfig), publicKey, shortID}
+	var classical bool //H: key_share
+	switch options.Reality.KeyShare {
+	case "", "hybrid":
+	case "classical":
+		classical = true
+	default:
+		return nil, E.New("unknown reality key_share: ", options.Reality.KeyShare, ` (expected "hybrid" or "classical")`)
+	}
+	var config Config = &RealityClientConfig{ctx, uClient.(*UTLSClientConfig), publicKey, shortID, classical} //H
 	if options.KernelRx || options.KernelTx {
 		if !C.IsLinux {
 			return nil, E.New("kTLS is only supported on Linux")
@@ -134,6 +147,11 @@ func (e *RealityClientConfig) Client(conn net.Conn) (Conn, error) {
 	return ClientHandshake(context.Background(), conn, e)
 }
 
+// H: realityClientVersion is the Xray version reported to REALITY servers. Servers compare it
+// with their minClientVer (Xray v26.7 applied 26.3.27 when unset), so it follows Xray's latest
+// release instead of sing-box's old 1.8.1, which those servers reject.
+var realityClientVersion = [3]byte{26, 10, 17}
+
 func (e *RealityClientConfig) ClientHandshake(ctx context.Context, conn net.Conn) (aTLS.Conn, error) {
 	verifier := &realityVerifier{
 		serverName: e.uClient.ServerName(),
@@ -142,23 +160,21 @@ func (e *RealityClientConfig) ClientHandshake(ctx context.Context, conn net.Conn
 	uConfig.InsecureSkipVerify = true
 	uConfig.SessionTicketsDisabled = true
 	uConfig.VerifyPeerCertificate = verifier.VerifyPeerCertificate
-	uConn := utls.UClient(conn, uConfig, e.uClient.id)
-	verifier.UConn = uConn
-	err := uConn.BuildHandshakeState()
+	// H: the fingerprint is changed to pass both older and v26.10+ Xray servers (see
+	// realityClientHelloSpec). The auth key comes from the X25519 share (KeyShareKeys.Ecdhe),
+	// which REALITY servers check first, as Xray's own client does.
+	spec, err := realityClientHelloSpec(e.uClient.id, uConfig, e.classical) //H
 	if err != nil {
 		return nil, err
 	}
-	for _, extension := range uConn.Extensions {
-		if ce, ok := extension.(*utls.SupportedCurvesExtension); ok {
-			ce.Curves = common.Filter(ce.Curves, func(curveID utls.CurveID) bool {
-				return curveID != utls.X25519MLKEM768
-			})
-		}
-		if ks, ok := extension.(*utls.KeyShareExtension); ok {
-			ks.KeyShares = common.Filter(ks.KeyShares, func(share utls.KeyShare) bool {
-				return share.Group != utls.X25519MLKEM768
-			})
-		}
+	if e.uClient.fragment || e.uClient.recordFragment { //H: fragment and record_fragment were skipped for REALITY
+		conn = tf.NewConn(conn, e.uClient.ctx, e.uClient.fragment, e.uClient.recordFragment, e.uClient.fragmentFallbackDelay) //H
+	} //H
+	uConn := utls.UClient(conn, uConfig, utls.HelloCustom)
+	verifier.UConn = uConn
+	err = uConn.ApplyPreset(spec)
+	if err != nil {
+		return nil, err
 	}
 	err = uConn.BuildHandshakeState()
 	if err != nil {
@@ -186,9 +202,7 @@ func (e *RealityClientConfig) ClientHandshake(ctx context.Context, conn net.Conn
 	}
 	binary.BigEndian.PutUint64(hello.SessionId, uint64(nowTime.Unix()))
 
-	hello.SessionId[0] = 1
-	hello.SessionId[1] = 8
-	hello.SessionId[2] = 1
+	copy(hello.SessionId[:3], realityClientVersion[:]) //H
 	binary.BigEndian.PutUint32(hello.SessionId[4:], uint32(time.Now().Unix()))
 	copy(hello.SessionId[8:], e.shortID[:])
 	if debug.Enabled {
@@ -257,7 +271,15 @@ func realityClientFallback(ctx context.Context, uConn net.Conn, serverName strin
 			},
 		},
 	}
-	request, _ := http.NewRequest("GET", "https://"+serverName, nil)
+	serverAddress := M.ParseSocksaddrHostPort(serverName, 0)
+	host := serverAddress.AddrString()
+	if serverAddress.IsIPv6() {
+		host = "[" + host + "]"
+	}
+	request, err := http.NewRequest("GET", "https://"+host, nil)
+	if err != nil {
+		return
+	}
 	request.Header.Set("User-Agent", fingerprint.Client)
 	request.AddCookie(&http.Cookie{Name: "padding", Value: strings.Repeat("0", mRand.Intn(32)+30)})
 	response, err := client.Do(request)
@@ -274,6 +296,7 @@ func (e *RealityClientConfig) Clone() Config {
 		e.uClient.Clone().(*UTLSClientConfig),
 		e.publicKey,
 		e.shortID,
+		e.classical, //H
 	}
 }
 
@@ -347,4 +370,10 @@ func (c *realityClientConnWrapper) ReaderReplaceable() bool {
 
 func (c *realityClientConnWrapper) WriterReplaceable() bool {
 	return false
+}
+
+// IsReality reports whether a client config is REALITY. //H
+func IsReality(config Config) bool {
+	_, isReality := config.(*RealityClientConfig)
+	return isReality
 }

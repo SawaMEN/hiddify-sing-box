@@ -53,7 +53,7 @@ type RuleItem interface {
 }
 
 func NewDefaultRule(ctx context.Context, logger log.ContextLogger, options option.DefaultRule) (*DefaultRule, error) {
-	action, err := NewRuleAction(ctx, logger, options.RuleAction)
+	action, err := NewRuleAction(logger, options.RuleAction)
 	if err != nil {
 		return nil, E.Cause(err, "action")
 	}
@@ -293,6 +293,16 @@ func NewDefaultRule(ctx context.Context, logger log.ContextLogger, options optio
 		rule.items = append(rule.items, item)
 		rule.allItems = append(rule.allItems, item)
 	}
+	if options.DNSServerAddress != nil && options.DNSServerAddress.Size() > 0 {
+		item := NewDNSServerAddressItem(ctx, options.DNSServerAddress)
+		rule.items = append(rule.items, item)
+		rule.allItems = append(rule.allItems, item)
+	}
+	if options.DNSSearchDomain != nil && options.DNSSearchDomain.Size() > 0 {
+		item := NewDNSSearchDomainItem(ctx, options.DNSSearchDomain)
+		rule.items = append(rule.items, item)
+		rule.allItems = append(rule.allItems, item)
+	}
 	if len(options.RuleSet) > 0 {
 		//nolint:staticcheck
 		if options.Deprecated_RulesetIPCIDRMatchSource {
@@ -316,7 +326,7 @@ type LogicalRule struct {
 }
 
 func NewLogicalRule(ctx context.Context, logger log.ContextLogger, options option.LogicalRule) (*LogicalRule, error) {
-	action, err := NewRuleAction(ctx, logger, options.RuleAction)
+	action, err := NewRuleAction(logger, options.RuleAction)
 	if err != nil {
 		return nil, E.Cause(err, "action")
 	}

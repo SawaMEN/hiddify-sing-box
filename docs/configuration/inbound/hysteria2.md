@@ -197,8 +197,6 @@ Enable debug information logging for Hysteria Brutal CC.
 
 Register this inbound to a Hysteria Realm rendezvous service to enable NAT traversal.
 
-The inbound discovers its public addresses via STUN, registers them on the realm, and uses UDP hole-punching to accept incoming clients without a publicly reachable listen address.
-
 See [Hysteria Realm](/configuration/service/hysteria-realm/) for the rendezvous service.
 
 #### realm.server_url
