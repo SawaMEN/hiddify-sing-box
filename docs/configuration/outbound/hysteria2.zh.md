@@ -187,15 +187,13 @@ BBR 拥塞控制算法配置，可选 `conservative` `standard` `aggressive`。
 !!! warning ""
 
     Chrome 不声明支持 Ed25519，因此使用 Ed25519 证书的服务端将无法完成握手。
-    请改用 ECDSA 或 RSA 证书；由 ACME 签发的证书不受影响。
+    请改用 ECDSA 或 RSA 证书。
 
 #### realm
 
 !!! question "自 sing-box 1.14.0 起"
 
 通过 Hysteria Realm 会合服务连接 Hysteria2 服务器。
-
-出站从 realm 查询服务器当前的公网地址，执行 UDP 打洞，然后进行常规的 QUIC 握手。
 
 与 `server`、`server_port` 和 `server_ports` 冲突。
 

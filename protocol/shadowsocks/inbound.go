@@ -70,7 +70,6 @@ func newInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 		logger:   logger,
 		obfsMode: options.ObfsMode,
 	}
-	var err error
 	inbound.router, err = mux.NewRouterWithOptions(inbound.router, logger, common.PtrValueOrDefault(options.Multiplex))
 	if err != nil {
 		return nil, err
@@ -103,15 +102,16 @@ func newInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 	return inbound, err
 }
 
-func (h *Inbound) Start(stage adapter.StartStage) error {
+func (h *Inbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage != adapter.StartStateStart {
 		return nil
 	}
-	return h.listener.Start()
-}
-
-func (h *Inbound) Close() error {
-	return h.listener.Close()
+	err := h.listener.Start()
+	if err != nil {
+		return err
+	}
+	scope.Add(h.listener.Close)
+	return nil
 }
 
 //nolint:staticcheck
@@ -142,6 +142,7 @@ func (h *Inbound) NewPacket(buffer *buf.Buffer, source M.Socksaddr) {
 }
 
 func (h *Inbound) newConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext) error {
+	markAuthenticated(ctx)
 	h.logger.InfoContext(ctx, "inbound connection to ", metadata.Destination)
 	metadata.Inbound = h.Tag()
 	metadata.InboundType = h.Type()

@@ -5,7 +5,6 @@ import (
 	"net"
 	"net/netip"
 	"os"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -28,7 +27,6 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/common/ranges"
-	"github.com/sagernet/sing/common/x/list"
 	"github.com/sagernet/sing/service"
 
 	"go4.org/netipx"
@@ -166,7 +164,7 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 	}
 
 	tableIndex := options.IPRoute2TableIndex
-	if tableIndex == 0 {
+	if tableIndex == 0 && options.AutoRoute {
 		tableIndex = tun.DefaultIPRoute2TableIndex
 	}
 	ruleIndex := options.IPRoute2RuleIndex
@@ -244,13 +242,14 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 			Logger:                                logger,
 			EXP_MultiPendingPackets:               C.IsDarwin,
 		},
-		udpTimeout:        udpTimeout,
-		udpMapping:        tun.NATMapping(options.UDPMapping),
-		udpFiltering:      tun.NATFiltering(options.UDPFiltering),
-		udpNATMax:         options.UDPNATMax,
-		stack:             options.Stack,
-		platformInterface: platformInterface,
-		platformOptions:   common.PtrValueOrDefault(options.Platform),
+		udpTimeout:           udpTimeout,
+		udpMapping:           tun.NATMapping(options.UDPMapping),
+		udpFiltering:         tun.NATFiltering(options.UDPFiltering),
+		udpNATMax:            options.UDPNATMax,
+		stack:                options.Stack,
+		platformInterface:    platformInterface,
+		usePlatformInterface: usePlatformInterface,
+		platformOptions:      common.PtrValueOrDefault(options.Platform),
 	}
 	for _, routeAddressSet := range options.RouteAddressSet {
 		ruleSet, loaded := router.RuleSet(routeAddressSet)
@@ -341,7 +340,7 @@ func (t *Inbound) Tag() string {
 	return t.tag
 }
 
-func (t *Inbound) Start(stage adapter.StartStage) error {
+func (t *Inbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	switch stage {
 	case adapter.StartStateInitialize:
 		if t.tunOptions.DNSModeOrDefault() != tun.DNSModeDisabled && len(t.tunOptions.DNSAddress) == 0 {
@@ -350,12 +349,12 @@ func (t *Inbound) Start(stage adapter.StartStage) error {
 			t.dnsHijackAddress = append(inet4DNSAddress, inet6DNSAddress...)
 		}
 	case adapter.StartStateStart:
-		if t.platformInterface == nil &&
+		if !t.usePlatformInterface &&
 			((C.IsLinux && !t.tunOptions.GSO) || (C.IsDarwin && !t.tunOptions.EXP_MultiPendingPackets)) {
 			outboundManager := service.FromContext[adapter.OutboundManager](t.ctx)
 			endpointManager := service.FromContext[adapter.EndpointManager](t.ctx)
 			for _, outbound := range outboundManager.Outbounds() {
-				if _, isFlowOutbound := outbound.(adapter.FlowOutbound); isFlowOutbound && common.Contains(outbound.Network(), N.NetworkTCP) {
+				if flowOutbound, isFlowOutbound := outbound.(adapter.FlowOutbound); isFlowOutbound && flowOutbound.PreMatchFlow(N.NetworkTCP, netip.Addr{}) == adapter.PreMatchFlow {
 					if C.IsLinux {
 						t.tunOptions.GSO = true
 					} else {
@@ -365,7 +364,7 @@ func (t *Inbound) Start(stage adapter.StartStage) error {
 				}
 			}
 			for _, endpoint := range endpointManager.Endpoints() {
-				if _, isFlowOutbound := endpoint.(adapter.FlowOutbound); isFlowOutbound && common.Contains(endpoint.Network(), N.NetworkTCP) {
+				if flowOutbound, isFlowOutbound := endpoint.(adapter.FlowOutbound); isFlowOutbound && flowOutbound.PreMatchFlow(N.NetworkTCP, netip.Addr{}) == adapter.PreMatchFlow {
 					if C.IsLinux {
 						t.tunOptions.GSO = true
 					} else {
@@ -381,6 +380,7 @@ func (t *Inbound) Start(stage adapter.StartStage) error {
 		if t.tunOptions.Name == "" {
 			t.tunOptions.Name = tun.CalculateInterfaceName("")
 		}
+		t.tunOptions.BridgeInterface = t.networkManager.BridgeInterfaces()
 		if t.tunOptions.NetNs != "" {
 			manager := service.FromContext[adapter.NetworkNamespaceManager](t.ctx)
 			if manager != nil {
@@ -421,10 +421,7 @@ func (t *Inbound) Start(stage adapter.StartStage) error {
 				}
 			}
 		}
-		var (
-			tunInterface tun.Tun
-			err          error
-		)
+		var tunInterface tun.Tun
 		monitor := taskmonitor.New(t.logger, C.StartTimeout)
 		tunOptions := t.tunOptions
 		if t.autoRedirect == nil && !(runtime.GOOS == "android" && t.platformInterface != nil) {
@@ -448,7 +445,7 @@ func (t *Inbound) Start(stage adapter.StartStage) error {
 			}
 		}
 		monitor.Start("open interface")
-		if t.platformInterface != nil && t.platformInterface.UsePlatformInterface() {
+		if t.usePlatformInterface {
 			tunInterface, err = t.platformInterface.OpenInterface(&tunOptions, t.platformOptions)
 		} else {
 			tunInterface, err = tun.New(tunOptions)
@@ -458,14 +455,13 @@ func (t *Inbound) Start(stage adapter.StartStage) error {
 		if err != nil {
 			return E.Cause(err, "configure tun interface")
 		}
+		scope.Add(tunInterface.Close)
 		t.logger.Trace("creating stack")
 		t.tunIf = tunInterface
 		if t.platformInterface != nil {
 			err = t.platformInterface.ProcessPlatformOptions(t.platformOptions)
 			if err != nil {
-				closeError := t.tunIf.Close()
-				t.tunIf = nil
-				return E.Errors(E.Cause(err, "process platform options"), closeError)
+				return E.Cause(err, "process platform options")
 			}
 		}
 		var includeAllNetworks bool
@@ -496,6 +492,7 @@ func (t *Inbound) Start(stage adapter.StartStage) error {
 		if err != nil {
 			return err
 		}
+		scope.Add(tunStack.Close)
 		t.tunStack = tunStack
 		t.logger.Info("started at ", t.tunOptions.Name)
 	case adapter.StartStatePostStart:
@@ -513,8 +510,9 @@ func (t *Inbound) Start(stage adapter.StartStage) error {
 			return E.Cause(err, "starting TUN interface")
 		}
 		if t.autoRedirect != nil {
+			scope.Add(t.autoRedirect.Close)
 			monitor.Start("initialize auto-redirect")
-			err := t.autoRedirect.Start()
+			err = t.autoRedirect.Start()
 			monitor.Finish()
 			if err != nil {
 				return E.Cause(err, "auto-redirect")
@@ -556,12 +554,18 @@ func (t *Inbound) InterfaceUpdated(ctx context.Context) {
 	}
 }
 
-func (t *Inbound) Close() error {
-	return common.Close(
-		t.tunStack,
-		t.tunIf,
-		t.autoRedirect,
-	)
+func (t *Inbound) FlushSystemDNSCache() {
+	linuxTUN, isLinuxTUN := t.tunIf.(tun.LinuxTUN)
+	if !isLinuxTUN {
+		return
+	}
+	serviceManager := service.FromContext[adapter.ServiceManager](t.ctx)
+	if slices.ContainsFunc(serviceManager.Services(), func(it adapter.Service) bool {
+		return it.Type() == C.TypeResolved
+	}) {
+		return
+	}
+	linuxTUN.FlushDNSCache()
 }
 
 func (t *Inbound) JudgeFlow(network uint8, source netip.AddrPort, destination netip.AddrPort, firstPacket []byte) tun.FlowVerdict {

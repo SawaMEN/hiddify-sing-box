@@ -53,7 +53,6 @@ func newRelayInbound(ctx context.Context, router adapter.Router, logger log.Cont
 		destinations: options.Destinations,
 		obfsMode:     options.ObfsMode,
 	}
-	var err error
 	inbound.router, err = mux.NewRouterWithOptions(inbound.router, logger, common.PtrValueOrDefault(options.Multiplex))
 	if err != nil {
 		return nil, err
@@ -94,15 +93,16 @@ func newRelayInbound(ctx context.Context, router adapter.Router, logger log.Cont
 	return inbound, err
 }
 
-func (h *RelayInbound) Start(stage adapter.StartStage) error {
+func (h *RelayInbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage != adapter.StartStateStart {
 		return nil
 	}
-	return h.listener.Start()
-}
-
-func (h *RelayInbound) Close() error {
-	return h.listener.Close()
+	err := h.listener.Start()
+	if err != nil {
+		return err
+	}
+	scope.Add(h.listener.Close)
+	return nil
 }
 
 //nolint:staticcheck
@@ -133,6 +133,7 @@ func (h *RelayInbound) NewPacket(buffer *buf.Buffer, source M.Socksaddr) {
 }
 
 func (h *RelayInbound) newConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext) error {
+	markAuthenticated(ctx)
 	destinationIndex, loaded := auth.UserFromContext[int](ctx)
 	if !loaded {
 		return os.ErrInvalid

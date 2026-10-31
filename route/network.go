@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/common/monitoring"
 	"github.com/sagernet/sing-box/common/settings"
 	"github.com/sagernet/sing-box/common/taskmonitor"
 	C "github.com/sagernet/sing-box/constant"
@@ -25,7 +26,6 @@ import (
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
 	"github.com/sagernet/sing/common/winpowrprof"
-	"github.com/sagernet/sing/common/x/list"
 	"github.com/sagernet/sing/service"
 	"github.com/sagernet/sing/service/pause"
 
@@ -42,6 +42,8 @@ type NetworkManager struct {
 	autoDetectInterface     bool
 	defaultOptions          adapter.NetworkOptions
 	autoRedirectOutputMark  uint32
+	bridgeInterfaceAccess   sync.Mutex
+	bridgeInterfaces        []string
 	networkMonitor          tun.NetworkUpdateMonitor
 	interfaceMonitor        tun.DefaultInterfaceMonitor
 	packageManager          tun.PackageManager
@@ -60,8 +62,6 @@ type NetworkManager struct {
 	environmentUpdateAccess sync.Mutex
 	environmentUpdateTimer  *time.Timer
 	startedCtx              context.Context
-	startedCancel           context.CancelFunc
-	interfaceUpdateElement  *list.Element[tun.DefaultInterfaceUpdateCallback]
 	interfaceUpdateAccess   sync.Mutex
 	interfaceUpdateCancel   context.CancelFunc
 	networkResetPending     bool
@@ -144,7 +144,7 @@ func NewNetworkManager(ctx context.Context, logger logger.ContextLogger, options
 	return nm, nil
 }
 
-func (r *NetworkManager) Start(stage adapter.StartStage) error {
+func (r *NetworkManager) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	monitor := taskmonitor.New(r.logger, C.StartTimeout)
 	switch stage {
 	case adapter.StartStateInitialize:
@@ -155,6 +155,7 @@ func (r *NetworkManager) Start(stage adapter.StartStage) error {
 			if err != nil {
 				return err
 			}
+			scope.Add(r.networkMonitor.Close)
 		}
 		if r.interfaceMonitor != nil {
 			monitor.Start("initialize interface monitor")
@@ -183,6 +184,7 @@ func (r *NetworkManager) Start(stage adapter.StartStage) error {
 				r.logger.Warn("initialize package manager: ", err)
 			} else {
 				r.packageManager = packageManager
+				scope.Add(packageManager.Close)
 			}
 		}
 	case adapter.StartStatePostStart:
@@ -194,6 +196,7 @@ func (r *NetworkManager) Start(stage adapter.StartStage) error {
 				}
 			} else {
 				r.wifiMonitor = wifiMonitor
+				scope.Add(wifiMonitor.Close)
 				err = r.wifiMonitor.Start()
 				if err != nil {
 					r.logger.Warn(E.Cause(err, "start WIFI monitor"))
@@ -234,63 +237,6 @@ func (r *NetworkManager) Initialize(ruleSets []adapter.RuleSet) {
 			break
 		}
 	}
-}
-
-func (r *NetworkManager) Close() error {
-	monitor := taskmonitor.New(r.logger, C.StopTimeout)
-	var err error
-	if r.interfaceUpdateElement != nil {
-		r.interfaceMonitor.UnregisterCallback(r.interfaceUpdateElement)
-		r.interfaceUpdateElement = nil
-	}
-	if r.powerListener != nil {
-		monitor.Start("close power listener")
-		err = E.Append(err, r.powerListener.Close(), func(err error) error {
-			return E.Cause(err, "close power listener")
-		})
-		monitor.Finish()
-	}
-	if r.startedCancel != nil {
-		r.startedCancel()
-		monitor.Start("wait network reset")
-		r.resetRunAccess.Lock()
-		monitor.Finish()
-		defer r.resetRunAccess.Unlock()
-	}
-	if r.packageManager != nil {
-		monitor.Start("close package manager")
-		err = E.Append(err, r.packageManager.Close(), func(err error) error {
-			return E.Cause(err, "close package manager")
-		})
-		monitor.Finish()
-	}
-	if r.interfaceMonitor != nil {
-		monitor.Start("close interface monitor")
-		err = E.Append(err, r.interfaceMonitor.Close(), func(err error) error {
-			return E.Cause(err, "close interface monitor")
-		})
-		monitor.Finish()
-	}
-	if r.networkMonitor != nil {
-		monitor.Start("close network monitor")
-		err = E.Append(err, r.networkMonitor.Close(), func(err error) error {
-			return E.Cause(err, "close network monitor")
-		})
-		monitor.Finish()
-	}
-	r.environmentUpdateAccess.Lock()
-	if r.environmentUpdateTimer != nil {
-		r.environmentUpdateTimer.Stop()
-	}
-	r.environmentUpdateAccess.Unlock()
-	if r.wifiMonitor != nil {
-		monitor.Start("close WIFI monitor")
-		err = E.Append(err, r.wifiMonitor.Close(), func(err error) error {
-			return E.Cause(err, "close WIFI monitor")
-		})
-		monitor.Finish()
-	}
-	return err
 }
 
 func (r *NetworkManager) InterfaceFinder() control.InterfaceFinder {
@@ -427,6 +373,20 @@ func (r *NetworkManager) AutoRedirectOutputMark() uint32 {
 	return r.autoRedirectOutputMark
 }
 
+func (r *NetworkManager) RegisterBridgeInterface(interfaceName string) {
+	r.bridgeInterfaceAccess.Lock()
+	defer r.bridgeInterfaceAccess.Unlock()
+	if !slices.Contains(r.bridgeInterfaces, interfaceName) {
+		r.bridgeInterfaces = append(r.bridgeInterfaces, interfaceName)
+	}
+}
+
+func (r *NetworkManager) BridgeInterfaces() []string {
+	r.bridgeInterfaceAccess.Lock()
+	defer r.bridgeInterfaceAccess.Unlock()
+	return slices.Clone(r.bridgeInterfaces)
+}
+
 func (r *NetworkManager) AutoRedirectOutputMarkFunc() control.Func {
 	return func(network, address string, conn syscall.RawConn) error {
 		if r.autoRedirectOutputMark == 0 {
@@ -487,7 +447,19 @@ func (r *NetworkManager) UpdateWIFIState(ctx context.Context) {
 	r.onWIFIStateChanged(state)
 }
 
+// networkChanged has the monitoring test every outbound again: its results are of another network.
+// Unlike ResetNetwork, it is for the network really changing, not for releasing memory.
+func (r *NetworkManager) networkChanged() {
+	if monitor := monitoring.Get(r.ctx); monitor != nil {
+		monitor.NetworkChanged()
+	}
+}
+
 func (r *NetworkManager) ResetNetwork(ctx context.Context) {
+	// H: before CloseAll, so a URL test it breaks already sees the change
+	if monitor := monitoring.Get(r.ctx); monitor != nil {
+		monitor.InterfaceUpdated(ctx)
+	}
 	if r.connectionManager != nil {
 		r.connectionManager.CloseAll()
 	}
@@ -539,6 +511,8 @@ func (r *NetworkManager) dispatchInterfaceUpdateLocked() {
 	if defaultInterface == nil {
 		r.pauseManager.NetworkPause()
 		r.logger.Error("missing default interface")
+		// with no network every test fails, and that is what the monitoring has to report
+		r.networkChanged()
 		return
 	}
 	r.pauseManager.NetworkWake()
@@ -627,6 +601,7 @@ func (r *NetworkManager) notifyWindowsPowerEvent(event int) {
 				return
 			}
 			r.ResetNetwork(updateContext)
+			r.networkChanged()
 		}()
 	}
 }

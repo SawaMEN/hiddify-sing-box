@@ -2,6 +2,7 @@ package wireguard
 
 import (
 	"context"
+	hiddify "github.com/sagernet/wireguard-go/hiddify"
 	"net/netip"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 )
 
 type EndpointOptions struct {
+	Noise        hiddify.NoiseOptions //H
 	Context      context.Context
 	Logger       logger.ContextLogger
 	System       bool

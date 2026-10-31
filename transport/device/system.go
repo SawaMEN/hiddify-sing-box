@@ -10,9 +10,11 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/dialer"
+	"github.com/sagernet/sing-box/common/kernelports"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing-tun/gtcpip/header"
+	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/buf"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
@@ -20,12 +22,7 @@ import (
 	"github.com/sagernet/sing/service"
 )
 
-var _ Device = (*systemDevice)(nil)
-
-const (
-	systemDeviceReadBufferSize  = 65535 + tun.PacketOffset
-	systemDevicePacketRearSpace = 64
-)
+const systemDeviceReadBufferSize = 65535 + tun.PacketOffset
 
 type systemDevice struct {
 	baseDevice
@@ -33,6 +30,7 @@ type systemDevice struct {
 	options      Options
 	dialer       N.Dialer
 	device       tun.Tun
+	ports        *kernelports.Pool
 	inet4Address netip.Addr
 	inet6Address netip.Addr
 	closed       bool
@@ -63,7 +61,16 @@ func newSystemDevice(options Options) (*systemDevice, error) {
 func (d *systemDevice) Start() error {
 	d.stateAccess.Lock()
 	defer d.stateAccess.Unlock()
-	return d.startLocked()
+	err := d.startLocked()
+	if err != nil {
+		return err
+	}
+	ports, err := kernelports.New()
+	if err != nil {
+		d.options.Logger.Warn(E.Cause(err, "reserve selector ports"))
+	}
+	d.ports = ports
+	return nil
 }
 
 func (d *systemDevice) startLocked() error {
@@ -106,8 +113,6 @@ func (d *systemDevice) buildTunOptions() tun.Options {
 		InterfaceMonitor:     nil,
 		InterfaceFinder:      nil,
 		Logger:               d.options.Logger,
-		IPRoute2TableIndex:   tun.DefaultIPRoute2TableIndex,
-		IPRoute2RuleIndex:    tun.DefaultIPRoute2RuleIndex,
 		EXP_DisableDNSHijack: true,
 	}
 	if networkManager != nil {
@@ -144,22 +149,23 @@ func (d *systemDevice) readLoop(tunInterface tun.Tun, mtu int) {
 		if readN <= tun.PacketOffset {
 			continue
 		}
-		packetBuffer.Truncate(readN)
-		packetBuffer.Advance(tun.PacketOffset)
-		if d.blockIPv6Enabled() && header.IPVersion(packetBuffer.Bytes()) == header.IPv6Version {
+		packet := readBuffer[tun.PacketOffset:readN]
+		if d.blockIPv6Enabled() && header.IPVersion(packet) == header.IPv6Version {
 			continue
 		}
-		packetBuffer.IncRef()
+		packetBuffer := buf.NewSize(frontHeadroom + len(packet) + rearHeadroom)
+		packetBuffer.Resize(frontHeadroom, 0)
+		common.Must1(packetBuffer.Write(packet))
 		err = d.writeOutbound([]*buf.Buffer{packetBuffer})
-		packetBuffer.DecRef()
 		if err != nil {
-			d.options.Logger.Error(E.Cause(err, "write packet"))
-			return
+			d.options.Logger.Debug(E.Cause(err, "write packet"))
 		}
 	}
 }
 
 func (d *systemDevice) readLoopLinux(tunInterface tun.LinuxTUN, batchSize int, mtu int) {
+	frontHeadroom := d.options.PacketFrontHeadroom
+	packetSize := frontHeadroom + mtu + d.options.PacketRearHeadroom
 	packetBuffers := make([]*buf.Buffer, batchSize)
 	readBuffers := make([][]byte, batchSize)
 	packetSizes := make([]int, batchSize)
@@ -175,25 +181,22 @@ func (d *systemDevice) readLoopLinux(tunInterface tun.LinuxTUN, batchSize int, m
 			readBuffers[i] = packetBuffer.FreeBytes()[:mtu]
 		}
 		packetCount, readErr := tunInterface.BatchRead(readBuffers, 0, packetSizes)
-		outboundBuffers = outboundBuffers[:0]
 		blockIPv6 := d.blockIPv6Enabled()
 		for i := range packetCount {
 			packetBuffers[i].Truncate(packetSizes[i])
 			if blockIPv6 && header.IPVersion(packetBuffers[i].Bytes()) == header.IPv6Version {
 				continue
 			}
-			packetBuffers[i].IncRef()
 			outboundBuffers = append(outboundBuffers, packetBuffers[i])
+			packetBuffers[i] = buf.NewSize(packetSize)
 		}
 		if len(outboundBuffers) > 0 {
 			writeErr := d.writeOutbound(outboundBuffers)
-			for _, packetBuffer := range outboundBuffers {
-				packetBuffer.DecRef()
-			}
 			if writeErr != nil {
-				d.options.Logger.Error(E.Cause(writeErr, "write packet batch"))
-				return
+				d.options.Logger.Debug(E.Cause(writeErr, "write packet batch"))
 			}
+			clear(outboundBuffers)
+			outboundBuffers = outboundBuffers[:0]
 		}
 		if readErr != nil {
 			if E.IsClosed(readErr) {
@@ -206,8 +209,10 @@ func (d *systemDevice) readLoopLinux(tunInterface tun.LinuxTUN, batchSize int, m
 }
 
 func (d *systemDevice) readLoopDarwin(tunInterface tun.DarwinTUN) {
+	frontHeadroom := d.options.PacketFrontHeadroom
+	rearHeadroom := d.options.PacketRearHeadroom
 	for {
-		packetBuffers, readErr := tunInterface.BatchRead()
+		packetBuffers, readErr := tunInterface.BatchRead(frontHeadroom, rearHeadroom)
 		outboundBuffers := packetBuffers[:0]
 		blockIPv6 := d.blockIPv6Enabled()
 		for _, packetBuffer := range packetBuffers {
@@ -224,8 +229,7 @@ func (d *systemDevice) readLoopDarwin(tunInterface tun.DarwinTUN) {
 		if len(outboundBuffers) > 0 {
 			writeErr := d.writeOutbound(outboundBuffers)
 			if writeErr != nil {
-				d.options.Logger.Error(E.Cause(writeErr, "write packet batch"))
-				return
+				d.options.Logger.Debug(E.Cause(writeErr, "write packet batch"))
 			}
 		}
 		if readErr != nil {
@@ -268,6 +272,17 @@ func (d *systemDevice) blockIPv6Enabled() bool {
 	d.stateAccess.RLock()
 	defer d.stateAccess.RUnlock()
 	return d.options.Configuration.BlockIPv6
+}
+
+func (d *systemDevice) FrontHeadroom() int {
+	d.stateAccess.RLock()
+	tunInterface := d.device
+	d.stateAccess.RUnlock()
+	linuxTUN, isLinuxTUN := tunInterface.(tun.LinuxTUN)
+	if !isLinuxTUN {
+		return d.baseDevice.FrontHeadroom()
+	}
+	return max(d.baseDevice.FrontHeadroom(), linuxTUN.FrontHeadroom())
 }
 
 func (d *systemDevice) WriteInboundBuffers(packetBuffers []*buf.Buffer) error {
@@ -361,15 +376,28 @@ func (d *systemDevice) PortMTU() uint32 {
 	return d.options.MTU
 }
 
+func (d *systemDevice) UpstreamPort() any {
+	d.stateAccess.RLock()
+	defer d.stateAccess.RUnlock()
+	if d.ports == nil {
+		return nil
+	}
+	return d.ports
+}
+
 func (d *systemDevice) Close() error {
 	d.stateAccess.Lock()
 	defer d.stateAccess.Unlock()
 	d.closed = true
-	if d.device == nil {
-		return nil
+	var err error
+	if d.device != nil {
+		err = d.device.Close()
+		d.device = nil
 	}
-	err := d.device.Close()
-	d.device = nil
+	if d.ports != nil {
+		err = E.Errors(err, d.ports.Close())
+		d.ports = nil
+	}
 	return err
 }
 

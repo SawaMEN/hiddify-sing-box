@@ -202,7 +202,10 @@ func NewDefault(ctx context.Context, options option.DialerOptions) (*DefaultDial
 	} else {
 		udpFragment = options.UDPFragmentDefault
 	}
-	if !udpFragment {
+	if udpFragment {
+		dialer.Control = control.Append(dialer.Control, control.EnableUDPFragment())
+		listenConfig.Control = control.Append(listenConfig.Control, control.EnableUDPFragment())
+	} else {
 		dialer.Control = control.Append(dialer.Control, control.DisableUDPFragment())
 		listenConfig.Control = control.Append(listenConfig.Control, control.DisableUDPFragment())
 	}
@@ -234,9 +237,8 @@ func NewDefault(ctx context.Context, options option.DialerOptions) (*DefaultDial
 		udpDialer6.LocalAddr = &net.UDPAddr{IP: net.IPv6unspecified, Port: int(options.UDPBindPort)}
 		udpAddr6 = M.SocksaddrFrom(netip.IPv6Unspecified(), options.UDPBindPort).String()
 	}
-	if options.TCPMultiPath {
-		dialer4.SetMultipathTCP(true)
-	}
+	dialer4.SetMultipathTCP(options.TCPMultiPath) //H: never by the Go default, only when asked
+	dialer6.SetMultipathTCP(options.TCPMultiPath) //H
 	tcpDialer4 := tfo.Dialer{Dialer: dialer4, DisableTFO: !options.TCPFastOpen}
 	tcpDialer6 := tfo.Dialer{Dialer: dialer6, DisableTFO: !options.TCPFastOpen}
 	return &DefaultDialer{
@@ -301,9 +303,9 @@ func (d *DefaultDialer) DialContext(ctx context.Context, network string, address
 				}
 			}
 			if !address.IsIPv6() {
-				return DialSlowContext(&d.dialer4, ctx, network, address)
+				return DialSlowContext(&d.dialer4, ctx, d.netns, network, address)
 			} else {
-				return DialSlowContext(&d.dialer6, ctx, network, address)
+				return DialSlowContext(&d.dialer6, ctx, d.netns, network, address)
 			}
 		})
 		return d.trackConn(ctx, address, conn, err)
@@ -386,12 +388,19 @@ func (d *DefaultDialer) ListenPacket(ctx context.Context, destination M.Socksadd
 	}
 }
 
-func (d *DefaultDialer) DialerForICMPDestination(destination netip.Addr) net.Dialer {
-	if !destination.Is6() {
-		return d.dialer4.Dialer
-	} else {
-		return d.dialer6.Dialer
+func (d *DefaultDialer) ICMPControl() control.Func {
+	if d.networkStrategy == nil || d.defaultNetworkStrategy && len(d.networkType) == 0 {
+		return d.dialer4.Control
 	}
+	interfaceControl := d.serialInterfaceControl(*d.networkStrategy, d.networkType, d.fallbackNetworkType)
+	return control.Append(d.dialer4.Control, func(network, address string, conn syscall.RawConn) error {
+		err := interfaceControl(network, address, conn)
+		// bind interface failed on legacy xiaomi systems
+		if d.defaultNetworkStrategy && errors.Is(err, syscall.EPERM) {
+			return nil
+		}
+		return err
+	})
 }
 
 func (d *DefaultDialer) ListenSerialInterfacePacket(ctx context.Context, destination M.Socksaddr, strategy *C.NetworkStrategy, interfaceType []C.InterfaceType, fallbackInterfaceType []C.InterfaceType, fallbackDelay time.Duration) (net.PacketConn, error) {
@@ -407,14 +416,13 @@ func (d *DefaultDialer) ListenSerialInterfacePacket(ctx context.Context, destina
 	if len(fallbackInterfaceType) == 0 {
 		fallbackInterfaceType = d.fallbackNetworkType
 	}
-	if fallbackDelay == 0 {
-		fallbackDelay = d.networkFallbackDelay
-	}
 	network := N.NetworkUDP
 	if destination.IsIPv4() && !destination.Addr.IsUnspecified() {
 		network += "4"
 	}
-	packetConn, err := d.listenSerialInterfacePacket(ctx, d.udpListener, network, "", *strategy, interfaceType, fallbackInterfaceType, fallbackDelay)
+	listenConfig := d.udpListener
+	listenConfig.Control = control.Append(listenConfig.Control, d.serialInterfaceControl(*strategy, interfaceType, fallbackInterfaceType))
+	packetConn, err := listenConfig.ListenPacket(ctx, network, "")
 	if err != nil {
 		// bind interface failed on legacy xiaomi systems
 		if d.defaultNetworkStrategy && errors.Is(err, syscall.EPERM) {
@@ -439,6 +447,15 @@ func (d *DefaultDialer) UDPListenerControl() (control.Func, bool) {
 func (d *DefaultDialer) trackConn(ctx context.Context, destination M.Socksaddr, conn net.Conn, err error) (net.Conn, error) {
 	if err != nil {
 		return conn, err
+	}
+	if nativeConn, isUDPConn := conn.(*net.UDPConn); isUDPConn {
+		var rawConn syscall.RawConn
+		rawConn, err = nativeConn.SyscallConn()
+		if err != nil {
+			conn.Close()
+			return nil, err
+		}
+		conn = &udpConn{Conn: conn, rawConn: rawConn}
 	}
 	if d.connectionManager != nil {
 		conn = d.connectionManager.TrackConn(conn)

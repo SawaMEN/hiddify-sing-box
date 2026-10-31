@@ -2,47 +2,40 @@ package dns
 
 import (
 	"context"
-	"io"
 	"os"
 	"slices"
 	"strings"
 	"sync"
 
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/taskmonitor"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
-	"github.com/sagernet/sing/common/logger"
 )
 
 var _ adapter.DNSTransportManager = (*TransportManager)(nil)
 
 type TransportManager struct {
-	logger                   log.ContextLogger
 	registry                 adapter.DNSTransportRegistry
 	outbound                 adapter.OutboundManager
 	defaultTag               string
 	access                   sync.RWMutex
-	started                  bool
-	stage                    adapter.StartStage
 	transports               []adapter.DNSTransport
 	transportByTag           map[string]adapter.DNSTransport
-	dependByTag              map[string][]string
 	defaultTransport         adapter.DNSTransport
 	defaultTransportFallback func() (adapter.DNSTransport, error)
 	fakeIPTransport          adapter.FakeIPTransport
+	scope                    *adapter.Scope // H: where servers created by hot reload are started
+	started                  bool
 }
 
-func NewTransportManager(logger logger.ContextLogger, registry adapter.DNSTransportRegistry, outbound adapter.OutboundManager, defaultTag string) *TransportManager {
+func NewTransportManager(registry adapter.DNSTransportRegistry, outbound adapter.OutboundManager, defaultTag string) *TransportManager {
 	return &TransportManager{
-		logger:         logger,
 		registry:       registry,
 		outbound:       outbound,
 		defaultTag:     defaultTag,
 		transportByTag: make(map[string]adapter.DNSTransport),
-		dependByTag:    make(map[string][]string),
 	}
 }
 
@@ -50,13 +43,9 @@ func (m *TransportManager) Initialize(defaultTransportFallback func() (adapter.D
 	m.defaultTransportFallback = defaultTransportFallback
 }
 
-func (m *TransportManager) Start(stage adapter.StartStage) error {
+func (m *TransportManager) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	m.access.Lock()
-	if m.started && m.stage >= stage {
-		panic("already started")
-	}
-	m.started = true
-	m.stage = stage
+	m.scope = scope
 	if stage == adapter.StartStateInitialize {
 		if m.defaultTag != "" && m.defaultTransport == nil {
 			m.access.Unlock()
@@ -76,19 +65,24 @@ func (m *TransportManager) Start(stage adapter.StartStage) error {
 	transports := m.transports
 	m.access.Unlock()
 	if stage == adapter.StartStateStart {
-		return m.startTransports(transports)
+		return m.startTransports(scope, transports)
 	}
 	for _, transport := range transports {
-		err := adapter.LegacyStart(transport, stage)
+		name := "dns/" + transport.Type() + "[" + transport.Tag() + "]"
+		err := scope.Start(name, transport, stage)
 		if err != nil {
-			return E.Cause(err, stage, " dns/", transport.Type(), "[", transport.Tag(), "]")
+			return err
 		}
+	}
+	if stage == adapter.StartStateStarted {
+		m.access.Lock()
+		m.started = true
+		m.access.Unlock()
 	}
 	return nil
 }
 
-func (m *TransportManager) startTransports(transports []adapter.DNSTransport) error {
-	monitor := taskmonitor.New(m.logger, C.StartTimeout)
+func (m *TransportManager) startTransports(scope *adapter.Scope, transports []adapter.DNSTransport) error {
 	started := make(map[string]bool)
 	for {
 		canContinue := false
@@ -106,13 +100,10 @@ func (m *TransportManager) startTransports(transports []adapter.DNSTransport) er
 			}
 			started[transportTag] = true
 			canContinue = true
-			if starter, isStarter := transportToStart.(adapter.Lifecycle); isStarter {
-				monitor.Start("start dns/", transportToStart.Type(), "[", transportTag, "]")
-				err := starter.Start(adapter.StartStateStart)
-				monitor.Finish()
-				if err != nil {
-					return E.Cause(err, "start dns/", transportToStart.Type(), "[", transportTag, "]")
-				}
+			name := "dns/" + transportToStart.Type() + "[" + transportTag + "]"
+			err := scope.Start(name, transportToStart, adapter.StartStateStart)
+			if err != nil {
+				return err
 			}
 		}
 		if len(started) == len(transports) {
@@ -141,30 +132,6 @@ func (m *TransportManager) startTransports(transports []adapter.DNSTransport) er
 			return lintTransport(append(oTree, problemTransportTag), problemTransport)
 		}
 		return lintTransport([]string{currentTransport.Tag()}, currentTransport)
-	}
-	return nil
-}
-
-func (m *TransportManager) Close() error {
-	monitor := taskmonitor.New(m.logger, C.StopTimeout)
-	m.access.Lock()
-	if !m.started {
-		m.access.Unlock()
-		return nil
-	}
-	m.started = false
-	transports := m.transports
-	m.transports = nil
-	m.access.Unlock()
-	var err error
-	for _, transport := range transports {
-		if closer, isCloser := transport.(io.Closer); isCloser {
-			monitor.Start("close server/", transport.Type(), "[", transport.Tag(), "]")
-			err = E.Append(err, closer.Close(), func(err error) error {
-				return E.Cause(err, "close server/", transport.Type(), "[", transport.Tag(), "]")
-			})
-			monitor.Finish()
-		}
 	}
 	return nil
 }
@@ -206,9 +173,9 @@ func (m *TransportManager) RemoveForReload(tag string) error {
 
 func (m *TransportManager) remove(tag string, ignoreDependents bool) error {
 	m.access.Lock()
-	defer m.access.Unlock()
 	transport, found := m.transportByTag[tag]
 	if !found {
+		m.access.Unlock()
 		return os.ErrInvalid
 	}
 	delete(m.transportByTag, tag)
@@ -226,10 +193,10 @@ func (m *TransportManager) remove(tag string, ignoreDependents bool) error {
 			if nextTransport.Type() == C.DNSTypeFakeIP { // H: was inverted
 				return E.New("default server cannot be fakeip")
 			}
-			m.defaultTransport = nextTransport
-			m.logger.Info("updated default server to ", m.defaultTransport.Tag())
-		} else {
-			m.defaultTransport = nil
+		}
+		if len(dependBy) > 0 {
+			m.access.Unlock()
+			return E.New("server[", tag, "] is depended by ", strings.Join(dependBy, ", "))
 		}
 	}
 	dependBy := m.dependByTag[tag]
@@ -240,8 +207,13 @@ func (m *TransportManager) remove(tag string, ignoreDependents bool) error {
 	if m.fakeIPTransport != nil && adapter.DNSTransport(m.fakeIPTransport) == transport {
 		m.fakeIPTransport = nil
 	}
+	if m.fakeIPTransport != nil && adapter.DNSTransport(m.fakeIPTransport) == transport {
+		m.fakeIPTransport = nil
+	}
+	started := m.started
+	m.access.Unlock()
 	if started {
-		transport.Close()
+		return adapter.CloseLate(m.scope, transport)
 	}
 	return nil
 }
@@ -255,13 +227,12 @@ func (m *TransportManager) Create(ctx context.Context, logger log.ContextLogger,
 		return err
 	}
 	m.access.Lock()
-	defer m.access.Unlock()
-	if m.started {
-		for _, stage := range adapter.ListStartStages {
-			err = adapter.LegacyStart(transport, stage)
-			if err != nil {
-				return E.Cause(err, stage, " dns/", transport.Type(), "[", transport.Tag(), "]")
-			}
+	started := m.started
+	m.access.Unlock()
+	if started { // H: hot reload
+		err = adapter.StartLate(m.scope, "dns/"+transport.Type()+"["+transport.Tag()+"]", transport)
+		if err != nil {
+			return err
 		}
 	}
 	var replaced bool
@@ -276,7 +247,7 @@ func (m *TransportManager) Create(ctx context.Context, logger log.ContextLogger,
 			return it == existsTransport
 		})
 		if existsIndex == -1 {
-			panic("invalid inbound index")
+			panic("invalid transport index")
 		}
 		// H: the replacement takes the old one's place (callers rely on the order, e.g. the main group
 		// comes first); a copy, so a slice already handed out never changes
@@ -293,18 +264,24 @@ func (m *TransportManager) Create(ctx context.Context, logger log.ContextLogger,
 		m.transports = append(m.transports, transport)
 	}
 	m.transportByTag[tag] = transport
-	dependencies := transport.Dependencies()
-	for _, dependency := range dependencies {
-		m.dependByTag[dependency] = append(m.dependByTag[dependency], tag)
+	err = m.setRoles(tag, transport, replaced && m.defaultTransport == existsTransport)
+	m.access.Unlock()
+	if replaced {
+		closeErr := adapter.CloseLate(m.scope, existsTransport)
+		if closeErr != nil {
+			return E.Cause(closeErr, "close dns/", existsTransport.Type(), "[", existsTransport.Tag(), "]")
+		}
 	}
-	if tag == m.defaultTag || (m.defaultTag == "" && m.defaultTransport == nil) {
+	return err
+}
+
+// setRoles makes a new server the default or the fakeip server where it should be. Call with access held.
+func (m *TransportManager) setRoles(tag string, transport adapter.DNSTransport, replacesDefault bool) error {
+	if tag == m.defaultTag || (m.defaultTag == "" && m.defaultTransport == nil) || replacesDefault {
 		if transport.Type() == C.DNSTypeFakeIP {
 			return E.New("default server cannot be fakeip")
 		}
 		m.defaultTransport = transport
-		if m.started {
-			m.logger.Info("updated default server to ", transport.Tag())
-		}
 	}
 	if transport.Type() == C.DNSTypeFakeIP {
 		if m.fakeIPTransport != nil {

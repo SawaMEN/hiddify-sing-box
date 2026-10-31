@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/sagernet/sing-box/common/interrupt"
 	"github.com/sagernet/sing-box/common/tlsspoof"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
@@ -40,7 +41,6 @@ type InboundManager interface {
 	Lifecycle
 	Inbounds() []Inbound
 	Get(tag string) (Inbound, bool)
-	Remove(tag string) error
 	Create(ctx context.Context, router Router, logger log.ContextLogger, tag string, inboundType string, options any) error
 }
 

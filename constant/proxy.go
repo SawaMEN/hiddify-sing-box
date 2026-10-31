@@ -72,6 +72,14 @@ const (
 	TypeURLTest  = "urltest"
 )
 
+// Display names of a warp endpoint, and of a masque outbound to WARP, by tunnel. //H
+const (
+	DisplayWARPWireGuard = "WARP · WG"
+	DisplayWARPAWG       = "WARP · AWG"
+	DisplayWARPMASQUE    = "WARP · MASQUE"
+	DisplayWARPAuto      = "WARP · Auto" // auto mode, before it chose a tunnel
+)
+
 func ProxyDisplayName(proxyType string) string {
 	switch proxyType {
 	case TypeTun:

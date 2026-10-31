@@ -44,7 +44,6 @@ type Outbound struct {
 }
 
 func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.TUICOutboundOptions) (adapter.Outbound, error) {
-	options.UDPFragmentDefault = true
 	if options.TLS == nil || !options.TLS.Enabled {
 		return nil, C.ErrTLSRequired
 	}
@@ -61,9 +60,11 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 		return nil, E.New("udp_over_stream is conflict with udp_relay_mode")
 	}
 	switch options.UDPRelayMode {
-	case "native":
+	case "", "native": //H
 	case "quic":
 		tuicUDPStream = true
+	default: //H: a misspelt mode used to mean native silently
+		return nil, E.New("unknown udp_relay_mode: ", options.UDPRelayMode, " (expected native or quic)") //H
 	}
 	outboundDialer, err := dialer.New(ctx, options.DialerOptions, options.ServerIsDomain())
 	if err != nil {

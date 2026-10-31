@@ -55,7 +55,7 @@ func (t *Endpoint) SendTaildropFile(ctx context.Context, peerStableID string, fi
 	if !peer.Valid() {
 		return E.New("taildrop: peer not found: ", peerStableID)
 	}
-	if peer.Hostinfo().OS() == "tvOS" {
+	if !peer.Hostinfo().Valid() || peer.Hostinfo().OS() == "tvOS" {
 		return E.New("taildrop: peer cannot receive files")
 	}
 	if self.User() != peer.User() && !nodeBackend.PeerHasCap(peer, tailcfg.PeerCapabilityFileSharingTarget) {

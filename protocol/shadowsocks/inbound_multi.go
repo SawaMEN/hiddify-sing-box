@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
@@ -59,7 +60,6 @@ func newMultiInbound(ctx context.Context, router adapter.Router, logger log.Cont
 		logger:   logger,
 		obfsMode: options.ObfsMode,
 	}
-	var err error
 	inbound.router, err = mux.NewRouterWithOptions(inbound.router, logger, common.PtrValueOrDefault(options.Multiplex))
 	if err != nil {
 		return nil, err
@@ -115,15 +115,16 @@ func newMultiInbound(ctx context.Context, router adapter.Router, logger log.Cont
 	return inbound, err
 }
 
-func (h *MultiInbound) Start(stage adapter.StartStage) error {
+func (h *MultiInbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage != adapter.StartStateStart {
 		return nil
 	}
-	return h.listener.Start()
-}
-
-func (h *MultiInbound) Close() error {
-	return h.listener.Close()
+	err := h.listener.Start()
+	if err != nil {
+		return err
+	}
+	scope.Add(h.listener.Close)
+	return nil
 }
 
 func (h *MultiInbound) SetTracker(tracker adapter.SSMTracker) {
@@ -131,6 +132,8 @@ func (h *MultiInbound) SetTracker(tracker adapter.SSMTracker) {
 }
 
 func (h *MultiInbound) UpdateUsers(users []string, uPSKs []string) error {
+	h.usersAccess.Lock()
+	defer h.usersAccess.Unlock()
 	err := h.service.UpdateUsersWithPasswords(common.MapIndexed(users, func(index int, user string) int {
 		return index
 	}), uPSKs)
@@ -143,6 +146,15 @@ func (h *MultiInbound) UpdateUsers(users []string, uPSKs []string) error {
 		}
 	})
 	return nil
+}
+
+func (h *MultiInbound) userName(userIndex int) string {
+	h.usersAccess.RLock()
+	defer h.usersAccess.RUnlock()
+	if userIndex >= len(h.users) {
+		return ""
+	}
+	return h.users[userIndex].Name
 }
 
 //nolint:staticcheck
@@ -173,11 +185,12 @@ func (h *MultiInbound) NewPacket(buffer *buf.Buffer, source M.Socksaddr) {
 }
 
 func (h *MultiInbound) newConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext) error {
+	markAuthenticated(ctx)
 	userIndex, loaded := auth.UserFromContext[int](ctx)
 	if !loaded {
 		return os.ErrInvalid
 	}
-	user := h.users[userIndex].Name
+	user := h.userName(userIndex)
 	if user == "" {
 		user = F.ToString(userIndex)
 	} else {
@@ -200,7 +213,7 @@ func (h *MultiInbound) newPacketConnection(ctx context.Context, conn N.PacketCon
 	if !loaded {
 		return os.ErrInvalid
 	}
-	user := h.users[userIndex].Name
+	user := h.userName(userIndex)
 	if user == "" {
 		user = F.ToString(userIndex)
 	} else {

@@ -33,6 +33,7 @@ func newStackDevice(options DeviceOptions) (*stackDevice, error) {
 	memoryTun := tun.NewMemoryTun(tun.MemoryTunOptions{MTU: int(options.MTU)})
 	stack, err := newStack(options, memoryTun)
 	if err != nil {
+		router.close()
 		return nil, err
 	}
 	inet4Address, inet6Address := deviceAddresses(options.Address)
@@ -105,7 +106,12 @@ func (w *stackDevice) Inet6Address() netip.Addr {
 	return w.inet6Address
 }
 
-func (w *stackDevice) SetDevice(device *device.Device) {
+func (w *stackDevice) UpstreamPort() any {
+	return w.stack
+}
+
+func (w *stackDevice) SetDevice(device *device.Device, peers []*device.Peer) {
+	w.router.setPeers(device.AllowedIPs(), peers)
 }
 
 func (w *stackDevice) Start() error {

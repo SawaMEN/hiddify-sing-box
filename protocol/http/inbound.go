@@ -98,7 +98,7 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 	return inbound, nil
 }
 
-func (h *Inbound) Start(stage adapter.StartStage) error {
+func (h *Inbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage != adapter.StartStateStart {
 		return nil
 	}
@@ -107,6 +107,7 @@ func (h *Inbound) Start(stage adapter.StartStage) error {
 		if err != nil {
 			return E.Cause(err, "create TLS config")
 		}
+		scope.Add(h.tlsConfig.Close)
 	}
 	err := h.listener.Start()
 	if err != nil {

@@ -3,7 +3,6 @@
 package libbox
 
 import (
-	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -31,6 +30,7 @@ type reportMetadata struct {
 func baseReportMetadata() reportMetadata {
 	processPath, _ := os.Executable()
 	processName := filepath.Base(processPath)
+	processPath = processName //H: the full path can hold the user name
 	if processName == "." {
 		processName = ""
 	}
@@ -60,16 +60,30 @@ func writeReportMetadata(destPath string, metadata any) {
 	writeReportFile(destPath, "metadata.json", data)
 }
 
+// H: reports do not carry the configuration; see saveConfigSnapshot
 func copyConfigSnapshot(destPath string) {
-	snapshotPath := configSnapshotPath()
-	content, err := os.ReadFile(snapshotPath)
-	if err != nil {
+}
+
+func platformSnapshotPath() string {
+	return filepath.Join(sWorkingPath, "PlatformMetadata-"+sCrashReportSource+".json")
+}
+
+func savePlatformSnapshot() {
+	snapshotPath := platformSnapshotPath()
+	if sPlatformMetadata == nil {
+		os.Remove(snapshotPath)
 		return
 	}
-	if len(bytes.TrimSpace(content)) == 0 {
-		return
+	os.WriteFile(snapshotPath, sPlatformMetadata, 0o666)
+	chownReport(snapshotPath)
+}
+
+func readPlatformSnapshot() json.RawMessage {
+	content, err := os.ReadFile(platformSnapshotPath())
+	if err != nil || !json.Valid(content) {
+		return nil
 	}
-	writeReportFile(destPath, "configuration.json", content)
+	return content
 }
 
 func platformSnapshotPath() string {

@@ -60,12 +60,7 @@ func newBackend(ctx context.Context, logger logger.ContextLogger, networkManager
 	instance := &backendDarwin{
 		writeBatch: make([]*buf.Buffer, 0, bridgeWriteBatchSize),
 	}
-	err := instance.init(ctx, logger, networkManager, tag, options)
-	if err != nil {
-		return nil, err
-	}
-	instance.inet4Local = addressAt(bridgeInet4LocalBase, instance.index)
-	instance.inet6Local = addressAt(bridgeInet6LocalBase, instance.index)
+	instance.init(ctx, logger, networkManager, tag, options)
 	platformInterface := service.FromContext[adapter.PlatformInterface](ctx)
 	if platformInterface != nil && platformInterface.UsePlatformBridge() {
 		instance.platform = platformInterface
@@ -73,24 +68,32 @@ func newBackend(ctx context.Context, logger logger.ContextLogger, networkManager
 	return instance, nil
 }
 
-func (b *backendDarwin) Start(stage adapter.StartStage) error {
-	if stage != adapter.StartStateStart {
-		return nil
-	}
-	err := b.start()
-	if err != nil {
-		b.Close()
-		return err
+func (b *backendDarwin) Start(stage adapter.StartStage, scope *adapter.Scope) error {
+	switch stage {
+	case adapter.StartStateInitialize:
+		err := b.allocateIndex(scope)
+		if err != nil {
+			return err
+		}
+		b.inet4Local = addressAt(bridgeInet4LocalBase, b.index)
+		b.inet6Local = addressAt(bridgeInet6LocalBase, b.index)
+	case adapter.StartStateStart:
+		b.closed = scope.Context().Done()
+		if b.platform != nil {
+			return b.startPlatform(scope)
+		}
+		return b.start(scope)
 	}
 	return nil
 }
 
-func (b *backendDarwin) start() error {
-	if b.platform != nil {
-		return b.startPlatform()
-	}
+func (b *backendDarwin) start(scope *adapter.Scope) error {
 	b.tunName = tun.CalculateInterfaceName(b.bridgeName)
 	b.anchorName = "com.apple/sing-box-" + b.tunName
+	scope.Add(func() error {
+		b.readGroup.Wait()
+		return nil
+	})
 	tunInterface, err := tun.New(tun.Options{
 		Name:                      b.tunName,
 		MTU:                       bridgeTunMTUDarwin,
@@ -103,12 +106,17 @@ func (b *backendDarwin) start() error {
 	if err != nil {
 		return E.Cause(err, "create bridge tun")
 	}
+	scope.Add(tunInterface.Close)
 	b.tunInterface = tunInterface
 	err = tunInterface.Start()
 	if err != nil {
 		return E.Cause(err, "start bridge tun")
 	}
-	b.forwardingRestore = enableDarwinForwarding(b.logger, b.inet4Port.IsValid(), b.inet6Port.IsValid())
+	forwardingRestore := enableDarwinForwarding(b.logger, b.inet4Port.IsValid(), b.inet6Port.IsValid())
+	scope.Add(func() error {
+		restoreDarwinForwarding(forwardingRestore)
+		return nil
+	})
 	err = assignBridgePortAddress(b.tunName, b.inet4Local, b.inet4Port)
 	if err != nil {
 		return E.Cause(err, "add bridge route")
@@ -122,23 +130,31 @@ func (b *backendDarwin) start() error {
 	if err != nil {
 		return E.Cause(err, "enable pf")
 	}
+	scope.Add(func() error {
+		_ = b.pfDevice.StopReference(b.pfToken)
+		return b.pfDevice.Close()
+	})
 	dropRules := bridgeDropRules(b.tunName, b.inet4Port, b.inet6Port)
 	err = b.pfDevice.LoadAnchor(b.anchorName, dropRules)
 	if err != nil {
 		return E.Cause(err, "initialize bridge pf rules")
 	}
+	scope.Add(func() error {
+		b.egressAccess.Lock()
+		_ = b.pfDevice.LoadAnchor(b.anchorName, nil)
+		b.egressAccess.Unlock()
+		return nil
+	})
 	b.currentRules = dropRules
 	b.batchTUN = tunInterface.(tun.DarwinTUN)
-	b.closed = make(chan struct{})
-	b.readDone = make(chan struct{})
-	b.registerMonitors(b.syncEgress)
+	b.registerMonitors(scope, b.syncEgress)
 	b.syncEgress()
-	go b.batchReadLoop()
+	b.readGroup.Go(b.batchReadLoop)
 	b.logger.Info("bridge started at ", b.tunName, " (masquerade, egress ", b.egressLabel(), ")")
 	return nil
 }
 
-func (b *backendDarwin) startPlatform() error {
+func (b *backendDarwin) startPlatform(scope *adapter.Scope) error {
 	session, err := b.platform.CreateBridge(adapter.BridgeOptions{
 		BridgeName: b.bridgeName,
 		MTU:        bridgeTunMTUDarwin,
@@ -149,11 +165,16 @@ func (b *backendDarwin) startPlatform() error {
 	if err != nil {
 		return E.Cause(err, "create bridge")
 	}
+	scope.Add(session.Close)
 	b.session = session
 	b.tunName = session.Name()
 	if !session.Inet6Active() {
 		b.inet6Port = netip.Addr{}
 	}
+	scope.Add(func() error {
+		b.readGroup.Wait()
+		return nil
+	})
 	tunInterface, err := tun.New(tun.Options{
 		Name:                      b.tunName,
 		MTU:                       bridgeTunMTUDarwin,
@@ -165,17 +186,16 @@ func (b *backendDarwin) startPlatform() error {
 	if err != nil {
 		return E.Cause(err, "create bridge tun")
 	}
+	scope.Add(tunInterface.Close)
 	b.tunInterface = tunInterface
 	err = tunInterface.Start()
 	if err != nil {
 		return E.Cause(err, "start bridge tun")
 	}
 	b.batchTUN = tunInterface.(tun.DarwinTUN)
-	b.closed = make(chan struct{})
-	b.readDone = make(chan struct{})
-	b.registerMonitors(b.syncSessionEgress)
+	b.registerMonitors(scope, b.syncSessionEgress)
 	b.syncSessionEgress()
-	go b.batchReadLoop()
+	b.readGroup.Go(b.batchReadLoop)
 	b.logger.Info("bridge started at ", b.tunName, " (platform, egress ", b.egressLabel(), ")")
 	return nil
 }
@@ -185,41 +205,6 @@ func (b *backendDarwin) egressLabel() string {
 		return b.boundInterface
 	}
 	return "auto"
-}
-
-func (b *backendDarwin) Close() error {
-	b.closeOnce.Do(func() {
-		if b.closed != nil {
-			close(b.closed)
-		}
-		if b.unregister != nil {
-			b.unregister()
-		}
-		if b.pfDevice != nil && b.anchorName != "" {
-			b.egressAccess.Lock()
-			_ = b.pfDevice.LoadAnchor(b.anchorName, nil)
-			b.egressAccess.Unlock()
-		}
-		restoreDarwinForwarding(b.forwardingRestore)
-		b.forwardingRestore = nil
-		if b.pfDevice != nil {
-			if b.pfToken != 0 {
-				_ = b.pfDevice.StopReference(b.pfToken)
-			}
-			_ = b.pfDevice.Close()
-		}
-		if b.tunInterface != nil {
-			b.tunInterface.Close()
-		}
-		if b.readDone != nil {
-			<-b.readDone
-		}
-		if b.session != nil {
-			_ = b.session.Close()
-		}
-		releaseBridgeIndex(b.index)
-	})
-	return nil
 }
 
 func (b *backendDarwin) PortMTU() uint32 {
@@ -258,12 +243,16 @@ func (b *backendDarwin) WritePackets(packets [][]byte) error {
 }
 
 func (b *backendDarwin) batchReadLoop() {
-	defer close(b.readDone)
-	headroom := -1
-	var buffers [][]byte
-	var batch [][]byte
+	var (
+		batch       [][]byte
+		returnPaths []tun.Return
+	)
 	for {
-		packets, err := b.batchTUN.BatchRead()
+		headroom := 0
+		if len(returnPaths) > 0 {
+			headroom = returnPaths[0].ReturnHeadroom()
+		}
+		packets, err := b.batchTUN.BatchRead(headroom, 0)
 		if err != nil {
 			select {
 			case <-b.closed:
@@ -280,34 +269,20 @@ func (b *backendDarwin) batchReadLoop() {
 			continue
 		}
 		b.returnAccess.Lock()
-		returnPaths := b.returnPaths
+		returnPaths = b.returnPaths
 		b.returnAccess.Unlock()
 		if len(returnPaths) == 0 {
 			buf.ReleaseMulti(packets)
 			continue
 		}
-		pathHeadroom := returnPaths[0].ReturnHeadroom()
-		if pathHeadroom != headroom {
-			headroom = pathHeadroom
-			buffers = buffers[:0]
-		}
-		for len(buffers) < len(packets) {
-			buffers = append(buffers, make([]byte, headroom+bridgeTunMTU))
-		}
 		batch = batch[:0]
 		for _, packet := range packets {
-			payload := packet.Bytes()
-			if len(payload) == 0 {
+			if packet.IsEmpty() {
 				continue
 			}
-			fixReturnChecksum(payload)
-			buffer := buffers[len(batch)][:headroom+len(payload)]
-			copy(buffer[headroom:], payload)
-			batch = append(batch, buffer)
-		}
-		buf.ReleaseMulti(packets)
-		if len(batch) == 0 {
-			continue
+			fixReturnChecksum(packet.Bytes())
+			packet.ExtendHeader(headroom)
+			batch = append(batch, packet.Bytes())
 		}
 		unconsumed := batch
 		currentHeadroom := headroom
@@ -329,6 +304,7 @@ func (b *backendDarwin) batchReadLoop() {
 			}
 			unconsumed = returnPath.ReturnPackets(unconsumed)
 		}
+		buf.ReleaseMulti(packets)
 	}
 }
 

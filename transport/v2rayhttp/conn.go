@@ -92,6 +92,9 @@ func (c *HTTPConn) writeRequest(payload []byte) error {
 	if err != nil {
 		return err
 	}
+	if err = hWriteRequestPadding(writer, c.request.Header, len(F.ToString(c.request.Method, " ", c.request.URL.RequestURI(), " HTTP/1.1", CRLF))); err != nil { //H
+		return err //H
+	} //H
 	for key, value := range c.request.Header {
 		_, err = writer.Write([]byte(F.ToString(key, ": ", strings.Join(value, ", "), CRLF)))
 		if err != nil {
@@ -226,7 +229,7 @@ type ServerHTTPConn struct {
 }
 
 func (c *ServerHTTPConn) Write(b []byte) (n int, err error) {
-	n, err = c.writer.Write(b)
+	n, err = c.HTTP2Conn.Write(b) //H: wraps HTTP/2 stream errors and maps closes, as on the client
 	if err == nil {
 		c.Flusher.Flush()
 	}

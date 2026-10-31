@@ -20,7 +20,6 @@ import (
 
 const (
 	defaultMinInterval               = 100 * time.Millisecond
-	defaultArmedInterval             = time.Second
 	defaultMaxInterval               = 10 * time.Second
 	defaultReleaseInterval           = time.Second
 	defaultReleaseShrinkFloor        = 16
@@ -56,7 +55,6 @@ type timerConfig struct {
 	safetyMargin    uint64
 	hasSafetyMargin bool
 	minInterval     time.Duration
-	armedInterval   time.Duration
 	maxInterval     time.Duration
 	policyMode      policyMode
 	killerDisabled  bool
@@ -99,7 +97,6 @@ func buildTimerConfig(options option.OOMKillerServiceOptions, memoryLimit uint64
 		safetyMargin:    safetyMargin,
 		hasSafetyMargin: hasSafetyMargin,
 		minInterval:     minInterval,
-		armedInterval:   max(min(defaultArmedInterval, maxInterval), minInterval),
 		maxInterval:     maxInterval,
 		policyMode:      policyMode,
 		killerDisabled:  killerDisabled,
@@ -364,7 +361,6 @@ func (t *adaptiveTimer) nextState(sample memorySample) pressureState {
 		return nextPressureState(t.state,
 			sample.usage >= t.limitThresholds.trigger,
 			sample.usage >= t.limitThresholds.armed,
-			sample.usage >= t.limitThresholds.resume,
 		)
 	case policyModeAvailable:
 		if !sample.availableKnown {
@@ -374,7 +370,6 @@ func (t *adaptiveTimer) nextState(sample memorySample) pressureState {
 		return nextPressureState(t.state,
 			sample.available <= thresholds.trigger,
 			sample.available <= thresholds.armed,
-			sample.available <= thresholds.resume,
 		)
 	default:
 		return pressureStateNormal
@@ -442,9 +437,9 @@ func (t *adaptiveTimer) logDetails(sample memorySample) string {
 	return ""
 }
 
-func nextPressureState(current pressureState, shouldTrigger, shouldArm, shouldStayTriggered bool) pressureState {
+func nextPressureState(current pressureState, shouldTrigger, shouldArm bool) pressureState {
 	if current == pressureStateTriggered {
-		if shouldStayTriggered {
+		if shouldArm {
 			return pressureStateTriggered
 		}
 		return pressureStateNormal

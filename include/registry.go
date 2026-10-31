@@ -74,6 +74,9 @@ func InboundRegistry() *inbound.Registry {
 	redirect.RegisterRedirect(registry)
 	redirect.RegisterTProxy(registry)
 	direct.RegisterInbound(registry)
+	registerSudokuInbound(registry) //H
+	registerBondInbound(registry)   //H
+	registerCallInbound(registry)   //H
 
 	socks.RegisterInbound(registry)
 	http.RegisterInbound(registry)

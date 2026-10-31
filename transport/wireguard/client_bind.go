@@ -5,8 +5,10 @@ import (
 	"net"
 	"net/netip"
 	"sync"
+	"sync/atomic" //H
 	"time"
 
+	C "github.com/sagernet/sing-box/constant" //H
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/bufio"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -35,11 +37,13 @@ type ClientBind struct {
 	reservedAccess      sync.RWMutex
 	reservedForEndpoint map[netip.AddrPort][3]uint8
 	connAccess          sync.Mutex
-	conn                *wireConn
+	conn                atomic.Pointer[wireConn] //H: read without the lock on the fast path
 	done                chan struct{}
 	isConnect           bool
 	connectAddr         netip.AddrPort
 	reserved            [3]uint8
+	connected           bool   //H
+	onReconnect         func() //H: the connection through the dialer was made again
 }
 
 func NewClientBind(ctx context.Context, logger logger.Logger, dialer N.Dialer, isConnect bool, connectAddr netip.AddrPort, reserved [3]uint8) *ClientBind {
@@ -181,7 +185,6 @@ func (c *ClientBind) SetMark(mark uint32) error {
 func (c *ClientBind) SendWithoutModify(bufs [][]byte, ep conn.Endpoint, offset int) error {
 	udpConn, err := c.connect()
 	if err != nil {
-		c.pauseManager.WaitActive()
 		time.Sleep(time.Second)
 		return err
 	}
@@ -226,6 +229,28 @@ func (c *ClientBind) Send(bufs [][]byte, ep conn.Endpoint, offset int) error {
 				reserved = c.reserved
 			}
 			copy(buf[1:4], reserved[:])
+		}
+		_, err = udpConn.WriteToUDPAddrPort(buf, destination)
+		if err != nil {
+			udpConn.Close()
+			return err
+		}
+	}
+	return nil
+}
+
+// SendWithoutModify sends packets as they are, without writing the reserved bytes; the
+// hiddify wireguard-go fork uses it for Noise fake packets. //H
+func (c *ClientBind) SendWithoutModify(bufs [][]byte, ep conn.Endpoint, offset int) error {
+	udpConn, err := c.connect()
+	if err != nil {
+		time.Sleep(time.Second)
+		return err
+	}
+	destination := netip.AddrPort(ep.(remoteEndpoint))
+	for _, buf := range bufs {
+		if offset > 0 {
+			buf = buf[offset:]
 		}
 		_, err = udpConn.WriteToUDPAddrPort(buf, destination)
 		if err != nil {
@@ -297,6 +322,7 @@ type wireConn struct {
 	conn   net.Conn
 	access sync.Mutex
 	done   chan struct{}
+	cancel context.CancelFunc //H: ends the context it was dialed with
 }
 
 func (w *wireConn) WriteToUDPAddrPort(b []byte, addr netip.AddrPort) (int, error) {
@@ -316,6 +342,9 @@ func (w *wireConn) Close() error {
 	}
 	w.PacketConn.Close()
 	close(w.done)
+	if w.cancel != nil { //H
+		w.cancel() //H
+	} //H
 	return nil
 }
 

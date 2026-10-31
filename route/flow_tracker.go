@@ -2,6 +2,7 @@ package route
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -70,34 +71,41 @@ func (l *flowLogger) CloseFlow(reason tun.FlowCloseReason) {
 		", upload ", byteformats.FormatBytes(uint64(l.upload.Load())), ", download ", byteformats.FormatBytes(uint64(l.download.Load())))
 }
 
-type multiFlowTracker []tun.FlowTracker
+type multiFlowTracker struct {
+	access   sync.Mutex
+	trackers []tun.FlowTracker
+}
 
-func (t multiFlowTracker) AttachFlow(handle tun.FlowHandle) {
-	for _, tracker := range t {
+func (t *multiFlowTracker) AttachFlow(handle tun.FlowHandle) {
+	t.access.Lock()
+	defer t.access.Unlock()
+	for _, tracker := range t.trackers {
 		tracker.AttachFlow(handle)
 	}
 }
 
-func (t multiFlowTracker) CountForward(n int) {
-	for _, tracker := range t {
+func (t *multiFlowTracker) CountForward(n int) {
+	for _, tracker := range t.trackers {
 		tracker.CountForward(n)
 	}
 }
 
-func (t multiFlowTracker) CountReverse(n int) {
-	for _, tracker := range t {
+func (t *multiFlowTracker) CountReverse(n int) {
+	for _, tracker := range t.trackers {
 		tracker.CountReverse(n)
 	}
 }
 
-func (t multiFlowTracker) FlowEstablished() {
-	for _, tracker := range t {
+func (t *multiFlowTracker) FlowEstablished() {
+	for _, tracker := range t.trackers {
 		tracker.FlowEstablished()
 	}
 }
 
-func (t multiFlowTracker) CloseFlow(reason tun.FlowCloseReason) {
-	for _, tracker := range t {
+func (t *multiFlowTracker) CloseFlow(reason tun.FlowCloseReason) {
+	t.access.Lock()
+	defer t.access.Unlock()
+	for _, tracker := range t.trackers {
 		tracker.CloseFlow(reason)
 	}
 }

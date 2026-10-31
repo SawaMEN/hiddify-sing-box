@@ -152,17 +152,36 @@ func (c *CacheFile) SetDisableExpire(disableExpire bool) {
 	c.disableExpire = disableExpire
 }
 
-func (c *CacheFile) Start(stage adapter.StartStage) error {
+func (c *CacheFile) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	switch stage {
 	case adapter.StartStateInitialize:
-		return c.start()
+		err := c.start()
+		if err != nil {
+			return err
+		}
+		scope.Add(func() error {
+			return c.database().Close()
+		})
+		scope.Add(func() error {
+			c.flushTimer.Stop()
+			c.Flush()
+			return nil
+		})
+		var flushGroup sync.WaitGroup
+		scope.Add(func() error {
+			flushGroup.Wait()
+			return nil
+		})
+		flushGroup.Go(func() {
+			c.loopFlush(scope.Context())
+		})
 	case adapter.StartStateStart:
-		c.startCacheCleanup()
+		c.startCacheCleanup(scope.Context())
 	}
 	return nil
 }
 
-func (c *CacheFile) startCacheCleanup() {
+func (c *CacheFile) startCacheCleanup(ctx context.Context) {
 	if c.storeDNS {
 		c.clearRDRC()
 		c.cleanupDNSCache()
@@ -170,14 +189,14 @@ func (c *CacheFile) startCacheCleanup() {
 		if interval <= 0 {
 			interval = time.Hour
 		}
-		go c.loopCacheCleanup(interval, c.cleanupDNSCache)
+		go c.loopCacheCleanup(ctx, interval, c.cleanupDNSCache)
 	} else if c.storeRDRC {
 		c.cleanupRDRC()
 		interval := c.rdrcTimeout / 2
 		if interval <= 0 {
 			interval = time.Hour
 		}
-		go c.loopCacheCleanup(interval, c.cleanupRDRC)
+		go c.loopCacheCleanup(ctx, interval, c.cleanupRDRC)
 	}
 }
 

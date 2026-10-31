@@ -263,7 +263,9 @@ How DNS is handled on the TUN interface.
 |------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `disabled` | Do not configure native DNS and do not hijack DNS traffic.                                                                                                 |
 | `native`   | Set the platform's native interface DNS where possible: per-interface DNS on Windows and Apple platforms, and `systemd-resolved` interface DNS on Linux.   |
-| `hijack`   | Same as `native`, with additional port 53 hijacking described below. Used by default.                                                                      |
+| `hijack`   | Same as `native`, with additional port 53 hijacking described below.                                                                                       |
+
+`hijack` is used by default when [`auto_route`](#auto_route) is enabled, otherwise `disabled` is used by default.
 
 `hijack` adds the following on top of `native`:
 
@@ -280,8 +282,8 @@ through the kernel `local` routing table before any user rule applies, and
 - With `auto_redirect`, port 53 traffic is redirected directly to
   [`dns_address`](#dns_address).
 
-*On Windows with [`strict_route`](#strict_route)*: a WFP filter blocks port
-53 traffic going through interfaces other than the TUN.
+*On Windows with [`strict_route`](#strict_route)*: port 53 traffic going
+through interfaces other than the TUN is blocked.
 
 #### dns_address
 
@@ -289,15 +291,12 @@ through the kernel `local` routing table before any user rule applies, and
 
 List of DNS server addresses used by [`dns_mode`](#dns_mode).
 
-When unset, sing-box derives one address per family by taking the next IP after
-the first IPv4/IPv6 entry in [`address`](#address). Connections toward those
-derived addresses are additionally hijacked into the sing-box DNS module,
-equivalent to a [`hijack-dns`](/configuration/route/rule_action/#hijack-dns)
-route action; this preserves the behaviour from before this option was added.
+When unset, the next address after the first IPv4 and IPv6 entry in
+[`address`](#address) is used, and connections to it are handled as a
+[`hijack-dns`](/configuration/route/rule_action/#hijack-dns) route action.
 
-When set, this auto-hijack is not applied; configure an explicit
-[`hijack-dns`](/configuration/route/rule_action/#hijack-dns) route rule if the
-behaviour is still required.
+When set, configure a [`hijack-dns`](/configuration/route/rule_action/#hijack-dns)
+route rule to handle DNS traffic to these addresses.
 
 #### gso
 
@@ -535,9 +534,9 @@ Exclude custom routes when `auto_route` is enabled.
     Add the destination IP CIDR rules in the specified rule-sets to routes, equivalent to adding to `route_address`.
     Unmatched traffic will bypass the sing-box routes.
 
-    Note that it **doesn't work on the Android graphical client** due to
-    the Android VpnService not being able to handle a large number of routes (DeadSystemException),
-    but otherwise it works fine on all command line clients and Apple platforms.
+    Note that it **doesn't work on the Android and Apple graphical clients**
+    as they cannot handle a large number of routes,
+    but otherwise it works fine on all command line clients and the Linux and Windows graphical clients.
 
 #### route_exclude_address_set
 
@@ -559,9 +558,9 @@ Exclude custom routes when `auto_route` is enabled.
     Add the destination IP CIDR rules in the specified rule-sets to routes, equivalent to adding to `route_exclude_address`.
     Matched traffic will bypass the sing-box routes.
 
-    Note that it **doesn't work on the Android graphical client** due to
-    the Android VpnService not being able to handle a large number of routes (DeadSystemException),
-    but otherwise it works fine on all command line clients and Apple platforms.
+    Note that it **doesn't work on the Android and Apple graphical clients**
+    as they cannot handle a large number of routes,
+    but otherwise it works fine on all command line clients and the Linux and Windows graphical clients.
 
 #### endpoint_independent_nat
 

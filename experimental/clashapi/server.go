@@ -152,7 +152,13 @@ func (s *Server) Name() string {
 	return "clash server"
 }
 
-func (s *Server) Start(stage adapter.StartStage) error {
+func (s *Server) Start(stage adapter.StartStage, scope *adapter.Scope) error {
+	if stage == adapter.StartStateInitialize {
+		// H: the hiddify clash server owns its traffic manager and URL test history
+		scope.Add(func() error {
+			return common.Close(s.trafficManager, s.urlTestHistory, common.PtrOrNil(s.cleaner))
+		})
+	}
 	if stage != adapter.StartStateStarted {
 		return nil
 	}
@@ -163,7 +169,7 @@ func (s *Server) Start(stage adapter.StartStage) error {
 			err      error
 		)
 		for range 3 {
-			listener, err = net.Listen("tcp", s.httpServer.Addr)
+			listener, err = net.Listen(M.NetworkFromNetAddr(N.NetworkTCP, M.ParseSocksaddr(s.httpServer.Addr).Addr), s.httpServer.Addr)
 			if runtime.GOOS == "android" && errors.Is(err, syscall.EADDRINUSE) {
 				time.Sleep(100 * time.Millisecond)
 				continue
@@ -173,6 +179,7 @@ func (s *Server) Start(stage adapter.StartStage) error {
 		if err != nil {
 			return E.Cause(err, "external controller listen error")
 		}
+		scope.Add(s.httpServer.Close)
 		s.logger.Info("restful api listening at ", listener.Addr())
 		go func() {
 			err = s.httpServer.Serve(listener)
