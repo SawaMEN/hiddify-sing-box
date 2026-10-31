@@ -28,7 +28,7 @@ jobs:
           unzip -q "$RUNNER_TEMP/snell-v5.zip" -d "$RUNNER_TEMP/snell-v5"
           chmod +x "$RUNNER_TEMP/snell-v5/snell-server"
       - name: Run Snell and option tests
-        run: go test -race ./protocol/snell ./option -count=1 -timeout 10m
+        run: go test -mod=mod -race ./protocol/snell ./option -count=1 -timeout 10m
         env:
           SNELL_V6_IDLE_TEST: 130s
           SNELL_V5_SOAK_TEST: 3m
