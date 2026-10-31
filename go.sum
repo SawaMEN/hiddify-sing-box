@@ -1049,3 +1049,6 @@ tailscale.com v1.58.2 h1:5trkhh/fpUn7f6TUcGUQYJ0GokdNNfNrjh9ONJhoc5A=
 tailscale.com v1.58.2/go.mod h1:faWR8XaXemnSKCDjHC7SAQzaagkUjA5x4jlLWiwxtuk=
 zombiezen.com/go/capnproto2 v2.18.2+incompatible h1:v3BD1zbruvffn7zjJUU5Pn8nZAB11bhZSQC4W+YnnKo=
 zombiezen.com/go/capnproto2 v2.18.2+incompatible/go.mod h1:XO5Pr2SbXgqZwn0m0Ru54QBqpOf4K5AYBO+8LAOBQEQ=
+
+github.com/SawaMEN/VetroffProxy v0.1.1-0.20261030200803-b81ec45c6865 h1:kXY1Y77aOTTgaQtwsHDR38rhbWDBCtSrW3+7rhrfEK8=
+github.com/SawaMEN/VetroffProxy v0.1.1-0.20261030200803-b81ec45c6865/go.mod h1:AfaoqPqcWgkiASgsSaWs6QcK/bz3azsHiStUr35su1M=
