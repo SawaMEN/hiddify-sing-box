@@ -77,6 +77,6 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         with:
           version: latest
-          args: --timeout=30m
+          args: --timeout=30m -v
           install-mode: binary
           verify: false
