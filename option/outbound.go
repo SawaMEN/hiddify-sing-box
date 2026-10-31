@@ -91,6 +91,8 @@ type DialerOptionsWrapper interface {
 }
 
 type DialerOptions struct {
+	// Deprecated: accepted from legacy subscriptions.
+	TLSFragment TLSFragmentOptions `json:"tls_fragment,omitempty" schema:"omit"`
 	Detour string `json:"detour,omitempty" reference:"outbound"`
 	// H: Xray-style finalmask applied to the connections this dialer opens
 	FinalMask *FinalMaskOptions `json:"final_mask,omitempty"`
