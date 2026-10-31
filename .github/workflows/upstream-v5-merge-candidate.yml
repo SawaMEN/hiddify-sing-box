@@ -70,11 +70,11 @@ jobs:
           test -f protocol/vetroff/outbound.go
           test -f option/vetroff.go
           test -f protocol/snell/quic_proxy_client.go
-      - name: Verify critical fork protocol compatibility
-        run: |
-          go test -mod=mod -count=1 ./transport/v2rayxhttp ./protocol/vetroff ./option ./include
-      - name: Publish validated upstream integration to candidate branch
+      - name: Publish isolated upstream merge candidate
         shell: bash
         run: |
           set -euo pipefail
           git push origin HEAD:maintenance/full-hiddify-v5-sync-20261101
+      - name: Verify critical fork protocol compatibility
+        run: |
+          go test -mod=mod -count=1 ./transport/v2rayxhttp ./protocol/vetroff ./option ./include
