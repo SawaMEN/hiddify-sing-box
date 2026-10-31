@@ -151,9 +151,7 @@ func (d *systemDevice) readLoop(tunInterface tun.Tun, mtu int) {
 		if readN <= tun.PacketOffset {
 			continue
 		}
-		packet := packetBuffer.FreeBytes()[:0] //H: see read bytes from the preallocated buffer
-		_ = packet
-		packet = readData[tun.PacketOffset:readN]
+		packet := readData[tun.PacketOffset:readN] //H
 		if d.blockIPv6Enabled() && header.IPVersion(packet) == header.IPv6Version {
 			continue
 		}
