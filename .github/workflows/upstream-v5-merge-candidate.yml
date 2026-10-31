@@ -1,0 +1,55 @@
+name: Integrate complete Hiddify v5 upstream (candidate)
+
+on:
+  push:
+    branches: [maintenance/full-hiddify-v5-sync-20261101]
+    paths:
+      - '.github/workflows/upstream-v5-merge-candidate.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: maintenance/full-hiddify-v5-sync-20261101
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: true
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Fetch upstream and try conflict-aware merge
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/hiddify/hiddify-sing-box.git
+          git fetch --no-tags upstream v5
+          if ! git merge-base HEAD FETCH_HEAD; then
+            echo "::error::No common ancestor with Hiddify v5: automatic merge is unsafe"
+            exit 1
+          fi
+          git merge --no-edit --no-ff -X ours FETCH_HEAD || {
+            echo "::error::Upstream merge has unresolved conflicts"
+            git diff --name-only --diff-filter=U
+            exit 1
+          }
+          git diff HEAD^ HEAD --check
+          test -f protocol/vetroff/outbound.go
+          test -f option/vetroff.go
+          test -f protocol/snell/quic_proxy_client.go
+      - name: Verify critical fork protocol compatibility
+        run: |
+          go test -mod=mod -count=1 ./transport/v2rayxhttp ./protocol/vetroff ./option ./include
+      - name: Publish validated upstream integration to candidate branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin HEAD:maintenance/full-hiddify-v5-sync-20261101
