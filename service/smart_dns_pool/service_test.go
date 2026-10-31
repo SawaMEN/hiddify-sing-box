@@ -114,7 +114,9 @@ func TestSmartDNSPool_EndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
-	if err := svc.Start(adapter.StartStateStart); err != nil {
+	scope := adapter.NewScope(context.Background(), log.NewNOPFactory().NewLogger("smart-dns-pool-test"))
+	defer scope.Close()
+	if err := svc.Start(adapter.StartStateStart, scope); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	defer svc.Close()
@@ -180,7 +182,9 @@ func TestSmartDNSPool_FailoverWithinDeadline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
-	if err := svc.Start(adapter.StartStateStart); err != nil {
+	scope := adapter.NewScope(context.Background(), log.NewNOPFactory().NewLogger("smart-dns-pool-test"))
+	defer scope.Close()
+	if err := svc.Start(adapter.StartStateStart, scope); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	defer svc.Close()

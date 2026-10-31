@@ -159,22 +159,8 @@ func (c *CacheFile) Start(stage adapter.StartStage, scope *adapter.Scope) error 
 		if err != nil {
 			return err
 		}
-		scope.Add(func() error {
-			return c.database().Close()
-		})
-		scope.Add(func() error {
-			c.flushTimer.Stop()
-			c.Flush()
-			return nil
-		})
-		var flushGroup sync.WaitGroup
-		scope.Add(func() error {
-			flushGroup.Wait()
-			return nil
-		})
-		flushGroup.Go(func() {
-			c.loopFlush(scope.Context())
-		})
+		scope.Add(c.Close) //H: c.start already launches loopFlush
+
 	case adapter.StartStateStart:
 		c.startCacheCleanup(scope.Context())
 	}

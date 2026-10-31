@@ -162,11 +162,8 @@ func (s *Store) CurrentPEM() []string {
 }
 
 func (s *Store) update() error {
-	currentPool, err := s.newBasePool()
-	var currentPEM []string
-	if err != nil {
-		return err
-	}
+	currentPool, anchorPEM, err := s.load()
+	if err != nil { return err }
 	s.access.Lock()
 	defer s.access.Unlock()
 	s.currentPool = currentPool
@@ -180,6 +177,7 @@ func (s *Store) load() (*x509.CertPool, []byte, error) {
 		return nil, nil, err
 	}
 	pemBuffer := new(bytes.Buffer)
+	var currentPEM []string
 	switch s.storeType {
 	case C.CertificateStoreMozilla:
 		pemContent := mozillaIncludedPEM()
@@ -235,10 +233,9 @@ func (s *Store) load() (*x509.CertPool, []byte, error) {
 		return nil, nil, firstErr
 	}
 	s.access.Lock()
-	defer s.access.Unlock()
-	s.currentPool = currentPool
 	s.currentPEM = currentPEM
-	return s.updatePlatformLocked(pemBuffer.Bytes())
+	s.access.Unlock()
+	return currentPool, pemBuffer.Bytes(), nil
 }
 
 func appendPEMBlock(buffer *bytes.Buffer, block string) {

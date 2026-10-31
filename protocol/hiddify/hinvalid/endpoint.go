@@ -30,7 +30,7 @@ func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextL
 	return &Endpoint{Outbound: out.(*Outbound)}, nil
 }
 
-func (h *Endpoint) Start(stage adapter.StartStage) error {
+func (h *Endpoint) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	return nil
 }
 

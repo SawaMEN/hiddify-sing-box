@@ -75,6 +75,7 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          GOFLAGS: -mod=mod
         with:
           version: latest
           args: --timeout=30m -v

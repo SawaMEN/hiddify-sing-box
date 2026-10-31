@@ -44,6 +44,7 @@ func (u *RuleSetUpdater) Close() error {
 
 func (u *RuleSetUpdater) loopUpdate() {
 	nextUpdates := make([]time.Time, len(u.ruleSets))
+	retries := make([]int, len(u.ruleSets))
 	for i, ruleSet := range u.ruleSets {
 		nextUpdates[i] = ruleSet.lastUpdated.Add(ruleSet.updateInterval)
 	}
@@ -62,10 +63,15 @@ func (u *RuleSetUpdater) loopUpdate() {
 				continue
 			}
 			if ruleSet.updateOnce() != nil { //H: retry a failed fetch with backoff, not after update_interval
-				nextUpdates[i] = now.Add(ruleSet.nextRetryDelay()) //H
-				continue                                           //H
+				delays := ruleSet.retryDelays //H
+				if len(delays) == 0 { //H
+					delays = hRuleSetRetryDelays //H
+				} //H
+				nextUpdates[i] = now.Add(delays[min(retries[i], len(delays)-1)]) //H
+				retries[i]++ //H
+				continue //H
 			} //H
-			ruleSet.retries = 0 //H
+			retries[i] = 0 //H
 			nextUpdates[i] = now.Add(ruleSet.updateInterval)
 			updated = true
 		}

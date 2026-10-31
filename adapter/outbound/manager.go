@@ -2,7 +2,6 @@ package outbound
 
 import (
 	"context"
-	"github.com/sagernet/sing-box/option"
 	"os"
 	"slices"
 	"strings"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/log"
+	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 )
@@ -189,104 +189,61 @@ func (m *Manager) RemoveForReload(tag string) error {
 func (m *Manager) remove(tag string, ignoreDependents bool) error {
 	m.access.Lock()
 	outbound, found := m.outboundByTag[tag]
-	if !found {
-		m.access.Unlock()
-		return os.ErrInvalid
-	}
+	if !found { m.access.Unlock(); return os.ErrInvalid }
 	if !ignoreDependents {
-		dependBy := m.dependents(tag)
-		if len(dependBy) > 0 {
+		var dependBy []string
+		for _, candidate := range m.outbounds {
+			if candidate.Tag() != tag && slices.Contains(candidate.Dependencies(), tag) {
+				dependBy = append(dependBy, candidate.Tag())
+			}
+		}
+		if len(dependBy) != 0 {
 			m.access.Unlock()
 			return E.New("outbound[", tag, "] is depended by ", strings.Join(dependBy, ", "))
 		}
 	}
-	m.outbounds = slices.Delete(slices.Clone(m.outbounds), index, index+1) // H: never change a slice already handed out
-	started := m.started
+	index := slices.Index(m.outbounds, outbound)
+	if index < 0 { m.access.Unlock(); return E.New("invalid outbound index: ", tag) }
+	m.outbounds = slices.Delete(slices.Clone(m.outbounds), index, index+1)
+	delete(m.outboundByTag, tag)
 	if m.defaultOutbound == outbound {
-		if len(m.outbounds) > 0 {
-			m.defaultOutbound = m.outbounds[0]
-		} else {
-			m.defaultOutbound = nil
-		}
+		m.defaultOutbound = nil
+		if len(m.outbounds) > 0 { m.defaultOutbound = m.outbounds[0] }
 	}
-	dependBy := m.dependByTag[tag]
-	if len(dependBy) > 0 && !ignoreDependents {
-		return E.New("outbound[", tag, "] is depended by ", strings.Join(dependBy, ", "))
-	}
-	m.removeDependencies(tag, outbound.Dependencies())
-	if started {
-		return adapter.CloseLate(m.scope, outbound)
-	}
+	started, scope := m.started, m.scope
+	m.access.Unlock()
+	if started { return adapter.CloseLate(scope, outbound) }
 	return nil
 }
 
-func (m *Manager) removeDependencies(tag string, dependencies []string) {
-	for _, dependency := range dependencies {
-		dependBy := common.Filter(m.dependByTag[dependency], func(it string) bool {
-			return it != tag
-		})
-		if len(dependBy) == 0 {
-			delete(m.dependByTag, dependency)
-		} else {
-			m.dependByTag[dependency] = dependBy
-		}
-	}
-}
-
 func (m *Manager) Create(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, inboundType string, options any) error {
-	if tag == "" {
-		return os.ErrInvalid
-	}
-	option.MigrateTLSFragment(options) //H: a tls_fragment in the tls block applies like the dialer's
+	if tag == "" { return os.ErrInvalid }
+	option.MigrateTLSFragment(options) //H
 	outbound, err := m.registry.CreateOutbound(ctx, router, logger, tag, inboundType, options)
-	if err != nil {
-		return err
+	if err != nil { return err }
+	m.access.RLock()
+	started, scope := m.started, m.scope
+	m.access.RUnlock()
+	if started {
+		if err = adapter.StartLate(scope, "outbound/"+outbound.Type()+"["+outbound.Tag()+"]", outbound); err != nil { return err }
 	}
 	m.access.Lock()
-	started := m.started
-	m.access.Unlock()
-	if started { // H: hot reload; started outside the lock, as starting may look up other outbounds
-		err = adapter.StartLate(m.scope, "outbound/"+outbound.Type()+"["+outbound.Tag()+"]", outbound)
-		if err != nil {
-			return err
-		}
-	}
-	m.access.Lock()
-	defer m.access.Unlock()
-	var replaced bool
-	if existsOutbound, loaded := m.outboundByTag[tag]; loaded {
-		if m.started {
-			err = common.Close(existsOutbound)
-			if err != nil {
-				return E.Cause(err, "close outbound/", existsOutbound.Type(), "[", existsOutbound.Tag(), "]")
-			}
-		}
-		existsIndex := common.Index(m.outbounds, func(it adapter.Outbound) bool {
-			return it == existsOutbound
-		})
-		if existsIndex == -1 {
-			panic("invalid outbound index")
-		}
-		// H: the replacement takes the old one's place (callers rely on the order, e.g. the main group
-		// comes first); a copy, so a slice already handed out never changes
+	old, replaced := m.outboundByTag[tag]
+	if replaced {
+		index := slices.Index(m.outbounds, old)
+		if index < 0 { m.access.Unlock(); return E.New("invalid outbound index: ", tag) }
 		m.outbounds = slices.Clone(m.outbounds)
-		m.outbounds[existsIndex] = outbound
-		replaced = true
-		m.removeDependencies(tag, existsOutbound.Dependencies()) // H: the replaced outbound no longer depends on them
-	}
-	if !replaced {
-		m.outbounds = append(m.outbounds, outbound)
+		m.outbounds[index] = outbound
+	} else {
+		m.outbounds = append(slices.Clone(m.outbounds), outbound)
 	}
 	m.outboundByTag[tag] = outbound
-	if tag == m.defaultTag || (m.defaultTag == "" && m.defaultOutbound == nil) || m.defaultOutbound == existsOutbound && replaced {
+	if tag == m.defaultTag || (m.defaultTag == "" && m.defaultOutbound == nil) || (replaced && m.defaultOutbound == old) {
 		m.defaultOutbound = outbound
 	}
 	m.access.Unlock()
 	if replaced {
-		err = adapter.CloseLate(m.scope, existsOutbound)
-		if err != nil {
-			return E.Cause(err, "close outbound/", existsOutbound.Type(), "[", existsOutbound.Tag(), "]")
-		}
+		if err = adapter.CloseLate(scope, old); err != nil { return E.Cause(err, "close outbound/", old.Type(), "[", old.Tag(), "]") }
 	}
 	return nil
 }
@@ -312,7 +269,6 @@ func (m *Manager) SetDefaultTag(tag string) error {
 	defer m.access.Unlock()
 	if m.defaultOutbound != outbound {
 		m.defaultOutbound = outbound
-		m.logger.Info("updated default outbound to ", outbound.Tag())
 	}
 	return nil
 }

@@ -187,7 +187,7 @@ func TestH_MonitoringGroupsAndHistory(t *testing.T) {
 	selector := &fakeGroup{fakeOutbound: fakeOutbound{tag: "select"}, all: []string{"auto", "c"}, selected: c}
 	m := newTestMonitor(t, nil, option.MonitoringOptions{}, a, b, c, urltestGroup, selector)
 	require.Equal(t, "outbound-monitoring", m.Name())
-	require.NoError(t, m.Start(adapter.StartStateInitialize))
+	require.NoError(t, m.Start(adapter.StartStateInitialize, nil))
 
 	require.Len(t, m.reg().groups, 3)
 	require.Len(t, m.reg().groups[""].outbounds, 5)
@@ -239,7 +239,7 @@ func TestH_MonitoringQueueAndApplyResult(t *testing.T) {
 	b := &fakeOutbound{tag: "b"}
 	grp := &fakeGroup{fakeOutbound: fakeOutbound{tag: "grp"}, all: []string{"a", "b"}}
 	m := newTestMonitor(t, nil, option.MonitoringOptions{}, a, b, grp)
-	require.NoError(t, m.Start(adapter.StartStateInitialize))
+	require.NoError(t, m.Start(adapter.StartStateInitialize, nil))
 
 	targets := m.collectCycleTargets()
 	require.ElementsMatch(t, []string{"a", "b"}, targets, "groups are never tested directly")
@@ -278,14 +278,14 @@ func TestH_MonitoringSaveLoadHistory(t *testing.T) {
 	b := &fakeOutbound{tag: "b"}
 	grp := &fakeGroup{fakeOutbound: fakeOutbound{tag: "grp"}, all: []string{"a", "b"}}
 	m := newTestMonitor(t, cache, option.MonitoringOptions{}, a, b, grp)
-	require.NoError(t, m.Start(adapter.StartStateInitialize))
+	require.NoError(t, m.Start(adapter.StartStateInitialize, nil))
 	setHistory(m, "a", 77, false, &ipinfo.IpInfo{IP: "8.8.8.8", CountryCode: "US"})
 	setHistory(m, "b", TimeoutDelay, false, nil)
 	require.NoError(t, m.saveHistory())
 	require.NotNil(t, cache.LoadBinary("outbound_monitoring_history"))
 
 	m2 := newTestMonitor(t, cache, option.MonitoringOptions{}, a, b, grp)
-	require.NoError(t, m2.Start(adapter.StartStateInitialize))
+	require.NoError(t, m2.Start(adapter.StartStateInitialize, nil))
 	ha := m2.getUrlTest("a")
 	require.Equal(t, uint16(77), ha.Delay)
 	require.True(t, ha.IsFromCache)
@@ -294,14 +294,14 @@ func TestH_MonitoringSaveLoadHistory(t *testing.T) {
 
 	cache.data["outbound_monitoring_history"] = &adapter.SavedBinary{Content: []byte("{garbage")}
 	m3 := newTestMonitor(t, cache, option.MonitoringOptions{}, a, b, grp)
-	require.NoError(t, m3.Start(adapter.StartStateInitialize))
+	require.NoError(t, m3.Start(adapter.StartStateInitialize, nil))
 	require.Equal(t, uint16(0), m3.getUrlTest("a").Delay)
 }
 
 func TestH_MonitoringStartRejectsUnknownGroupMember(t *testing.T) {
 	grp := &fakeGroup{fakeOutbound: fakeOutbound{tag: "grp"}, all: []string{"ghost"}}
 	m := newTestMonitor(t, nil, option.MonitoringOptions{}, grp)
-	require.Error(t, m.Start(adapter.StartStateInitialize))
+	require.Error(t, m.Start(adapter.StartStateInitialize, nil))
 }
 
 func TestH_MonitoringCycleEndToEnd(t *testing.T) {
@@ -328,10 +328,10 @@ func TestH_MonitoringCycleEndToEnd(t *testing.T) {
 		DebounceWindow: badoption.Duration(10 * time.Millisecond),
 		URLTestTimeout: badoption.Duration(2 * time.Second),
 	}, good, bad, grp)
-	require.NoError(t, m.Start(adapter.StartStateInitialize))
+	require.NoError(t, m.Start(adapter.StartStateInitialize, nil))
 	events, err := m.SubscribeGroup("grp")
 	require.NoError(t, err)
-	require.NoError(t, m.Start(adapter.StartStatePostStart))
+	require.NoError(t, m.Start(adapter.StartStatePostStart, nil))
 
 	select {
 	case <-events:
@@ -357,7 +357,7 @@ func TestH_MonitoringSignalChangePropagatesToDependents(t *testing.T) {
 	viaSelector := &fakeOutbound{tag: "c", deps: []string{"select"}}
 	outer := &fakeGroup{fakeOutbound: fakeOutbound{tag: "outer"}, all: []string{"c"}, selected: viaSelector}
 	m := newTestMonitor(t, nil, option.MonitoringOptions{}, a, b, selector, viaSelector, outer)
-	require.NoError(t, m.Start(adapter.StartStateInitialize))
+	require.NoError(t, m.Start(adapter.StartStateInitialize, nil))
 
 	done := make(chan error, 1)
 	go func() {
