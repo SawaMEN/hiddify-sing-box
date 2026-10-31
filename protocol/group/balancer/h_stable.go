@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/option" //H
 	"github.com/sagernet/sing-box/common/interrupt"
 	"github.com/sagernet/sing-box/common/monitoring"
 	N "github.com/sagernet/sing/common/network"
@@ -117,10 +118,17 @@ func (s *Balancer) usedMembers(history map[string]*adapter.URLTestHistory) map[s
 		return used
 	}
 	sorted := sortOutboundsByDelay(convertOutbounds(s.availbleOutbounds), history)
-	for network, index := range getAcceptableIndex(sorted, history, acceptableRatio(s.options)) {
+	for network, index := range getAcceptableIndex(sorted, history, hAcceptableRatio(s.options)) {
 		for _, member := range sorted[network][:index+1] {
 			used[member.Tag()] = true
 		}
 	}
 	return used
 }
+
+ // hAcceptableRatio returns the configured acceptable latency multiplier.
+ // With an unset value, use the balancing default so settling preserves viable members. //H
+ func hAcceptableRatio(opts option.BalancerOutboundOptions) float64 {
+ 	if opts.DelayAcceptableRatio > 0 { return opts.DelayAcceptableRatio }
+ 	return 2
+ }

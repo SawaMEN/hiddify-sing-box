@@ -1,12 +1,10 @@
 package dialer
 
 import (
-	"io"
 	"net"
 	"syscall"
 
 	"github.com/sagernet/sing/common"
-	"github.com/sagernet/sing/common/control"
 	N "github.com/sagernet/sing/common/network"
 )
 
@@ -16,17 +14,8 @@ type udpConn struct {
 }
 
 func (c *udpConn) Read(b []byte) (n int, err error) {
-	n, err = c.Conn.Read(b)
-	if n == 0 && err == nil {
-		var isEOF bool
-		c.rawConn.Control(func(fd uintptr) {
-			isEOF = control.IsUDPEOF(fd)
-		})
-		if isEOF {
-			err = io.EOF
-		}
-	}
-	return
+	//H: zero-length UDP datagrams are valid; do not depend on removed control.IsUDPEOF.
+	return c.Conn.Read(b)
 }
 
 func (c *udpConn) SyscallConn() (syscall.RawConn, error) {

@@ -26,6 +26,7 @@ import (
 	"github.com/sagernet/sing/common/cleanup"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/json"
+	M "github.com/sagernet/sing/common/metadata" //H
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/common/observable"
 	"github.com/sagernet/sing/service"
