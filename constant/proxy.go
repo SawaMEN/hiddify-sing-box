@@ -59,6 +59,7 @@ const (
 	TypeCustom         = "custom"          //H
 	TypeAwg            = "awg"             //H
 	TypeBalancer       = "balancer"        //H
+	TypeFallback       = "fallback"       //H
 	TypeDNSTT          = "dnstt"           //H
 	TypeGooseRelay     = "gooserelay"      //H
 	TypeSmartDNSPool   = "smart_dns_pool"  //H — local recursive-resolver pool with AIMD throttling + recovery probing (github.com/hiddify/hmrd_multi_resolver_dns)
@@ -70,6 +71,7 @@ const (
 const (
 	TypeSelector = "selector"
 	TypeURLTest  = "urltest"
+	URLTestModeFailover = "failover" //H
 )
 
 // Display names of a warp endpoint, and of a masque outbound to WARP, by tunnel. //H
@@ -170,6 +172,8 @@ func ProxyDisplayName(proxyType string) string {
 		return "Awg"
 	case TypeBalancer:
 		return "Balancer"
+	case TypeFallback:
+		return "Fallback"
 	case TypeDNSTT:
 		return "DNSTT"
 	case TypeGooseRelay:

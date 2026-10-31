@@ -79,43 +79,22 @@ func NewWithOptions(options Options) (N.Dialer, error) {
 			server               string
 			defaultServer        bool // H: follow the current default DNS server
 			dnsQueryOptions      adapter.DNSQueryOptions
-			resolveFallbackDelay time.Duration
 		)
 		hasDomainResolver := dialOptions.DomainResolver != nil && dialOptions.DomainResolver.Server != ""
-		if options.DirectResolver {
-			if !hasDomainResolver {
-				return nil, E.New("missing domain resolver for domain server address")
-			}
-			dnsQueryOptions = domainResolveQueryOptions(dialOptions.DomainResolver)
+		if options.DirectResolver && !hasDomainResolver {
+			return nil, E.New("missing domain resolver for domain server address")
+		}
+		dnsQueryOptions, err = NewDNSQueryOptions(options.Context, dialOptions.DomainResolver, options.NewDialer)
+		if err != nil {
+			return nil, err
+		}
+		if hasDomainResolver {
+			server = dialOptions.DomainResolver.Server
+		} else if networkManager := service.FromContext[adapter.NetworkManager](options.Context); networkManager != nil {
+			server = networkManager.DefaultOptions().DomainResolver
+			defaultServer = server == "" && dnsQueryOptions.Transport != nil
 		} else {
-			if defaultOptions.DomainResolver != "" {
-				dnsQueryOptions = defaultOptions.DomainResolveOptions
-				transport, loaded := dnsTransport.Transport(defaultOptions.DomainResolver)
-				if !loaded {
-					return nil, E.New("default domain resolver not found: " + defaultOptions.DomainResolver)
-				}
-				dnsQueryOptions.Transport = transport
-				server = defaultOptions.DomainResolver // H: looked up by tag on each use
-				resolveFallbackDelay = time.Duration(dialOptions.FallbackDelay)
-			} else {
-				transports := dnsTransport.Transports()
-				if len(transports) < 2 {
-					dnsQueryOptions.Transport = dnsTransport.Default()
-					defaultServer = true
-				} else if options.NewDialer {
-					return nil, E.New("missing domain resolver for domain server address")
-				} else {
-					deprecated.Report(options.Context, deprecated.OptionMissingDomainResolver)
-				}
-			}
-			// H: hot reload replaces DNS servers, so remember which one to look up again on each use
-			if !hasDomainResolver {
-				if defaultDomainResolver := service.FromContext[adapter.NetworkManager](options.Context).DefaultOptions().DomainResolver; defaultDomainResolver != "" {
-					server = defaultDomainResolver
-				} else if dnsQueryOptions.Transport != nil {
-					defaultServer = true
-				}
-			}
+			defaultServer = dnsQueryOptions.Transport != nil
 		}
 		dialer = newResolveDialer(
 			options.Context,
@@ -186,46 +165,3 @@ type ParallelNetworkDialer interface {
 type PacketDialerWithDestination interface {
 	ListenPacketWithDestination(ctx context.Context, destination M.Socksaddr) (net.PacketConn, netip.Addr, error)
 }
-
-func NewDNSQueryOptions(ctx context.Context, domainResolver *option.DomainResolveOptions, newDialer bool) (adapter.DNSQueryOptions, error) {
-	dnsTransport := service.FromContext[adapter.DNSTransportManager](ctx)
-	if domainResolver != nil && domainResolver.Server != "" {
-		transport, loaded := dnsTransport.Transport(domainResolver.Server)
-		if !loaded {
-			return adapter.DNSQueryOptions{}, E.New("domain resolver not found: ", domainResolver.Server)
-		}
-		dnsQueryOptions := domainResolveQueryOptions(domainResolver)
-		dnsQueryOptions.Transport = transport
-		return dnsQueryOptions, nil
-	}
-	defaultOptions := service.FromContext[adapter.NetworkManager](ctx).DefaultOptions()
-	if defaultOptions.DomainResolver != "" {
-		transport, loaded := dnsTransport.Transport(defaultOptions.DomainResolver)
-		if !loaded {
-			return adapter.DNSQueryOptions{}, E.New("default domain resolver not found: ", defaultOptions.DomainResolver)
-		}
-		dnsQueryOptions := defaultOptions.DomainResolveOptions
-		dnsQueryOptions.Transport = transport
-		return dnsQueryOptions, nil
-	}
-	if len(dnsTransport.Transports()) < 2 {
-		return adapter.DNSQueryOptions{Transport: dnsTransport.Default()}, nil
-	}
-	if newDialer {
-		return adapter.DNSQueryOptions{}, E.New("missing domain resolver for domain server address")
-	}
-	deprecated.Report(ctx, deprecated.OptionMissingDomainResolver)
-	return adapter.DNSQueryOptions{}, nil
-}
-
-func domainResolveQueryOptions(domainResolver *option.DomainResolveOptions) adapter.DNSQueryOptions {
-	return adapter.DNSQueryOptions{
-		Strategy:               C.DomainStrategy(domainResolver.Strategy),
-		Timeout:                time.Duration(domainResolver.Timeout),
-		DisableCache:           domainResolver.DisableCache,
-		DisableOptimisticCache: domainResolver.DisableOptimisticCache,
-		RewriteTTL:             domainResolver.RewriteTTL,
-		ClientSubnet:           domainResolver.ClientSubnet.Build(netip.Prefix{}),
-	}
-}
-
