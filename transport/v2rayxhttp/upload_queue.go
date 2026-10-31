@@ -8,6 +8,7 @@ import (
 	"io"
 	"runtime"
 	"sync"
+	"sync/atomic"
 
 	E "github.com/sagernet/sing/common/exceptions"
 )
@@ -20,21 +21,24 @@ type Packet struct {
 
 type uploadQueue struct {
 	reader          io.ReadCloser
+	readerAccess    sync.Mutex // reader is set by Read and by Close's drain
 	nomore          bool
 	pushedPackets   chan Packet
 	writeCloseMutex sync.Mutex
 	heap            uploadHeap
 	nextSeq         uint64
-	closed          bool
+	closed          atomic.Bool   // read by Read without writeCloseMutex
+	closing         chan struct{} // closed by Close before it waits for writeCloseMutex
+	closeOnce       sync.Once
 	maxPackets      int
 }
 
 func NewUploadQueue(maxPackets int) *uploadQueue {
 	return &uploadQueue{
 		pushedPackets: make(chan Packet, maxPackets),
+		closing:       make(chan struct{}),
 		heap:          uploadHeap{},
 		nextSeq:       0,
-		closed:        false,
 		maxPackets:    maxPackets,
 	}
 }
@@ -42,31 +46,37 @@ func NewUploadQueue(maxPackets int) *uploadQueue {
 func (h *uploadQueue) Push(p Packet) error {
 	h.writeCloseMutex.Lock()
 	defer h.writeCloseMutex.Unlock()
-	if h.closed {
+	if h.closed.Load() {
 		return E.New("packet queue closed")
 	}
 	if h.nomore {
 		return E.New("h.reader already exists")
 	}
+	// a full queue that nobody reads would hold writeCloseMutex here, and Close with it, forever
+	select {
+	case h.pushedPackets <- p:
+	case <-h.closing:
+		return E.New("packet queue closed")
+	}
 	if p.Reader != nil {
 		h.nomore = true
 	}
-	h.pushedPackets <- p
 	return nil
 }
 
 func (h *uploadQueue) Close() error {
+	h.closeOnce.Do(func() { close(h.closing) }) // a blocked Push gives up the mutex
 	h.writeCloseMutex.Lock()
 	defer h.writeCloseMutex.Unlock()
-	if !h.closed {
-		h.closed = true
+	if !h.closed.Load() {
+		h.closed.Store(true)
 		runtime.Gosched() // hope Read() gets the packet
 	f:
 		for {
 			select {
 			case p := <-h.pushedPackets:
 				if p.Reader != nil {
-					h.reader = p.Reader
+					h.setReader(p.Reader)
 				}
 			default:
 				break f
@@ -74,17 +84,29 @@ func (h *uploadQueue) Close() error {
 		}
 		close(h.pushedPackets)
 	}
-	if h.reader != nil {
-		return h.reader.Close()
+	if reader := h.currentReader(); reader != nil {
+		return reader.Close()
 	}
 	return nil
 }
 
+func (h *uploadQueue) currentReader() io.ReadCloser {
+	h.readerAccess.Lock()
+	defer h.readerAccess.Unlock()
+	return h.reader
+}
+
+func (h *uploadQueue) setReader(reader io.ReadCloser) {
+	h.readerAccess.Lock()
+	h.reader = reader
+	h.readerAccess.Unlock()
+}
+
 func (h *uploadQueue) Read(b []byte) (int, error) {
-	if h.reader != nil {
-		return h.reader.Read(b)
+	if reader := h.currentReader(); reader != nil {
+		return reader.Read(b)
 	}
-	if h.closed {
+	if h.closed.Load() {
 		return 0, io.EOF
 	}
 	if len(h.heap) == 0 {
@@ -93,8 +115,8 @@ func (h *uploadQueue) Read(b []byte) (int, error) {
 			return 0, io.EOF
 		}
 		if packet.Reader != nil {
-			h.reader = packet.Reader
-			return h.reader.Read(b)
+			h.setReader(packet.Reader)
+			return packet.Reader.Read(b)
 		}
 		heap.Push(&h.heap, packet)
 	}
