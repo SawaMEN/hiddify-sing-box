@@ -106,6 +106,8 @@ func (o *InboundTLSOptionsContainer) ReplaceInboundTLSOptions(options *InboundTL
 }
 
 type OutboundTLSOptions struct {
+	// Deprecated: legacy nested fragmentation options are migrated to the dialer.
+	TLSFragment *TLSFragmentOptions `json:"tls_fragment,omitempty" schema:"omit"`
 	Enabled                    bool                                `json:"enabled,omitempty"`
 	Engine                     string                              `json:"engine,omitempty" enum:"go,apple,windows"`
 	DisableSNI                 bool                                `json:"disable_sni,omitempty"`

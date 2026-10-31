@@ -17,10 +17,11 @@ import (
 
 type _V2RayTransportOptions struct {
 	XDriveOptions      V2RayXDriveOptions      `json:"-"`
-	Type               string                  `json:"type" enum:"http,ws,quic,grpc,httpupgrade"`
+	Type               string                  `json:"type" enum:"http,ws,quic,grpc,httpupgrade,xhttp,raw,mkcp,kcp"`
 	HTTPOptions        V2RayHTTPOptions        `json:"-"`
 	WebsocketOptions   V2RayWebsocketOptions   `json:"-"`
 	QUICOptions        V2RayQUICOptions        `json:"-"`
+	KCPOptions         V2RayKCPOptions         `json:"-"`
 	GRPCOptions        V2RayGRPCOptions        `json:"-"`
 	HTTPUpgradeOptions V2RayHTTPUpgradeOptions `json:"-"`
 	XHTTPOptions       V2RayXHTTPOptions       `json:"-"` //H
@@ -41,6 +42,8 @@ func (o V2RayTransportOptions) MarshalJSON() ([]byte, error) {
 		v = o.WebsocketOptions
 	case C.V2RayTransportTypeQUIC:
 		v = o.QUICOptions
+	case C.V2RayTransportTypeKCP, C.V2RayTransportTypeKCPAlias:
+		v = o.KCPOptions
 	case C.V2RayTransportTypeGRPC:
 		v = o.GRPCOptions
 	case C.V2RayTransportTypeHTTPUpgrade:
@@ -73,6 +76,9 @@ func (o *V2RayTransportOptions) UnmarshalJSON(bytes []byte) error {
 		v = &o.WebsocketOptions
 	case C.V2RayTransportTypeQUIC:
 		v = &o.QUICOptions
+	case C.V2RayTransportTypeKCP, C.V2RayTransportTypeKCPAlias:
+		o.Type = C.V2RayTransportTypeKCP
+		v = &o.KCPOptions
 	case C.V2RayTransportTypeGRPC:
 		v = &o.GRPCOptions
 	case C.V2RayTransportTypeHTTPUpgrade:

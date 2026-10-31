@@ -8,18 +8,6 @@ type SudokuHTTPMaskOptions struct {
 	PathRoot  string `json:"path_root,omitempty"`
 	Multiplex string `json:"multiplex,omitempty"`
 }
-type SudokuOutboundOptions struct {
-	DialerOptions
-	ServerOptions
-	Key                string                `json:"key"`
-	ASCII              string                `json:"ascii,omitempty"`
-	AEAD               string                `json:"aead,omitempty"`
-	CustomTables       []string              `json:"custom_tables,omitempty"`
-	EnablePureDownlink bool                  `json:"enable_pure_downlink,omitempty"`
-	PaddingMin         int                   `json:"padding_min,omitempty"`
-	PaddingMax         int                   `json:"padding_max,omitempty"`
-	HTTPMask           SudokuHTTPMaskOptions `json:"httpmask,omitempty"`
-}
 type OpenFluxTransportOptions struct {
 	Type     string `json:"type"`
 	URL      string `json:"url,omitempty"`
