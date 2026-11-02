@@ -304,6 +304,7 @@ func (r *Router) matchDNS(ctx context.Context, rules []adapter.DNSRule, allowFak
 				if action.Strategy != C.DomainStrategyAsIS {
 					options.Strategy = action.Strategy
 				}
+				options.Strategy = r.ipv6ByOutbound(options.Strategy, action.IPv6ByOutbound) //H
 				if isFakeIP || action.DisableCache {
 					options.DisableCache = true
 				}
@@ -323,6 +324,7 @@ func (r *Router) matchDNS(ctx context.Context, rules []adapter.DNSRule, allowFak
 				if action.Strategy != C.DomainStrategyAsIS {
 					options.Strategy = action.Strategy
 				}
+				options.Strategy = r.ipv6ByOutbound(options.Strategy, action.IPv6ByOutbound) //H
 				if action.DisableCache {
 					options.DisableCache = true
 				}

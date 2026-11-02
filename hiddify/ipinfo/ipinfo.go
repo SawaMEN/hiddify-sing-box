@@ -31,6 +31,11 @@ var providers = []Provider{
 	NewReallyFreeGeoIPProvider(),
 }
 
+// fallbackProviders are tried when every provider above failed. The providers are tried from a
+// random one, so a place in the list is no order; Cloudflare's trace endpoint is here, not
+// above, because it answers only the address and the country: the JSON providers also give the
+// network, which the app shows, so they come first, and the trace answers when they rate-limit
+// (429) or time out on a busy network and the core would otherwise have no measurement at all.
 var fallbackProviders = []Provider{
 	NewMyIPProvider(),
 	NewCountryIsProvider(),
