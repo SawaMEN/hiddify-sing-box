@@ -68,8 +68,7 @@ func ConnectTunnel(ctx context.Context, dialer N.Dialer, tlsConfig aTLS.Config, 
 		tlsConfig,
 		quicConfig,
 	)
-	var rejection *tls.ECHRejectionError //H: as in newHTTP2Client, once without ECH when the peer rejects it
-	if errors.As(err, &rejection) {
+	if _, ok := errors.AsType[*tls.ECHRejectionError](err); ok { // H: retry without rejected ECH
 		if capable, ok := tlsConfig.(interface{ SetECHConfigList([]byte) }); ok {
 			capable.SetECHConfigList(nil)
 		}
@@ -148,8 +147,7 @@ func newHTTP2Client(dialer N.Dialer, baseTLSConfig aTLS.Config, endpoint *net.TC
 		Transport: &http2.Transport{
 			DialTLSContext: func(ctx context.Context, network, _ string, _ *tls.Config) (net.Conn, error) {
 				conn, err := dialTLS(ctx)
-				var rejection *tls.ECHRejectionError
-				if errors.As(err, &rejection) {
+				if _, ok := errors.AsType[*tls.ECHRejectionError](err); ok {
 					// The peer does not accept the offered ECH config (WARP does not). Drop it and
 					// retry once rather than failing the tunnel. //H
 					if capable, ok := tlsConfig.(interface{ SetECHConfigList([]byte) }); ok {
