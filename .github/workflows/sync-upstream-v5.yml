@@ -177,8 +177,11 @@ jobs:
         run: |
           set -euo pipefail
           # Skip only the two pre-existing unsafe runtime linker test binaries.
-          mapfile -t packages < <(go list -mod=mod ./... | grep -v -E '^github.com/sagernet/sing-box/experimental/(libbox|boxdd)$')
-          go test -mod=mod -short -count=1 "${packages[@]}"
+          TAGS="$(cat release/DEFAULT_BUILD_TAGS_OTHERS)"
+          TAGS="${TAGS/,badlinkname/}"
+          mapfile -t packages < <(go list -mod=mod -tags "$TAGS" ./... | grep -v -E '^github.com/sagernet/sing-box/experimental/(libbox|boxdd)$')
+          # Namespace unshare requires host privileges unavailable to GitHub runners.
+          go test -mod=mod -short -count=1 -tags "$TAGS" -skip '^TestUnshareNamespace$' "${packages[@]}"
 
       - name: Commit verified upstream merge on review branch
         shell: bash
@@ -198,8 +201,9 @@ jobs:
             echo "- Fork-exclusive paths: $(wc -l < /tmp/fork-exclusive-paths)"
             echo "- Deferred: upstream-only monitoring, sequential DNS and MASQUE registration helpers requiring a full state-machine port; fork MASQUE outbound preserved whole; existing fork monitor left unchanged."
             echo "- Paths requiring fork-preferred conflict handling: $(wc -l < /tmp/upstream-conflict-paths)"
-            echo "- Validation: fork libbox Go package compiles, boxdd vet succeeds; all other packages compile/test without legacy badlinkname, custom protocol tests and short regression tests passed."
+            echo "- Validation: production-like build and short tests with all usual tags except pre-existing badlinkname, namespace unshare test skipped for runner privileges, libbox compiled, boxdd vetted, custom protocol tests passed."
             echo "- Known pre-existing gap: badlinkname runtime.allgs cannot link on fork Go 1.26.10; its implementation was not changed."
+            echo "- Test environment: TestUnshareNamespace requires privileges not granted to GitHub Actions; the test is not run in this unprivileged CI job."
             echo "- Existing linker gap: libbox and boxdd test binaries and boxdd executable cannot link runtime/pprof.parseProcSelfMaps under Go 1.26.10; their original source is unchanged."
             echo ""
             echo "## Conflict paths (local fork version takes precedence)"
