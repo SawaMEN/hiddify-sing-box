@@ -1,5 +1,5 @@
 name: Preserve local features and sync Hiddify v5
-# Retry after adding fork-compatible raw-body IP-info transport.
+# Guarded upstream merge: preserve custom protocols, run production validation, then push review branch.
 
 on:
   push:
