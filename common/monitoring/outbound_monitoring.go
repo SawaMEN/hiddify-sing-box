@@ -75,6 +75,7 @@ type OutboundMonitoring struct {
 	mainInterval     time.Duration
 	debounceWindow   time.Duration
 	urlTestTimeout   time.Duration
+	onDemand         []time.Duration // retry schedule for priority tests
 	workersCount     int
 	history          adapter.URLTestHistoryStorage
 
@@ -266,6 +267,7 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 		idleTimeout:    options.IdleTimeout.Build(),
 		workersCount:   options.Workers,
 		urlTestTimeout: options.URLTestTimeout.Build(),
+		onDemand:       onDemandTimeouts(options.OnDemandTimeouts),
 		debounceWindow: options.DebounceWindow.Build(),
 
 		priorityQueue: make(chan *testTask, 1000),
@@ -550,7 +552,7 @@ func (m *OutboundMonitoring) executeTask(task *testTask) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		delay, err := m.tester(m.ctx, task.outboundTag)
+		delay, err := m.tester(m.ctx, task.outboundTag, task.priority)
 
 		outcome := testOutcome{
 			outboundTag: task.outboundTag,
@@ -576,7 +578,7 @@ func (m *OutboundMonitoring) executeTask(task *testTask) {
 	}
 }
 
-func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter.URLTestHistory, error) {
+func (m *OutboundMonitoring) tester(parent context.Context, tag string, priority bool) (adapter.URLTestHistory, error) {
 	out, ok := m.reg().outbounds[tag]
 	if !ok {
 		return adapter.URLTestHistory{Delay: 0}, errors.New("outbound not registered")
@@ -584,10 +586,15 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 
 	idx := m.currentLinkIndex.Load()
 
-	ctx, cancel := context.WithTimeout(parent, m.urlTestTimeout)
-	defer cancel()
-
-	delay, err := urltest.URLTest(ctx, m.urls[idx], out.outbound)
+	var delay uint16
+	var err error
+	if priority {
+		delay, err = m.stagedURLTest(parent, m.urls[idx], out.outbound, nil)
+	} else {
+		ctx, cancel := context.WithTimeout(parent, m.urlTestTimeout)
+		defer cancel()
+		delay, err = urltest.URLTest(ctx, m.urls[idx], out.outbound)
+	}
 
 	his := adapter.URLTestHistory{
 		Time:  time.Now(),
