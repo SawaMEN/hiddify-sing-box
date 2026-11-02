@@ -34,8 +34,8 @@ type GroupTransport struct {
 	logger       log.ContextLogger
 	serverTags   []string
 	sequential   *groupSequential // H: timed member failover
-	modes        *groupModes    // H
-	ignoreRanges []netip.Prefix // H
+	modes        *groupModes      // H
+	ignoreRanges []netip.Prefix   // H
 }
 
 func NewGroup(ctx context.Context, logger log.ContextLogger, tag string, options option.GroupDNSServerOptions) (adapter.DNSTransport, error) {
