@@ -33,7 +33,8 @@ type GroupTransport struct {
 	ctx          context.Context
 	logger       log.ContextLogger
 	serverTags   []string
-	sequential   *groupSequential // H: timed member failover
+	sequential   bool             // H: original compatibility field
+	sequentialState *groupSequential // H: timed member failover
 	modes        *groupModes      // H
 	ignoreRanges []netip.Prefix   // H
 }
@@ -85,7 +86,8 @@ func newGroup(ctx context.Context, logger log.ContextLogger, transportType strin
 		ctx:              ctx,
 		logger:           logger,
 		serverTags:       options.Servers,
-		sequential:       sequentialMode,
+		sequential:       sequential,
+		sequentialState:  sequentialMode,
 		modes:            modes,
 		ignoreRanges:     ignoreRanges,
 	}, nil
@@ -122,8 +124,8 @@ func (t *GroupTransport) Reset() {
 	if t.modes != nil {
 		t.modes.reset()
 	}
-	if t.sequential != nil {
-		t.sequential.reset()
+	if t.sequentialState != nil {
+		t.sequentialState.reset()
 	}
 }
 
@@ -224,7 +226,7 @@ func (t *GroupTransport) ExchangeAsync(ctx context.Context, message *mDNS.Msg, c
 		go t.exchangeModes(ctx, transportManager, message, callback)
 		return
 	}
-	if t.sequential != nil {
+	if t.sequential {
 		go t.exchangeSequential(ctx, transportManager, message, callback)
 		return
 	}
