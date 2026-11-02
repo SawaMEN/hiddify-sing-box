@@ -254,7 +254,7 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 		ctx:             ctx,
 		cancel:          cancel,
 		urls:            cloned,
-		ipInfoURL:       options.IpInfoURL, // H
+		ipInfoURL:       options.IpInfoURL,                   // H
 		ipv6Probe:       ipv6ProbeAddress(options.IPv6Probe), // H
 		pause:           service.FromContext[pause.Manager](ctx),
 		logger:          logger,
