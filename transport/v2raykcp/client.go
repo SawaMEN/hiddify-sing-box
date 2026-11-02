@@ -32,6 +32,9 @@ type Client struct {
 }
 
 func NewClient(ctx context.Context, dialer N.Dialer, serverAddr M.Socksaddr, options option.V2RayKCPOptions, tlsConfig tls.Config) (adapter.V2RayClientTransport, error) {
+	if options.Legacy || options.Seed != "" || options.Header != "" && options.Header != "none" || options.FinalMask != nil {
+		return newLegacyClient(ctx, dialer, serverAddr, options, tlsConfig)
+	}
 	config, err := newConfig(options)
 	if err != nil {
 		return nil, err
