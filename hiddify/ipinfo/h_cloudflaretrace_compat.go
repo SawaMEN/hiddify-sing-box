@@ -16,6 +16,7 @@ import (
 // fetchBody provides the raw-body transport required by the upstream Cloudflare
 // trace provider. It deliberately leaves the fork's existing JSON fetchData
 // implementation untouched, including custom IP information providers.
+//nolint:unused // Required by upstream v5 Cloudflare trace provider once merged.
 func (p *BaseProvider) fetchBody(ctx context.Context, detour N.Dialer) ([]byte, uint16, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, p.URL, nil)
 	if err != nil {
