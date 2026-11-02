@@ -39,8 +39,8 @@ func runtimeFrameSymbolName(f *runtime.Frame) string
 //go:linkname runtimeExpandFinalInlineFrame runtime/pprof.runtime_expandFinalInlineFrame
 func runtimeExpandFinalInlineFrame(stk []uintptr) []uintptr
 
-//go:linkname stdParseProcSelfMaps runtime/pprof.parseProcSelfMaps
-func stdParseProcSelfMaps(data []byte, addMapping func(lo uint64, hi uint64, offset uint64, file string, buildID string))
+// Go 1.26+ no longer exposes runtime/pprof.parseProcSelfMaps.
+// Linux mappings are parsed in mapping_linux.go using stable /proc/self/maps.
 
 //go:linkname stdELFBuildID runtime/pprof.elfBuildID
 func stdELFBuildID(file string) (string, error)
