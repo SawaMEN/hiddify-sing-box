@@ -136,7 +136,7 @@ func (s *ECHClientConfig) fetchAndHandshake(ctx context.Context, conn net.Conn) 
 
 // FetchConfig resolves the ECH config list now. Protocols that hand a cloned *tls.Config to
 // another stack (MASQUE over http2/quic-go) call Client()/STDConfig() and never reach
-// ClientHandshake, so waiting for the first handshake would leave ECH unset. //H
+// ClientHandshake, so waiting for the first handshake would leave ECH unset. // H
 func (s *ECHClientConfig) FetchConfig(ctx context.Context) error {
 	s.access.Lock()
 	defer s.access.Unlock()
