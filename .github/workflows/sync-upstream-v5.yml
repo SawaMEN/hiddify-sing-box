@@ -85,6 +85,12 @@ jobs:
             fi
           done < /tmp/fork-exclusive-paths
           echo "Restored $count fork-exclusive files modified or deleted by merge."
+          # A line-level merge of the two monitoring state machines can compile
+          # neither implementation. Preserve the fork's whole implementation
+          # and tests together before selectively backporting upstream changes.
+          git restore --source="$BASE" --staged --worktree -- \
+            common/monitoring/outbound_monitoring.go \
+            common/monitoring/h_monitoring_test.go
           # These v5-only monitoring helpers depend on the upstream monitoring
           # state machine, which differs from the fork's custom priority-queue
           # implementation. Keep the fork's working monitor; port these changes
