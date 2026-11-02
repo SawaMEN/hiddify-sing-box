@@ -93,9 +93,9 @@ func (s *groupSequential) budget(ctx context.Context, left int) time.Duration {
 
 func (t *GroupTransport) exchangeSequential(ctx context.Context, transportManager adapter.DNSTransportManager, message *mDNS.Msg, callback func(response *mDNS.Msg, err error)) {
 	collector := groupCollector{transport: t}
-	order := t.sequential.order(t.serverTags)
+	order := t.sequentialState.order(t.serverTags)
 	for i, tag := range order {
-		memberContext, cancel := context.WithTimeout(ctx, t.sequential.budget(ctx, len(order)-i))
+		memberContext, cancel := context.WithTimeout(ctx, t.sequentialState.budget(ctx, len(order)-i))
 		result := t.exchangeOne(memberContext, transportManager, tag, message)
 		cancel()
 		if result.err != nil && ctx.Err() != nil {
@@ -106,7 +106,7 @@ func (t *GroupTransport) exchangeSequential(ctx context.Context, transportManage
 			result.err = E.Cause(result.err, "waiting for ", tag)
 		}
 		response, outcome := collector.classify(ctx, result, false)
-		t.sequential.record(tag, outcome)
+		t.sequentialState.record(tag, outcome)
 		if outcome == groupAccepted {
 			callback(response, nil)
 			return
