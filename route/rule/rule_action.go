@@ -118,7 +118,7 @@ func NewDNSRuleAction(logger logger.ContextLogger, action option.DNSRuleAction) 
 				ClientSubnet:           netip.Prefix(common.PtrValueOrDefault(action.RouteOptions.ClientSubnet)),
 				RemoveClientSubnet:     action.RouteOptions.RemoveClientSubnet,
 				BypassIfFailed:         action.RouteOptions.BypassIfFailed,
-				IPv6ByOutbound:         action.RouteOptions.IPv6ByOutbound, //H
+				IPv6ByOutbound:         action.RouteOptions.IPv6ByOutbound, // H
 			},
 		}
 	case C.RuleActionTypeEvaluate:
@@ -134,7 +134,7 @@ func NewDNSRuleAction(logger logger.ContextLogger, action option.DNSRuleAction) 
 				RewriteTTL:             action.EvaluateOptions.RewriteTTL,
 				ClientSubnet:           netip.Prefix(common.PtrValueOrDefault(action.EvaluateOptions.ClientSubnet)),
 				RemoveClientSubnet:     action.EvaluateOptions.RemoveClientSubnet,
-				IPv6ByOutbound:         action.EvaluateOptions.IPv6ByOutbound, //H
+				IPv6ByOutbound:         action.EvaluateOptions.IPv6ByOutbound, // H
 			},
 		}
 	case C.RuleActionTypeRespond:
@@ -148,7 +148,7 @@ func NewDNSRuleAction(logger logger.ContextLogger, action option.DNSRuleAction) 
 			RewriteTTL:             action.RouteOptionsOptions.RewriteTTL,
 			ClientSubnet:           netip.Prefix(common.PtrValueOrDefault(action.RouteOptionsOptions.ClientSubnet)),
 			RemoveClientSubnet:     action.RouteOptionsOptions.RemoveClientSubnet,
-			IPv6ByOutbound:         action.RouteOptionsOptions.IPv6ByOutbound, //H
+			IPv6ByOutbound:         action.RouteOptionsOptions.IPv6ByOutbound, // H
 		}
 	case C.RuleActionTypeReject:
 		return &RuleActionReject{
@@ -352,7 +352,7 @@ type RuleActionDNSRouteOptions struct {
 	ClientSubnet           netip.Prefix
 	RemoveClientSubnet     bool
 	BypassIfFailed         bool
-	IPv6ByOutbound         string //H
+	IPv6ByOutbound         string // H
 }
 
 func (r *RuleActionDNSRouteOptions) Type() string {
