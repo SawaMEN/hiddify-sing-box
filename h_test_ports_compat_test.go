@@ -1,3 +1,5 @@
+//go:build !with_wireguard
+
 package box_test
 
 import "testing"
