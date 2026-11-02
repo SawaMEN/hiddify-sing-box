@@ -91,6 +91,16 @@ jobs:
           git restore --source="$BASE" --staged --worktree -- \
             common/monitoring/outbound_monitoring.go \
             common/monitoring/h_monitoring_test.go
+          # Keep DNS group unit tests paired with the fork implementation.
+          git restore --source="$BASE" --staged --worktree -- dns/transport/h_group_test.go
+          # Upstream's device re-enrolment helper expects a rewritten MASQUE
+          # outbound state machine. Defer its stateful integration; preserve the
+          # fork's existing device lifecycle and WARP handling.
+          for path in protocol/masque/h_register.go protocol/masque/h_register_test.go; do
+            if ! git cat-file -e "$BASE:$path" 2>/dev/null; then
+              git rm -f --ignore-unmatch -- "$path"
+            fi
+          done
           # The fork already has its own sequential DNS group, with legacy multi
           # support and custom modes. The upstream-only replacement assumes a
           # different GroupTransport state model and duplicates exchangeSequential.
@@ -167,7 +177,7 @@ jobs:
             echo "- Original upstream: \`$UPSTREAM\`"
             echo "- Merge base: \`$(cat /tmp/upstream-merge-base)\`"
             echo "- Fork-exclusive paths: $(wc -l < /tmp/fork-exclusive-paths)"
-            echo "- Deferred: upstream-only monitoring and sequential DNS helpers requiring a full state-machine port; existing fork monitor left unchanged."
+            echo "- Deferred: upstream-only monitoring, sequential DNS and MASQUE registration helpers requiring a full state-machine port; existing fork monitor left unchanged."
             echo "- Paths requiring fork-preferred conflict handling: $(wc -l < /tmp/upstream-conflict-paths)"
             echo "- Validation: production-tag package compilation, custom protocol tests, and short regression suite passed."
             echo ""
