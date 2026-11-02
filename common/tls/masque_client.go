@@ -69,7 +69,7 @@ func NewMASQUEClient(ctx context.Context, logger logger.ContextLogger, serverNam
 	}
 	// Cloudflare's WARP endpoint publishes no ECH config of its own and rejects the public
 	// cloudflare-ech.com one, so this is always the fallback path: accept the rejection and let
-	// Go retry the plain handshake, which the pin above still covers. //H
+	// Go retry the plain handshake, which the pin above still covers. // H
 	tlsConfig.EncryptedClientHelloRejectionVerify = func(state tls.ConnectionState) error {
 		return nil
 	}
@@ -81,7 +81,7 @@ func NewMASQUEClient(ctx context.Context, logger logger.ContextLogger, serverNam
 		fragmentFallbackDelay: time.Duration(options.FragmentFallbackDelay),
 		recordFragment:        options.RecordFragment,
 	}
-	if options.ECH != nil && options.ECH.Enabled { //H
+	if options.ECH != nil && options.ECH.Enabled { // H
 		// ECH is applied to the underlying client; the tunnel hands this config to http2/quic-go,
 		// so the ClientHello carries the encrypted config list.
 		echConfig, err := parseECHClientConfig(ctx, config.(ECHCapableConfig), option.OutboundTLSOptions{ECH: options.ECH})
