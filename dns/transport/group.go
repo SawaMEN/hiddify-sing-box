@@ -30,13 +30,13 @@ func RegisterMulti(registry *dns.TransportRegistry) { // H
 type GroupTransport struct {
 	dns.TransportAdapter
 
-	ctx          context.Context
-	logger       log.ContextLogger
-	serverTags   []string
-	sequential   bool             // H: original compatibility field
+	ctx             context.Context
+	logger          log.ContextLogger
+	serverTags      []string
+	sequential      bool             // H: original compatibility field
 	sequentialState *groupSequential // H: timed member failover
-	modes        *groupModes      // H
-	ignoreRanges []netip.Prefix   // H
+	modes           *groupModes      // H
+	ignoreRanges    []netip.Prefix   // H
 }
 
 func NewGroup(ctx context.Context, logger log.ContextLogger, tag string, options option.GroupDNSServerOptions) (adapter.DNSTransport, error) {
