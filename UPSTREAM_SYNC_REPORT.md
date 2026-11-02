@@ -12,13 +12,13 @@
 
 - IPv6 probe and `IPv6Capability` service to support `ipv6_by_outbound` and `ipv6_unavailable_via` rules, plus upstream regression tests.
 - Sequential DNS failover with per-member time budgets, error TTL, recovery tracking and regression tests. Existing `multi`, parallel, stable and fastest modes retained.
-- Monitor selected-outbound priority on startup and selector changes, without replacing the fork's existing monitoring registry, worker queues or IP-info behavior.
+- Monitor selected-outbound priority on startup and selector changes, staged on-demand retries and bounded worker timeouts, without replacing the fork's existing monitoring registry, worker queues or IP-info behavior.
 - MASQUE/WARP outbound lifecycle, endpoint scanner, detour following, and safe device registration/re-registration with backoff, retaining public WARP outbound API and existing fork protocol integrations. Upstream registration regression tests restored.
 - Cloudflare Trace body fetch integrated into the existing IP provider, without overwriting custom IP information providers.
 
 ## Deliberate compatibility limits
 
-- The fork's custom monitoring worker and event state machine remains authoritative; the upstream-only provisional *staged* test and hard-timeout *settle* helpers are not copied wholesale because they depend on a different scheduler and would overwrite the fork's monitoring logic. The documented `on_demand_timeouts` configuration exists, but this upstream scheduling behavior requires a separate reviewed integration.
+- The fork's custom monitoring event state machine remains authoritative. Staged retry timeouts and late-result rejection were ported, but the upstream-specific interim/tentative event publishing and group-confirmed-result model were not copied wholesale because those depend on a different scheduler and would overwrite the fork's custom event logic.
 - Go 1.26.10's `badlinkname` support and `runtime/pprof.parseProcSelfMaps` linker issue are pre-existing in the fork. The guarded merge validation compiled and tested all normal runtime packages under production-like tags *except* those existing incompatible linker paths; it vetted `boxdd`, compiled `libbox`, and skipped the privileged Linux namespace test on an unprivileged runner.
 
 ## Validation
