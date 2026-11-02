@@ -64,12 +64,6 @@ jobs:
         uses: actions/setup-go@v7.0.0
         with:
           go-version-file: go.mod
-      - name: Cache go module
-        uses: actions/cache@v6.1.0
-        with:
-          path: |
-            ~/go/pkg/mod
-          key: go-${{ hashFiles('**/go.sum') }}
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         env:

@@ -68,6 +68,12 @@ func ConnectTunnel(ctx context.Context, dialer N.Dialer, tlsConfig aTLS.Config, 
 		tlsConfig,
 		quicConfig,
 	)
+	if _, ok := errors.AsType[*tls.ECHRejectionError](err); ok { // H: retry without rejected ECH
+		if capable, ok := tlsConfig.(interface{ SetECHConfigList([]byte) }); ok {
+			capable.SetECHConfigList(nil)
+		}
+		conn, err = qtls.Dial(ctx, bufio.NewBindPacketConn(udpConn, quicEndpoint), tlsConfig, quicConfig)
+	}
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -121,22 +127,35 @@ func newHTTP2Client(dialer N.Dialer, baseTLSConfig aTLS.Config, endpoint *net.TC
 	}
 	tlsConfig := baseTLSConfig.Clone()
 	tlsConfig.SetNextProtos([]string{"h2"})
+	dialTLS := func(ctx context.Context) (net.Conn, error) {
+		conn, err := dialer.DialContext(ctx, "tcp", M.SocksaddrFromNetIP(endpoint.AddrPort()))
+		if err != nil {
+			return nil, err
+		}
+		tlsConn, err := tlsConfig.Client(conn)
+		if err != nil {
+			_ = conn.Close()
+			return nil, err
+		}
+		if err = tlsConn.HandshakeContext(ctx); err != nil {
+			_ = conn.Close()
+			return nil, err
+		}
+		return tlsConn, nil
+	}
 	return &http.Client{
 		Transport: &http2.Transport{
 			DialTLSContext: func(ctx context.Context, network, _ string, _ *tls.Config) (net.Conn, error) {
-				conn, err := dialer.DialContext(ctx, network, M.SocksaddrFromNetIP(endpoint.AddrPort()))
-				if err != nil {
-					return nil, err
+				conn, err := dialTLS(ctx)
+				if _, ok := errors.AsType[*tls.ECHRejectionError](err); ok {
+					// The peer does not accept the offered ECH config (WARP does not). Drop it and
+					// retry once rather than failing the tunnel. // H
+					if capable, ok := tlsConfig.(interface{ SetECHConfigList([]byte) }); ok {
+						capable.SetECHConfigList(nil)
+					}
+					return dialTLS(ctx)
 				}
-				tlsConn, err := tlsConfig.Client(conn)
-				if err != nil {
-					return nil, err
-				}
-				if err := tlsConn.HandshakeContext(ctx); err != nil {
-					_ = conn.Close()
-					return nil, err
-				}
-				return tlsConn, nil
+				return conn, err
 			},
 		},
 	}, nil

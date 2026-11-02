@@ -70,6 +70,19 @@ do about it. Items marked **Required** break or misbehave until they are handled
   dies (lx's `round_robin`).
 - **URL test failover.** A failover member that is more than 2 times slower than the fastest
   other one, twice in a row, is now left for one more than 1.5 times faster.
+- **A tapped or selected proxy answers at once.** The outbound a group's selection leads to is
+  tested before the first cycle and again when the selection moves; a test asked for runs at
+  once beside the cycle, in stages (`experimental.monitoring.on_demand_timeouts`, 1 s, 3 s,
+  10 s by default): the app sees the proxy as unavailable after the first mark with no answer,
+  then the first answer from any attempt, however late. The delay is published before the IP
+  lookup, so the IP arrives after the ping. Nothing to set; the core's defaults are these.
+- **IPv6 follows the proxy.** The monitoring probes an IPv6 address through every outbound and
+  endpoint that answered, each on its own (`experimental.monitoring.ipv6_probe`); hiddify-core sets `ipv6_by_outbound` on the
+  remote DNS rules and an `ipv6_unavailable_via` reject rule, both on the main selector. A
+  browser through a proxy without IPv6 gets IPv4 answers only, and an IPv6 connection that still
+  comes is refused so it falls back (hiddify-app #2307, #2420). Nothing to set in the app; the
+  IPv6 mode only orders the families. `URLTestHistory.IPv6` says what the probe found, for an
+  app that wants to show it.
 - **New options worth exposing:**
   - DNS group: `mode` `stable` and `fastest`, `error_ttl`, `win_ttl`.
   - URL test: `urls` (more test URLs) and `mode: "failover"`.
@@ -111,6 +124,12 @@ do about it. Items marked **Required** break or misbehave until they are handled
   `lowest` (lowest-delay) balancer when the profile has 2+ proxies. With only one proxy, `lowest`
   is not built; connectivity then uses that proxy's own ping (the select leaf) so the core does
   not stay WAITING ("Connecting") forever.
+- **MASQUE devices from links.** A `masque` outbound with `device` (what `masque://` links
+  become, MahsaNG's shape included) needs no `endpoint_public_key`: the edge's fixed key is
+  built in. The port of an endpoint written as `ip:port` is used. When Cloudflare refuses the
+  device and it points at WARP, the outbound registers a device like a profile and saves it in
+  the cache file under the profile key as the link device's replacement, so the cache file
+  matters for such configs too.
 - **WARP over MASQUE in the warp endpoint.** A `warp` endpoint can now run MASQUE instead of
   WireGuard: `"masque": {"enabled": true}`, or any MASQUE setting (`vhttp`, `server_name`,
   `use_ipv6`, `tls`, …). Prefer this to a separate `masque` outbound: one endpoint handles

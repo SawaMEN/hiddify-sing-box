@@ -22,6 +22,7 @@ type TunnelOptions struct {
 	ConnectURI           string                                                     // H
 	OnConnected          func(endpoint net.Addr, http2 bool, elapsed time.Duration) // H
 	NextEndpoint         func(failed net.Addr, http2 bool) net.Addr                 // H
+	OnRejected           func(err error)                                            // Upstream v5: refused MASQUE device
 	UDPTimeout           time.Duration
 	UDPKeepalivePeriod   time.Duration
 	UDPInitialPacketSize uint16

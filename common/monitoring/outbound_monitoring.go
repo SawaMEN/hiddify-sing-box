@@ -66,6 +66,7 @@ type OutboundMonitoring struct {
 	started          atomic.Bool
 	urls             []string
 	ipInfoURL        string // H
+	ipv6Probe        string // H
 	currentLinkIndex atomic.Uint32
 	access           sync.Mutex
 	idleTimeout      time.Duration
@@ -74,6 +75,7 @@ type OutboundMonitoring struct {
 	mainInterval     time.Duration
 	debounceWindow   time.Duration
 	urlTestTimeout   time.Duration
+	onDemand         []time.Duration // retry schedule for priority tests
 	workersCount     int
 	history          adapter.URLTestHistoryStorage
 
@@ -252,7 +254,8 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 		ctx:             ctx,
 		cancel:          cancel,
 		urls:            cloned,
-		ipInfoURL:       options.IpInfoURL, // H
+		ipInfoURL:       options.IpInfoURL,                   // H
+		ipv6Probe:       ipv6ProbeAddress(options.IPv6Probe), // H
 		pause:           service.FromContext[pause.Manager](ctx),
 		logger:          logger,
 		outboundManager: service.FromContext[adapter.OutboundManager](ctx),
@@ -264,12 +267,17 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 		idleTimeout:    options.IdleTimeout.Build(),
 		workersCount:   options.Workers,
 		urlTestTimeout: options.URLTestTimeout.Build(),
+		onDemand:       onDemandTimeouts(options.OnDemandTimeouts),
 		debounceWindow: options.DebounceWindow.Build(),
 
 		priorityQueue: make(chan *testTask, 1000),
 		normalQueue:   make(chan *testTask, 10000),
 	}
 	m.registry.Store(newMonitoringRegistry())
+	// DNS and routing look up the monitored IPv6 transport capability through the shared registry.
+	if service.FromContext[adapter.IPv6Capability](ctx) == nil {
+		service.MustRegister[adapter.IPv6Capability](ctx, m)
+	}
 
 	return m, nil
 }
@@ -298,6 +306,7 @@ func (m *OutboundMonitoring) Start(stage adapter.StartStage, scope *adapter.Scop
 		}
 
 		m.started.Store(true)
+		m.testSelections() // prioritize selected members ahead of the regular cycle
 		m.Touch()
 	}
 
@@ -340,6 +349,7 @@ func (m *OutboundMonitoring) SignalChange(outboundTag string) error {
 	}
 	m.signalChange(outboundTag, make(map[string]bool))
 	m.testParents(outboundTag, true)
+	m.testSelected(outboundTag) // selection changed: probe the selected member immediately
 	return nil
 }
 
@@ -370,6 +380,7 @@ func (m *OutboundMonitoring) TestNow(outboundTag string) error {
 func (m *OutboundMonitoring) testNow(outboundTag string, priority bool) error {
 	m.logger.Info("testing outbound ", outboundTag, " with priority: ", priority)
 	if grp, ok := m.reg().groups[outboundTag]; ok {
+		m.testSelected(outboundTag) // selected outbound gets priority
 		for tag := range grp.outbounds {
 			m.testNow(tag, false)
 		}
@@ -538,36 +549,56 @@ func (m *OutboundMonitoring) executeTask(task *testTask) {
 		}()
 		return
 	}
-	done := make(chan struct{})
+	// A broken dialer can ignore the context deadline. Do not allow it to hold
+	// the worker or a whole monitoring cycle indefinitely. Only this worker
+	// applies the result, so a dialer returning late cannot overwrite the timeout.
+	limit := 2*m.urlTestTimeout + ipv6ProbeTimeout + time.Second
+	if task.priority && len(m.onDemand) > 0 {
+		limit = m.onDemand[len(m.onDemand)-1] + m.urlTestTimeout + ipv6ProbeTimeout + time.Second
+	}
+	testContext, cancel := context.WithTimeout(m.ctx, limit)
+	defer cancel()
+	completed := make(chan testOutcome, 1)
 	go func() {
-		defer close(done)
-		delay, err := m.tester(m.ctx, task.outboundTag)
-
-		outcome := testOutcome{
+		history, err := m.tester(testContext, task.outboundTag, task.priority)
+		completed <- testOutcome{
 			outboundTag: task.outboundTag,
-			history:     delay,
+			history:     history,
 			err:         err,
 			cycleID:     task.cycleID,
 			priority:    task.priority,
 		}
-
-		m.applyResult(outcome)
-		if task.resultCh != nil {
-			select {
-			case task.resultCh <- outcome:
-			case <-m.ctx.Done():
-			default:
-			}
-		}
 	}()
+
+	var result testOutcome
 	select {
 	case <-m.ctx.Done():
 		return
-	case <-done:
+	case result = <-completed:
+	case <-testContext.Done():
+		if m.ctx.Err() != nil {
+			return
+		}
+		m.logger.Warn("outbound ", task.outboundTag, " URL test exceeded ", limit, "; worker continues")
+		result = testOutcome{
+			outboundTag: task.outboundTag,
+			history:     adapter.URLTestHistory{Time: time.Now(), Delay: TimeoutDelay},
+			err:         testContext.Err(),
+			cycleID:     task.cycleID,
+			priority:    task.priority,
+		}
+	}
+	m.applyResult(result)
+	if task.resultCh != nil {
+		select {
+		case task.resultCh <- result:
+		case <-m.ctx.Done():
+		default:
+		}
 	}
 }
 
-func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter.URLTestHistory, error) {
+func (m *OutboundMonitoring) tester(parent context.Context, tag string, priority bool) (adapter.URLTestHistory, error) {
 	out, ok := m.reg().outbounds[tag]
 	if !ok {
 		return adapter.URLTestHistory{Delay: 0}, errors.New("outbound not registered")
@@ -575,10 +606,15 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 
 	idx := m.currentLinkIndex.Load()
 
-	ctx, cancel := context.WithTimeout(parent, m.urlTestTimeout)
-	defer cancel()
-
-	delay, err := urltest.URLTest(ctx, m.urls[idx], out.outbound)
+	var delay uint16
+	var err error
+	if priority {
+		delay, err = m.stagedURLTest(parent, m.urls[idx], out.outbound, nil)
+	} else {
+		ctx, cancel := context.WithTimeout(parent, m.urlTestTimeout)
+		defer cancel()
+		delay, err = urltest.URLTest(ctx, m.urls[idx], out.outbound)
+	}
 
 	his := adapter.URLTestHistory{
 		Time:  time.Now(),
@@ -594,8 +630,8 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 		return his, parent.Err()
 	default:
 	}
+	his.IPv6 = m.ipv6Of(parent, out)                      // H: test the IPv6 path of this outbound
 	if out.history.IpInfo == nil || out.ipInfoFromCache { // H
-
 		ctx, cancel2 := context.WithTimeout(parent, m.urlTestTimeout)
 		defer cancel2()
 
@@ -768,6 +804,12 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 	}
 	state.history.Delay = outcome.history.Delay
 	state.history.Time = outcome.history.Time
+	if outcome.history.IPv6 != nil {
+		if state.history.IPv6 == nil || *state.history.IPv6 != *outcome.history.IPv6 {
+			m.cacheDirty.Store(true)
+		}
+		state.history.IPv6 = outcome.history.IPv6
+	}
 	state.from_cache = false
 	if outcome.history.IpInfo != nil {
 		state.ipInfoFromCache = false // H

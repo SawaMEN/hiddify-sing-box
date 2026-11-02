@@ -31,6 +31,11 @@ var providers = []Provider{
 	NewReallyFreeGeoIPProvider(),
 }
 
+// fallbackProviders are tried when every provider above failed. The providers are tried from a
+// random one, so a place in the list is no order; Cloudflare's trace endpoint is here, not
+// above, because it answers only the address and the country: the JSON providers also give the
+// network, which the app shows, so they come first, and the trace answers when they rate-limit
+// (429) or time out on a busy network and the core would otherwise have no measurement at all.
 var fallbackProviders = []Provider{
 	NewMyIPProvider(),
 	NewCountryIsProvider(),
@@ -161,6 +166,65 @@ func (p *BaseProvider) fetchData(ctx context.Context, detour N.Dialer) (map[stri
 	}
 
 	return jsonResponse, t, nil
+}
+
+// fetchBody provides the raw-body transport required by the upstream Cloudflare
+// trace provider. It deliberately leaves the fork's existing JSON fetchData
+// implementation untouched, including custom IP information providers.
+func (p *BaseProvider) fetchBody(ctx context.Context, detour N.Dialer) ([]byte, uint16, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, p.URL, nil)
+	if err != nil {
+		return nil, 65535, err
+	}
+	agent := p.UserAgent
+	if agent == "" {
+		agent = C.DefaultBrowserAgent
+	}
+	request.Header.Set("User-Agent", agent)
+
+	transport := &http.Transport{
+		TLSHandshakeTimeout: 15 * time.Second,
+	}
+	if detour != nil {
+		transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(address)
+			if err != nil {
+				return nil, err
+			}
+			return detour.DialContext(ctx, network, M.ParseSocksaddrHostPortStr(host, port))
+		}
+	}
+	defer transport.CloseIdleConnections()
+
+	client := &http.Client{
+		Transport: transport,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	start := time.Now()
+	response, err := client.Do(request)
+	if err != nil {
+		return nil, 65535, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, 65535, fmt.Errorf("non-200 response from [%s]: %d", p.URL, response.StatusCode)
+	}
+
+	const maxResponseSize = 32 << 10
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxResponseSize+1))
+	if err != nil {
+		return nil, 65535, fmt.Errorf("failed to read response from [%s]: %w", p.URL, err)
+	}
+	if len(body) > maxResponseSize {
+		return nil, 65535, fmt.Errorf("response from [%s] exceeds %d bytes", p.URL, maxResponseSize)
+	}
+	ms := time.Since(start) / time.Millisecond
+	if ms >= 65535 {
+		ms = 65534
+	}
+	return body, uint16(ms), nil
 }
 
 // getCurrentIpInfo iterates over the providers to fetch and parse IP information.

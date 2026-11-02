@@ -29,6 +29,9 @@ type URLTestHistory struct {
 	IpInfo          *ipinfo.IpInfo `json:"ipinfo"`
 	IsFromCache     bool           `json:"from_cache"`
 	IpInfoFromCache bool           `json:"ipinfo_from_cache,omitempty"` // H
+	// IPv6 indicates whether the monitored outbound accepted a TCP connection to an IPv6 address.
+	// nil means the probe has not yet been performed.
+	IPv6 *bool `json:"ipv6,omitempty"` // H
 }
 
 type URLTestHistoryStorage interface {

@@ -30,12 +30,13 @@ func RegisterMulti(registry *dns.TransportRegistry) { // H
 type GroupTransport struct {
 	dns.TransportAdapter
 
-	ctx          context.Context
-	logger       log.ContextLogger
-	serverTags   []string
-	sequential   bool           // H
-	modes        *groupModes    // H
-	ignoreRanges []netip.Prefix // H
+	ctx             context.Context
+	logger          log.ContextLogger
+	serverTags      []string
+	sequential      bool             // H: original compatibility field
+	sequentialState *groupSequential // H: timed member failover
+	modes           *groupModes      // H
+	ignoreRanges    []netip.Prefix   // H
 }
 
 func NewGroup(ctx context.Context, logger log.ContextLogger, tag string, options option.GroupDNSServerOptions) (adapter.DNSTransport, error) {
@@ -73,6 +74,10 @@ func newGroup(ctx context.Context, logger log.ContextLogger, transportType strin
 		ignoreRanges = append(ignoreRanges, netip.Prefix(prefix))
 	}
 	var modes *groupModes
+	var sequentialMode *groupSequential
+	if sequential {
+		sequentialMode = newGroupSequential(options)
+	}
 	if options.Mode == C.DNSGroupModeStable || options.Mode == C.DNSGroupModeFastest {
 		modes = newGroupModes(options)
 	}
@@ -82,6 +87,7 @@ func newGroup(ctx context.Context, logger log.ContextLogger, transportType strin
 		logger:           logger,
 		serverTags:       options.Servers,
 		sequential:       sequential,
+		sequentialState:  sequentialMode,
 		modes:            modes,
 		ignoreRanges:     ignoreRanges,
 	}, nil
@@ -117,6 +123,9 @@ func (t *GroupTransport) Close() error {
 func (t *GroupTransport) Reset() {
 	if t.modes != nil {
 		t.modes.reset()
+	}
+	if t.sequentialState != nil {
+		t.sequentialState.reset()
 	}
 }
 
@@ -222,40 +231,6 @@ func (t *GroupTransport) ExchangeAsync(ctx context.Context, message *mDNS.Msg, c
 		return
 	}
 	t.exchangeParallel(ctx, transportManager, message, callback)
-}
-
-func (t *GroupTransport) exchangeSequential(ctx context.Context, transportManager adapter.DNSTransportManager, message *mDNS.Msg, callback func(response *mDNS.Msg, err error)) { // H
-	collector := groupCollector{transport: t}
-	for _, tag := range t.serverTags {
-		transport, loaded := transportManager.Transport(tag)
-		if !loaded {
-			collector.add(ctx, groupResult{nil, tag, E.New("DNS server not found: ", tag)}, false)
-			continue
-		}
-		resultCh := make(chan groupResult, 1)
-		childContext, cancel := context.WithCancel(adapter.OverrideContext(ctx))
-		transport.ExchangeAsync(childContext, message.Copy(), func(response *mDNS.Msg, err error) {
-			resultCh <- groupResult{response, tag, err}
-		})
-		var r groupResult
-		select {
-		case <-ctx.Done():
-			cancel()
-			if collector.fallback != nil {
-				callback(collector.fallback, nil)
-			} else {
-				callback(nil, ctx.Err())
-			}
-			return
-		case r = <-resultCh:
-		}
-		cancel()
-		if response, accepted := collector.add(ctx, r, false); accepted {
-			callback(response, nil)
-			return
-		}
-	}
-	callback(collector.finish())
 }
 
 func (t *GroupTransport) exchangeParallel(ctx context.Context, transportManager adapter.DNSTransportManager, message *mDNS.Msg, callback func(response *mDNS.Msg, err error)) {

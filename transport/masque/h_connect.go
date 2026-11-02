@@ -91,7 +91,7 @@ func (e *Tunnel) connectLeg(ctx context.Context, http2 bool) (*connection, net.A
 	}
 	if rsp.StatusCode != http.StatusOK {
 		conn.close()
-		return nil, endpoint, E.New("tunnel connection failed: ", rsp.Status)
+		return nil, endpoint, &StatusError{Status: rsp.StatusCode, Text: rsp.Status}
 	}
 	return conn, endpoint, nil
 }
@@ -224,13 +224,18 @@ func (e *Tunnel) report(endpoint net.Addr, http2 bool, elapsed time.Duration, er
 		return
 	}
 	e.endpointAccess.Lock()
-	onConnected, nextEndpoint := e.options.OnConnected, e.options.NextEndpoint
+	onConnected, nextEndpoint, onRejected := e.options.OnConnected, e.options.NextEndpoint, e.options.OnRejected
 	if err == nil {
 		e.failures[http2] = 0
 		e.endpointAccess.Unlock()
 		if onConnected != nil {
 			onConnected(endpoint, http2, elapsed)
 		}
+		return
+	}
+	if onRejected != nil && IsRejected(err) { // the device, not the endpoint, is the problem
+		e.endpointAccess.Unlock()
+		onRejected(err)
 		return
 	}
 	e.failures[http2]++
@@ -266,6 +271,14 @@ func (e *Tunnel) ResetConnection() {
 	if ipConn != nil {
 		e.closeIpConn(ipConn)
 	}
+}
+
+// SetOnRejected sets the callback for a connect the server refused because of the device (see
+// TunnelOptions) before the tunnel starts.
+func (e *Tunnel) SetOnRejected(onRejected func(err error)) {
+	e.endpointAccess.Lock()
+	defer e.endpointAccess.Unlock()
+	e.options.OnRejected = onRejected
 }
 
 // SetFailover sets the endpoint callbacks (see TunnelOptions) before the tunnel starts.

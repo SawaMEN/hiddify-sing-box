@@ -379,7 +379,7 @@ func TestH_MonitoringSignalChangePropagatesToDependents(t *testing.T) {
 		require.Len(t, m.reg().groups[groupTag].notifyCh, 1, "group %q not notified", groupTag)
 	}
 	require.True(t, m.reg().outbounds["c"].priorityQueued, "outbound routed through the selector is re-tested")
-	require.False(t, m.reg().outbounds["a"].priorityQueued, "selector members did not change")
+	require.True(t, m.reg().outbounds["a"].priorityQueued, "selected member must be retested immediately")
 	require.False(t, m.reg().outbounds["b"].priorityQueued, "selector members did not change")
 
 	require.Error(t, m.SignalChange("missing"))
