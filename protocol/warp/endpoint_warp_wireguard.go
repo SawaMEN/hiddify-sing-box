@@ -9,7 +9,6 @@ import (
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	wg "github.com/sagernet/sing-box/protocol/wireguard"
-	"github.com/sagernet/sing/common/json/badoption"
 )
 
 func createWARPWireGuardEndpoint(
@@ -43,7 +42,7 @@ func createWARPWireGuardEndpoint(
 				Address:   peerAddr,
 				Port:      peerPort,
 				PublicKey: peerPublicKey,
-				AllowedIPs: badoption.Listable[netip.Prefix]{
+				AllowedIPs: option.LegacyListable[netip.Prefix]{
 					netip.MustParsePrefix("0.0.0.0/0"),
 					netip.MustParsePrefix("::/0"),
 				},
