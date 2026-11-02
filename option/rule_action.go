@@ -220,6 +220,7 @@ type AbstractDNSRouteActionOptions struct {
 	RemoveClientSubnet     bool                  `json:"remove_client_subnet,omitempty"`
 
 	BypassIfFailed bool `json:"bypass_if_failed,omitempty"` // H
+	IPv6ByOutbound string `json:"ipv6_by_outbound,omitempty"` // H: upstream v5 DNS rule option
 }
 
 type DNSRouteOptionsActionOptions AbstractDNSRouteActionOptions

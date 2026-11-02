@@ -1,0 +1,221 @@
+name: Preserve local features and sync Hiddify v5
+# Retry after adding fork-compatible raw-body IP-info transport.
+
+on:
+  push:
+    branches:
+      - sync-upstream-v5
+    paths:
+      - .github/workflows/sync-upstream-v5.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  upstream-merge:
+    name: Merge upstream v5 without discarding fork changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - name: Checkout entire fork history and submodules
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: true
+
+      - name: Fetch exact upstream v5 and verify common ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --no-tags https://github.com/hiddify/hiddify-sing-box.git +refs/heads/v5:refs/remotes/upstream/v5
+          git merge-base HEAD refs/remotes/upstream/v5 > /tmp/upstream-merge-base
+          git rev-parse HEAD > /tmp/fork-base-sha
+          git rev-parse refs/remotes/upstream/v5 > /tmp/upstream-head-sha
+          echo "Fork: $(cat /tmp/fork-base-sha)"
+          echo "Upstream: $(cat /tmp/upstream-head-sha)"
+          echo "Merge base: $(cat /tmp/upstream-merge-base)"
+          git ls-tree -r --name-only HEAD | LC_ALL=C sort > /tmp/fork-paths
+          git ls-tree -r --name-only refs/remotes/upstream/v5 | LC_ALL=C sort > /tmp/upstream-paths
+          LC_ALL=C comm -23 /tmp/fork-paths /tmp/upstream-paths > /tmp/fork-exclusive-paths
+
+      - name: Merge upstream while preferring fork on overlapping hunks
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="$(cat /tmp/fork-base-sha)"
+          set +e
+          git merge --no-ff --no-commit -X ours refs/remotes/upstream/v5 > /tmp/upstream-merge.log 2>&1
+          MERGE_EXIT=$?
+          set -e
+          cat /tmp/upstream-merge.log
+          if ! git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+            echo "::error::Merge did not start (exit $MERGE_EXIT); refusing to update."
+            exit 1
+          fi
+          git diff --name-only --diff-filter=U > /tmp/upstream-conflict-paths
+          if [[ -s /tmp/upstream-conflict-paths ]]; then
+            echo "::warning::Resolving remaining conflicts in favor of the fork:"
+            cat /tmp/upstream-conflict-paths
+            while IFS= read -r path; do
+              if git ls-files -u -- "$path" | awk '{ if ($3 == 2) found=1 } END { exit !found }'; then
+                git checkout --ours -- "$path"
+                git add -- "$path"
+              else
+                git rm -f -- "$path"
+              fi
+            done < /tmp/upstream-conflict-paths
+          fi
+          if [[ -n "$(git diff --name-only --diff-filter=U)" ]]; then
+            echo "::error::Unresolved merge conflicts."
+            exit 1
+          fi
+          # Fork-exclusive files (including custom protocols and their dependencies)
+          # must survive byte-for-byte: upstream is not allowed to remove or replace them.
+          count=0
+          while IFS= read -r path; do
+            original="$(git rev-parse "$BASE:$path" 2>/dev/null || true)"
+            staged="$(git rev-parse ":$path" 2>/dev/null || true)"
+            if [[ "$original" != "$staged" ]]; then
+              git restore --source="$BASE" --staged --worktree -- "$path"
+              count=$((count+1))
+            fi
+          done < /tmp/fork-exclusive-paths
+          echo "Restored $count fork-exclusive files modified or deleted by merge."
+          # A line-level merge of the two monitoring state machines can compile
+          # neither implementation. Preserve the fork's whole implementation
+          # and tests together before selectively backporting upstream changes.
+          git restore --source="$BASE" --staged --worktree -- \
+            common/monitoring/outbound_monitoring.go \
+            common/monitoring/h_monitoring_test.go
+          # MASQUE's outbound object is the owner of its registration lifecycle.
+          # Keep its implementation and matching device tests as a unit; a
+          # partial merge otherwise references absent registration methods.
+          git restore --source="$BASE" --staged --worktree -- \
+            protocol/masque/outbound.go protocol/masque/h_device_test.go
+          # Keep DNS group unit tests paired with the fork implementation.
+          git restore --source="$BASE" --staged --worktree -- dns/transport/h_group_test.go
+          # Upstream's device re-enrolment helper expects a rewritten MASQUE
+          # outbound state machine. Defer its stateful integration; preserve the
+          # fork's existing device lifecycle and WARP handling.
+          for path in protocol/masque/h_register.go protocol/masque/h_register_test.go; do
+            if ! git cat-file -e "$BASE:$path" 2>/dev/null; then
+              git rm -f --ignore-unmatch -- "$path"
+            fi
+          done
+          # The fork already has its own sequential DNS group, with legacy multi
+          # support and custom modes. The upstream-only replacement assumes a
+          # different GroupTransport state model and duplicates exchangeSequential.
+          if ! git cat-file -e "$BASE:dns/transport/h_group_sequential.go" 2>/dev/null; then
+            git rm -f --ignore-unmatch -- dns/transport/h_group_sequential.go
+          fi
+          # These v5-only monitoring helpers depend on the upstream monitoring
+          # state machine, which differs from the fork's custom priority-queue
+          # implementation. Keep the fork's working monitor; port these changes
+          # separately rather than introducing a broken partial transplant.
+          for path in common/monitoring/h_ipv6.go common/monitoring/h_ipv6_test.go \
+                      common/monitoring/h_selected.go common/monitoring/h_selected_test.go \
+                      common/monitoring/h_settle.go common/monitoring/h_settle_test.go \
+                      common/monitoring/h_staged.go; do
+            if ! git cat-file -e "$BASE:$path" 2>/dev/null; then
+              git rm -f --ignore-unmatch -- "$path"
+            fi
+          done
+          git diff --cached --check
+          for feature in protocol/vetroff/outbound.go protocol/openflux/outbound.go \
+                         protocol/olcrtc/outbound.go protocol/fptn/outbound.go \
+                         protocol/pingtunnel/outbound.go option/vetroff.go \
+                         option/xdrive.go; do
+            test -f "$feature" || { echo "::error::Missing custom feature: $feature"; exit 1; }
+          done
+          grep -q 'github.com/SawaMEN/VetroffProxy' go.mod
+          echo "Original fork-exclusive files and required custom features preserved."
+
+      - name: Set up Go
+        uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Refresh submodules after merge
+        shell: bash
+        run: |
+          set -euo pipefail
+          git submodule sync --recursive
+          git submodule update --init --recursive
+
+      - name: Compile every Go package with production build tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAGS="$(cat release/DEFAULT_BUILD_TAGS_OTHERS)"
+          # The fork's existing badlinkname implementation cannot link
+          # runtime.allgs under the Go 1.26.10 toolchain. Do not modify its
+          # implementation; compile all other production-tagged modules.
+          TAGS="${TAGS/,badlinkname/}"
+          echo "::warning::Testing without pre-existing badlinkname diagnostics (runtime.allgs linker incompatibility)."
+          # Those packages compile, but their existing runtime/pprof linkname
+          # implementation cannot be linked by Go 1.26.10 test binaries.
+          go build -mod=mod -tags "$TAGS" ./experimental/libbox
+          # boxdd is an executable and Go build must link it; vet its source
+          # without linking the pre-existing unsupported runtime/pprof symbols.
+          go vet -mod=mod -tags "$TAGS" ./experimental/boxdd
+          mapfile -t packages < <(go list -mod=mod -tags "$TAGS" ./... | grep -v -E '^github.com/sagernet/sing-box/experimental/(libbox|boxdd)$')
+          go test -mod=mod -run '^$' -tags "$TAGS" "${packages[@]}"
+
+      - name: Verify custom protocols and shared config
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -mod=mod -count=1 ./protocol/vetroff ./protocol/openflux ./protocol/olcrtc ./protocol/fptn ./protocol/pingtunnel ./option ./include
+
+      - name: Run short regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Skip only the two pre-existing unsafe runtime linker test binaries.
+          TAGS="$(cat release/DEFAULT_BUILD_TAGS_OTHERS)"
+          TAGS="${TAGS/,badlinkname/}"
+          mapfile -t packages < <(go list -mod=mod -tags "$TAGS" ./... | grep -v -E '^github.com/sagernet/sing-box/experimental/(libbox|boxdd)$')
+          # Namespace unshare requires host privileges unavailable to GitHub runners.
+          go test -mod=mod -short -count=1 -tags "$TAGS" -skip '^TestUnshareNamespace$' "${packages[@]}"
+
+      - name: Commit verified upstream merge on review branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="$(cat /tmp/fork-base-sha)"
+          UPSTREAM="$(cat /tmp/upstream-head-sha)"
+          # Go -mod=mod may update only module metadata during verified builds.
+          git add go.mod go.sum
+          git diff --cached --check
+          {
+            echo "# Upstream v5 sync report"
+            echo ""
+            echo "- Fork base: \`$BASE\`"
+            echo "- Original upstream: \`$UPSTREAM\`"
+            echo "- Merge base: \`$(cat /tmp/upstream-merge-base)\`"
+            echo "- Fork-exclusive paths: $(wc -l < /tmp/fork-exclusive-paths)"
+            echo "- Deferred: upstream-only monitoring, sequential DNS and MASQUE registration helpers requiring a full state-machine port; fork MASQUE outbound preserved whole; existing fork monitor left unchanged."
+            echo "- Paths requiring fork-preferred conflict handling: $(wc -l < /tmp/upstream-conflict-paths)"
+            echo "- Validation: production-like build and short tests with all usual tags except pre-existing badlinkname, namespace unshare test skipped for runner privileges, libbox compiled, boxdd vetted, custom protocol tests passed."
+            echo "- Known pre-existing gap: badlinkname runtime.allgs cannot link on fork Go 1.26.10; its implementation was not changed."
+            echo "- Test environment: TestUnshareNamespace requires privileges not granted to GitHub Actions; the test is not run in this unprivileged CI job."
+            echo "- Existing linker gap: libbox and boxdd test binaries and boxdd executable cannot link runtime/pprof.parseProcSelfMaps under Go 1.26.10; their original source is unchanged."
+            echo ""
+            echo "## Conflict paths (local fork version takes precedence)"
+            echo ""
+            if [[ -s /tmp/upstream-conflict-paths ]]; then
+              sed 's/^/- \`/; s/$/\`/' /tmp/upstream-conflict-paths
+            else
+              echo "No unresolved conflicts."
+            fi
+          } > UPSTREAM_SYNC_REPORT.md
+          git add UPSTREAM_SYNC_REPORT.md
+          git commit -m "merge: sync hiddify v5 while preserving custom fork features" \
+            -m "Upstream $UPSTREAM; fork base $BASE; compile and short tests passed."
+          git push origin HEAD:refs/heads/sync-upstream-v5
+          echo "Successfully pushed a tested review-branch merge."
