@@ -36,6 +36,7 @@ func createWARPWireGuardEndpoint(
 		AWG:           options.AWG,
 		DialerOptions: options.DialerOptions,
 		Address:       addresses,
+		FallbackAddress: options.FallbackAddress,
 		PrivateKey:    config.PrivateKey,
 		Peers: []option.WireGuardPeer{
 			{

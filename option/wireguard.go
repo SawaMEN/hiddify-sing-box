@@ -52,6 +52,7 @@ type WARPEndpointOptions struct { // H
 	Scanner     *WARPScannerOptions `json:"scanner,omitempty"`
 	MASQUE      *WARPMASQUEOptions  `json:"masque,omitempty"`
 	RotatePorts *bool               `json:"rotate_ports,omitempty"`
+	FallbackAddress badoption.Listable[netip.Addr] `json:"fallback_address,omitempty"`
 	DialerOptions
 
 	UniqueIdentifier string `json:"unique_identifier,omitempty"`
