@@ -85,6 +85,18 @@ jobs:
             fi
           done < /tmp/fork-exclusive-paths
           echo "Restored $count fork-exclusive files modified or deleted by merge."
+          # These v5-only monitoring helpers depend on the upstream monitoring
+          # state machine, which differs from the fork's custom priority-queue
+          # implementation. Keep the fork's working monitor; port these changes
+          # separately rather than introducing a broken partial transplant.
+          for path in common/monitoring/h_ipv6.go common/monitoring/h_ipv6_test.go \
+                      common/monitoring/h_selected.go common/monitoring/h_selected_test.go \
+                      common/monitoring/h_settle.go common/monitoring/h_settle_test.go \
+                      common/monitoring/h_staged.go; do
+            if ! git cat-file -e "$BASE:$path" 2>/dev/null; then
+              git rm -f --ignore-unmatch -- "$path"
+            fi
+          done
           git diff --cached --check
           for feature in protocol/vetroff/outbound.go protocol/openflux/outbound.go \
                          protocol/olcrtc/outbound.go protocol/fptn/outbound.go \
@@ -143,6 +155,7 @@ jobs:
             echo "- Original upstream: \`$UPSTREAM\`"
             echo "- Merge base: \`$(cat /tmp/upstream-merge-base)\`"
             echo "- Fork-exclusive paths: $(wc -l < /tmp/fork-exclusive-paths)"
+            echo "- Deferred: upstream-only monitoring helper files requiring a full state-machine port; existing fork monitor left unchanged."
             echo "- Paths requiring fork-preferred conflict handling: $(wc -l < /tmp/upstream-conflict-paths)"
             echo "- Validation: production-tag package compilation, custom protocol tests, and short regression suite passed."
             echo ""
