@@ -214,7 +214,11 @@ type GroupDNSServerOptions struct {
 	ErrorTTL     badoption.Duration `json:"error_ttl,omitempty"`     // H
 	WinTTL       badoption.Duration `json:"win_ttl,omitempty"`       // H
 	IgnoreRanges []badoption.Prefix `json:"ignore_ranges,omitempty"` // H
+	// MemberTimeout bounds the time spent waiting for a single server in sequential mode.
+	// Zero shares the remaining DNS timeout among servers yet to be queried.
+	MemberTimeout badoption.Duration `json:"member_timeout,omitempty"` // H
 }
+
 
 type FakeIPDNSServerOptions struct {
 	Inet4Range *badoption.Prefix `json:"inet4_range,omitempty" examples:"198.18.0.0/15"`
