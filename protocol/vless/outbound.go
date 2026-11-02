@@ -251,21 +251,29 @@ func (h *vlessDialer) DialContext(ctx context.Context, network string, destinati
 	// Apply encryption if configured
 	if h.encryption != nil {
 		rawConn := conn
-		// The encryption handshake performs blocking reads. Interrupt them when
-		// the caller's deadline expires; a plain net.Conn has no context API.
-		stopHandshake := context.AfterFunc(ctx, func() {
-			_ = rawConn.Close()
-		})
-		conn, err = h.encryption.Handshake(conn)
+		// Do not overwrite the raw connection with the typed-nil *CommonConn
+		// returned by a failed handshake. The cancellation callback and error
+		// path may run concurrently; close the transport at most once.
+		var closeOnce sync.Once
+		closeRaw := func() {
+			closeOnce.Do(func() { _ = rawConn.Close() })
+		}
+		stopHandshake := context.AfterFunc(ctx, closeRaw)
+		encryptedConn, handshakeErr := h.encryption.Handshake(rawConn)
 		stopHandshake()
-		if ctx.Err() != nil {
-			_ = rawConn.Close()
-			return nil, E.Cause(ctx.Err(), "encryption handshake")
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			closeRaw()
+			return nil, E.Cause(ctxErr, "encryption handshake")
 		}
-		if err != nil {
-			_ = rawConn.Close()
-			return nil, E.Cause(err, "encryption handshake")
+		if handshakeErr != nil {
+			closeRaw()
+			return nil, E.Cause(handshakeErr, "encryption handshake")
 		}
+		if encryptedConn == nil {
+			closeRaw()
+			return nil, E.New("encryption handshake returned nil connection")
+		}
+		conn = encryptedConn
 	}
 
 	// For Vision: wrap the connection to expose the TLS/encryption connection for vless client
@@ -358,21 +366,29 @@ func (h *vlessDialer) ListenPacket(ctx context.Context, destination M.Socksaddr)
 	// Apply encryption if configured
 	if h.encryption != nil {
 		rawConn := conn
-		// The encryption handshake performs blocking reads. Interrupt them when
-		// the caller's deadline expires; a plain net.Conn has no context API.
-		stopHandshake := context.AfterFunc(ctx, func() {
-			_ = rawConn.Close()
-		})
-		conn, err = h.encryption.Handshake(conn)
+		// Do not overwrite the raw connection with the typed-nil *CommonConn
+		// returned by a failed handshake. The cancellation callback and error
+		// path may run concurrently; close the transport at most once.
+		var closeOnce sync.Once
+		closeRaw := func() {
+			closeOnce.Do(func() { _ = rawConn.Close() })
+		}
+		stopHandshake := context.AfterFunc(ctx, closeRaw)
+		encryptedConn, handshakeErr := h.encryption.Handshake(rawConn)
 		stopHandshake()
-		if ctx.Err() != nil {
-			_ = rawConn.Close()
-			return nil, E.Cause(ctx.Err(), "encryption handshake")
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			closeRaw()
+			return nil, E.Cause(ctxErr, "encryption handshake")
 		}
-		if err != nil {
-			_ = rawConn.Close()
-			return nil, E.Cause(err, "encryption handshake")
+		if handshakeErr != nil {
+			closeRaw()
+			return nil, E.Cause(handshakeErr, "encryption handshake")
 		}
+		if encryptedConn == nil {
+			closeRaw()
+			return nil, E.New("encryption handshake returned nil connection")
+		}
+		conn = encryptedConn
 	}
 	if h.xudp {
 		return h.client.DialEarlyXUDPPacketConn(conn, destination)
