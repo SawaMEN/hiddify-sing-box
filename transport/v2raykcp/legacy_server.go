@@ -41,8 +41,8 @@ func newLegacyServer(ctx context.Context, logger logger.ContextLogger, o option.
 	return &LegacyServer{ctx: ctx, config: config, masks: masks, tls: tlsConfig, handler: handler, sessions: make(map[legacySessionID]*kcp.Connection)}, nil
 }
 func (s *LegacyServer) Network() []string        { return []string{N.NetworkUDP} }
-func (s *Server) Serve(net.Listener) error { return os.ErrInvalid }
-func (s *Server) ServePacket(packet net.PacketConn) error {
+func (s *LegacyServer) Serve(net.Listener) error { return os.ErrInvalid }
+func (s *LegacyServer) ServePacket(packet net.PacketConn) error {
 	var err error
 	if s.masks != nil && s.masks.UDP != nil {
 		raw := packet
@@ -92,7 +92,7 @@ func (s *Server) ServePacket(packet net.PacketConn) error {
 		conn.Input(segments)
 	}
 }
-func (s *Server) handle(session *kcp.Connection, addr net.Addr) {
+func (s *LegacyServer) handle(session *kcp.Connection, addr net.Addr) {
 	var conn net.Conn = session
 	var err error
 	if s.tls != nil {
@@ -104,7 +104,7 @@ func (s *Server) handle(session *kcp.Connection, addr net.Addr) {
 	}
 	s.handler.NewConnectionEx(s.ctx, conn, M.SocksaddrFromNet(addr), M.Socksaddr{}, nil)
 }
-func (s *Server) Close() error {
+func (s *LegacyServer) Close() error {
 	s.mu.Lock()
 	s.closed = true
 	packet := s.packet
@@ -125,7 +125,7 @@ func (s *Server) Close() error {
 type legacyPacketWriter struct {
 	packet  net.PacketConn
 	address net.Addr
-	server  *Server
+	server  *LegacyServer
 	id      legacySessionID
 }
 

@@ -92,7 +92,7 @@ func (c *LegacyClient) DialContext(ctx context.Context) (net.Conn, error) {
 	return conn, nil
 }
 
-func (c *Client) Close() error {
+func (c *LegacyClient) Close() error {
 	c.mu.Lock()
 	c.closed = true
 	list := make([]*kcp.Connection, 0, len(c.sessions))
