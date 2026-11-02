@@ -7,6 +7,7 @@ import (
 // H — WARP-flavored MASQUE outbound, tunnels through Cloudflare's consumer WARP service
 type MASQUEOutboundTLSOptions struct { // H
 	Insecure              bool                                `json:"insecure,omitempty"`
+	CertificatePublicKeySHA256 badoption.Listable[string] `json:"certificate_public_key_sha256,omitempty"`
 	CipherSuites          badoption.Listable[string]          `json:"cipher_suites,omitempty"`
 	CurvePreferences      badoption.Listable[CurvePreference] `json:"curve_preferences,omitempty"`
 	Fragment              bool                                `json:"fragment,omitempty"`
@@ -14,6 +15,7 @@ type MASQUEOutboundTLSOptions struct { // H
 	RecordFragment        bool                                `json:"record_fragment,omitempty"`
 	KernelTx              bool                                `json:"kernel_tx,omitempty"`
 	KernelRx              bool                                `json:"kernel_rx,omitempty"`
+	ECH *OutboundECHOptions `json:"ech,omitempty"`
 }
 
 type MASQUEOutboundOptions struct { // H
