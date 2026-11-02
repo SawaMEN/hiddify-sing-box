@@ -64,20 +64,20 @@ func TestH_PsiphonLiveStatus(t *testing.T) {
 	if os.Getenv("HIDDIFY_PSIPHON_E2E") == "" {
 		t.Skip("HIDDIFY_PSIPHON_E2E is not set")
 	}
-	dataDirectory := filepath.Join(t.TempDir(), "psiphon")
+	dataDirectory := filepath.ToSlash(filepath.Join(t.TempDir(), "psiphon"))
 	for round := range 2 {
 		instance, mixedPort := hStartPsiphonBox(t, dataDirectory)
 		require.Eventually(t, func() bool { return hTraceThrough(mixedPort) }, 3*time.Minute, 2*time.Second, "round %d: no traffic through Psiphon", round)
 		outbound, _ := instance.Outbound().Outbound("psiphon")
 		require.Eventually(t, func() bool { return adapter.IsReady(outbound) }, 10*time.Second, 200*time.Millisecond,
-			"round %d: traffic goes through, but the status is %s (%q)", round, outbound.Status(), adapter.DisplayType(outbound))
+			"round %d: traffic goes through, but the status is %s (%q)", round, adapter.OutboundStatus(outbound), adapter.DisplayType(outbound))
 		instance.Close()
 	}
 }
 
 // Two Psiphon outbounds start together, each with its own data directory, and close.
 func TestH_PsiphonTwoOutbounds(t *testing.T) {
-	dataDirectory := filepath.Join(t.TempDir(), "psiphon")
+	dataDirectory := filepath.ToSlash(filepath.Join(t.TempDir(), "psiphon"))
 	ctx := include.Context(context.Background())
 	options, err := json.UnmarshalExtendedContext[option.Options](ctx, []byte(`{
 		"log": {"disabled": true},
@@ -95,7 +95,7 @@ func TestH_PsiphonTwoOutbounds(t *testing.T) {
 	for _, tag := range []string{"psiphon-us", "psiphon-de"} {
 		outbound, loaded := instance.Outbound().Outbound(tag)
 		require.True(t, loaded)
-		require.NotEqual(t, adapter.StatusFailed, outbound.Status(), tag)
+		require.NotEqual(t, adapter.StatusFailed, adapter.OutboundStatus(outbound), tag)
 		require.DirExists(t, filepath.Join(dataDirectory, tag), "a directory of its own")
 	}
 	require.NoError(t, instance.Close())

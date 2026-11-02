@@ -25,16 +25,17 @@ func createWARPAwgEndpoint(
 	peerPort uint16,
 	peerPublicKey string,
 ) (adapter.Endpoint, error) {
+	addresses, err := warpInterfaceAddresses(config.Interface.Addresses.V4, config.Interface.Addresses.V6)
+	if err != nil {
+		return nil, err
+	}
 	return awg.NewEndpoint(ctx, router, logger, tag, option.AwgEndpointOptions{
 		UseIntegratedTun: options.System,
 		PrivateKey:       config.PrivateKey,
-		Address: badoption.Listable[netip.Prefix]{
-			netip.MustParsePrefix(config.Interface.Addresses.V4 + "/32"),
-			netip.MustParsePrefix(config.Interface.Addresses.V6 + "/128"),
-		},
-		MTU:        options.MTU,
-		ListenPort: options.ListenPort,
-		Awg:        *options.AWG,
+		Address:          addresses,
+		MTU:              options.MTU,
+		ListenPort:       options.ListenPort,
+		Awg:              *options.AWG,
 		Peers: []option.AwgPeerOptions{
 			{
 				Address:   peerAddr,

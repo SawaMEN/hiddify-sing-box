@@ -32,8 +32,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coder/websocket"
 	"github.com/sagernet/sing-box/transport/compat/sudoku/pkg/dnsutil"
+
+	"github.com/coder/websocket"
 )
 
 func normalizeWSSchemeFromAddress(serverAddress string, tlsEnabled bool) (string, string) {

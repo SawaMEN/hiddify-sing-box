@@ -26,7 +26,7 @@ import (
 	"github.com/sagernet/sing/common/cleanup"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/json"
-	M "github.com/sagernet/sing/common/metadata" //H
+	M "github.com/sagernet/sing/common/metadata" // H
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/common/observable"
 	"github.com/sagernet/sing/service"
@@ -244,6 +244,7 @@ func (noopFlowTracker) CloseFlow(tun.FlowCloseReason) {}
 func (s *Server) RoutedFlow(ctx context.Context, metadata adapter.InboundContext, matchedRule adapter.Rule, matchOutbound adapter.Outbound) tun.FlowTracker {
 	return noopFlowTracker{}
 }
+
 func authentication(serverSecret string) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {

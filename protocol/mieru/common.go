@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	mierupb "github.com/enfein/mieru/v3/pkg/appctl/appctlpb"
 	"github.com/sagernet/sing-box/option"
+
+	mierupb "github.com/enfein/mieru/v3/pkg/appctl/appctlpb"
 )
 
 func validateMieruTransport(transport []option.MieruPortBinding) error {
-
 	for _, pr := range transport {
 		if getTransportProtocol(pr.Protocol) == nil {
 			return fmt.Errorf("transport must be TCP or UDP")
@@ -47,7 +47,6 @@ func beginAndEndPortFromPortRange(portRange string) (int, int, error) {
 
 	_, err := fmt.Sscanf(portRange, "%d-%d", &begin, &end)
 	return begin, end, err
-
 }
 
 func getTransportProtocol(transport string) *mierupb.TransportProtocol {

@@ -45,11 +45,10 @@ type Service struct {
 
 	listenAddr string
 
-	mu         sync.Mutex
-	mgr        *multidns.Manager
-	server     *multidns.Server
-	serverOnce sync.Once
-	serveErr   chan error
+	mu       sync.Mutex
+	mgr      *multidns.Manager
+	server   *multidns.Server
+	serveErr chan error
 }
 
 // NewService constructs a smart_dns_pool service. It validates the options
@@ -200,12 +199,15 @@ func newLoggerAdapter(logger log.ContextLogger, tag string) *loggerAdapter {
 func (l *loggerAdapter) Debugf(format string, args ...any) {
 	l.logger.Debug(l.tag, ": ", fmt.Sprintf(format, args...))
 }
+
 func (l *loggerAdapter) Infof(format string, args ...any) {
 	l.logger.Info(l.tag, ": ", fmt.Sprintf(format, args...))
 }
+
 func (l *loggerAdapter) Warnf(format string, args ...any) {
 	l.logger.Warn(l.tag, ": ", fmt.Sprintf(format, args...))
 }
+
 func (l *loggerAdapter) Errorf(format string, args ...any) {
 	l.logger.Error(l.tag, ": ", fmt.Sprintf(format, args...))
 }

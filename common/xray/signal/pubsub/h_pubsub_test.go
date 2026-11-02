@@ -51,7 +51,7 @@ func TestH_PublishDropsWhenFull(t *testing.T) {
 	s := NewService()
 	defer s.ctask.Close()
 	sub := s.Subscribe("t")
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		s.Publish("t", i)
 	}
 	require.Len(t, sub.buffer, cap(sub.buffer))

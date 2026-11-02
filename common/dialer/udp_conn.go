@@ -14,7 +14,7 @@ type udpConn struct {
 }
 
 func (c *udpConn) Read(b []byte) (n int, err error) {
-	//H: zero-length UDP datagrams are valid; do not depend on removed control.IsUDPEOF.
+	// H: zero-length UDP datagrams are valid; do not depend on removed control.IsUDPEOF.
 	return c.Conn.Read(b)
 }
 

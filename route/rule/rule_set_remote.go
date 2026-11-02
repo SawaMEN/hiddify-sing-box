@@ -60,8 +60,8 @@ type RemoteRuleSet struct {
 	lastUpdated    time.Time
 	lastEtag       string
 	updateTicker   *time.Ticker
-	fetchFailed    bool            //H: initial fetch failed, retry in background
-	retryDelays    []time.Duration //H: overrides hRuleSetRetryDelays (tests)
+	fetchFailed    bool            // H: initial fetch failed, retry in background
+	retryDelays    []time.Duration // H: overrides hRuleSetRetryDelays (tests)
 	cacheFile      adapter.CacheFile
 	pauseManager   pause.Manager
 	callbacks      list.List[adapter.RuleSetUpdateCallback]
@@ -143,7 +143,9 @@ func (s *RemoteRuleSet) StartContext(ctx context.Context, startContext *adapter.
 		}
 	}
 	if s.lastUpdated.IsZero() && !loadedFromInitialPath {
-		s.initialFetch(ctx)
+		// Starting the box must not depend on a remote rule-set being reachable.
+		// Fetch it in PostStart and retry there if it fails.
+		s.fetchFailed = true
 	}
 	s.updateTicker = time.NewTicker(s.updateInterval)
 	return nil
@@ -159,11 +161,18 @@ func (s *RemoteRuleSet) initialFetch(ctx context.Context) {
 	if err != nil {
 		s.logger.Warn("initial rule-set ", s.tag, " unavailable, will retry: ", err)
 		s.fetchFailed = true
+	} else {
+		s.fetchFailed = false
 	}
 }
 
 func (s *RemoteRuleSet) PostStart() error {
-	go s.loopUpdate()
+	go func() {
+		if s.fetchFailed {
+			s.initialFetch(s.ctx)
+		}
+		s.loopUpdate()
+	}()
 	return nil
 }
 

@@ -30,7 +30,7 @@ type reportMetadata struct {
 func baseReportMetadata() reportMetadata {
 	processPath, _ := os.Executable()
 	processName := filepath.Base(processPath)
-	processPath = processName //H: the full path can hold the user name
+	processPath = processName // H: the full path can hold the user name
 	if processName == "." {
 		processName = ""
 	}
@@ -62,28 +62,6 @@ func writeReportMetadata(destPath string, metadata any) {
 
 // H: reports do not carry the configuration; see saveConfigSnapshot
 func copyConfigSnapshot(destPath string) {
-}
-
-func platformSnapshotPath() string {
-	return filepath.Join(sWorkingPath, "PlatformMetadata-"+sCrashReportSource+".json")
-}
-
-func savePlatformSnapshot() {
-	snapshotPath := platformSnapshotPath()
-	if sPlatformMetadata == nil {
-		os.Remove(snapshotPath)
-		return
-	}
-	os.WriteFile(snapshotPath, sPlatformMetadata, 0o666)
-	chownReport(snapshotPath)
-}
-
-func readPlatformSnapshot() json.RawMessage {
-	content, err := os.ReadFile(platformSnapshotPath())
-	if err != nil || !json.Valid(content) {
-		return nil
-	}
-	return content
 }
 
 func platformSnapshotPath() string {

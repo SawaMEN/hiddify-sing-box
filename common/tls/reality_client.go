@@ -28,7 +28,7 @@ import (
 	"unsafe"
 
 	"github.com/sagernet/sing-box/adapter"
-	tf "github.com/sagernet/sing-box/common/tlsfragment" //H
+	tf "github.com/sagernet/sing-box/common/tlsfragment" // H
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/debug"
@@ -50,7 +50,7 @@ type RealityClientConfig struct {
 	uClient   *UTLSClientConfig
 	publicKey []byte
 	shortID   [8]byte
-	classical bool //H: key_share "classical", no X25519MLKEM768
+	classical bool // H: key_share "classical", no X25519MLKEM768
 }
 
 func NewRealityClient(ctx context.Context, logger logger.ContextLogger, serverAddress string, options option.OutboundTLSOptions) (Config, error) {
@@ -80,9 +80,9 @@ func newRealityClient(ctx context.Context, logger logger.ContextLogger, serverAd
 	if len(publicKey) != 32 {
 		return nil, E.New("invalid public_key")
 	}
-	if len(options.Reality.ShortID) > 16 { //H: hex.Decode panics when the input does not fit in 8 bytes
-		return nil, E.New("invalid short_id: longer than 16 hex digits") //H
-	} //H
+	if len(options.Reality.ShortID) > 16 { // H: hex.Decode panics when the input does not fit in 8 bytes
+		return nil, E.New("invalid short_id: longer than 16 hex digits") // H
+	} // H
 	var shortID [8]byte
 	decodedLen, err := hex.Decode(shortID[:], []byte(options.Reality.ShortID))
 	if err != nil {
@@ -92,7 +92,7 @@ func newRealityClient(ctx context.Context, logger logger.ContextLogger, serverAd
 		return nil, E.New("invalid short_id")
 	}
 
-	var classical bool //H: key_share
+	var classical bool // H: key_share
 	switch options.Reality.KeyShare {
 	case "", "hybrid":
 	case "classical":
@@ -100,7 +100,7 @@ func newRealityClient(ctx context.Context, logger logger.ContextLogger, serverAd
 	default:
 		return nil, E.New("unknown reality key_share: ", options.Reality.KeyShare, ` (expected "hybrid" or "classical")`)
 	}
-	var config Config = &RealityClientConfig{ctx, uClient.(*UTLSClientConfig), publicKey, shortID, classical} //H
+	var config Config = &RealityClientConfig{ctx, uClient.(*UTLSClientConfig), publicKey, shortID, classical} // H
 	if options.KernelRx || options.KernelTx {
 		if !C.IsLinux {
 			return nil, E.New("kTLS is only supported on Linux")
@@ -163,13 +163,13 @@ func (e *RealityClientConfig) ClientHandshake(ctx context.Context, conn net.Conn
 	// H: the fingerprint is changed to pass both older and v26.10+ Xray servers (see
 	// realityClientHelloSpec). The auth key comes from the X25519 share (KeyShareKeys.Ecdhe),
 	// which REALITY servers check first, as Xray's own client does.
-	spec, err := realityClientHelloSpec(e.uClient.id, uConfig, e.classical) //H
+	spec, err := realityClientHelloSpec(e.uClient.id, uConfig, e.classical) // H
 	if err != nil {
 		return nil, err
 	}
-	if e.uClient.fragment || e.uClient.recordFragment { //H: fragment and record_fragment were skipped for REALITY
-		conn = tf.NewConn(conn, e.uClient.ctx, e.uClient.fragment, e.uClient.recordFragment, e.uClient.fragmentFallbackDelay) //H
-	} //H
+	if e.uClient.fragment || e.uClient.recordFragment { // H: fragment and record_fragment were skipped for REALITY
+		conn = tf.NewConn(conn, e.uClient.ctx, e.uClient.fragment, e.uClient.recordFragment, e.uClient.fragmentFallbackDelay) // H
+	} // H
 	uConn := utls.UClient(conn, uConfig, utls.HelloCustom)
 	verifier.UConn = uConn
 	err = uConn.ApplyPreset(spec)
@@ -202,7 +202,7 @@ func (e *RealityClientConfig) ClientHandshake(ctx context.Context, conn net.Conn
 	}
 	binary.BigEndian.PutUint64(hello.SessionId, uint64(nowTime.Unix()))
 
-	copy(hello.SessionId[:3], realityClientVersion[:]) //H
+	copy(hello.SessionId[:3], realityClientVersion[:]) // H
 	binary.BigEndian.PutUint32(hello.SessionId[4:], uint32(time.Now().Unix()))
 	copy(hello.SessionId[8:], e.shortID[:])
 	if debug.Enabled {
@@ -296,7 +296,7 @@ func (e *RealityClientConfig) Clone() Config {
 		e.uClient.Clone().(*UTLSClientConfig),
 		e.publicKey,
 		e.shortID,
-		e.classical, //H
+		e.classical, // H
 	}
 }
 

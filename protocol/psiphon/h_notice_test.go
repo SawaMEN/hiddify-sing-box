@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon"
 	"github.com/sagernet/sing-box/log"
 
+	"github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,17 +16,17 @@ import (
 // type assertion it replaced panicked.
 func TestH_NoticeCount(t *testing.T) {
 	for _, test := range []struct {
-		data  map[string]interface{}
+		data  map[string]any
 		count float64
 		ok    bool
 	}{
-		{map[string]interface{}{"count": float64(2)}, 2, true},
-		{map[string]interface{}{"count": 3}, 3, true},
-		{map[string]interface{}{"count": int64(1)}, 1, true},
-		{map[string]interface{}{"count": json.Number("4")}, 4, true},
-		{map[string]interface{}{"count": "2"}, 0, false},
-		{map[string]interface{}{"count": nil}, 0, false},
-		{map[string]interface{}{}, 0, false},
+		{map[string]any{"count": float64(2)}, 2, true},
+		{map[string]any{"count": 3}, 3, true},
+		{map[string]any{"count": int64(1)}, 1, true},
+		{map[string]any{"count": json.Number("4")}, 4, true},
+		{map[string]any{"count": "2"}, 0, false},
+		{map[string]any{"count": nil}, 0, false},
+		{map[string]any{}, 0, false},
 		{nil, 0, false},
 	} {
 		count, ok := noticeCount(test.data)

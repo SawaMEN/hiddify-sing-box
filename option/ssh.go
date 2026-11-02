@@ -16,11 +16,11 @@ type SSHOutboundOptions struct {
 	Cipher               badoption.Listable[string] `json:"cipher,omitempty"`
 	MAC                  badoption.Listable[string] `json:"mac,omitempty"`
 	KexAlgorithm         badoption.Listable[string] `json:"kex_algorithm,omitempty"`
-	UDPOverTCP           *UDPOverTCPOptions         `json:"udp_over_tcp,omitempty"` //H
-	Network              NetworkList                `json:"network,omitempty"`      //H
+	UDPOverTCP           *UDPOverTCPOptions         `json:"udp_over_tcp,omitempty"` // H
+	Network              NetworkList                `json:"network,omitempty"`      // H
 }
 
-type SSHInboundOptions struct { //H
+type SSHInboundOptions struct { // H
 	ListenOptions
 	Users             []SSHUser                  `json:"users,omitempty"`
 	Network           NetworkList                `json:"network,omitempty"`
@@ -29,7 +29,7 @@ type SSHInboundOptions struct { //H
 	ServerVersion     string                     `json:"server_version,omitempty"`
 }
 
-type SSHUser struct { //H
+type SSHUser struct { // H
 	User      string `json:"user,omitempty"`
 	Password  string `json:"password,omitempty"`
 	PublicKey string `json:"public_key,omitempty"`

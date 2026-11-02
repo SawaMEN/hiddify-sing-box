@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kianmhz/GooseRelayVPN/goose"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
 	C "github.com/sagernet/sing-box/constant"
@@ -26,6 +25,8 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/common/uot"
+
+	"github.com/kianmhz/GooseRelayVPN/goose"
 )
 
 const (
@@ -181,7 +182,7 @@ func (h *Outbound) diagnoseAndMarkReady(runCtx context.Context) {
 		}(key)
 	}
 
-	for i := 0; i < len(keys); i++ {
+	for range keys {
 		select {
 		case r := <-results:
 			if r.err == nil {

@@ -1,15 +1,17 @@
 package pingtunnel
 
 import (
-	"github.com/esrrhs/gohome/common"
-	"github.com/esrrhs/gohome/network"
-	"github.com/esrrhs/gohome/thread"
-	"github.com/sagernet/sing-box/transport/compat/pingtunnel/loggo"
-	"google.golang.org/protobuf/proto"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/sagernet/sing-box/transport/compat/pingtunnel/loggo"
+
+	"github.com/esrrhs/gohome/common"
+	"github.com/esrrhs/gohome/network"
+	"github.com/esrrhs/gohome/thread"
+	"google.golang.org/protobuf/proto"
 )
 
 func NewServer(icmpAddr string, key int, maxconn int, maxprocessthread int, maxprocessbuffer int, connecttmeout int, cryptoConfig *CryptoConfig, forwardConfig *ForwardConfig, congestion string) (*Server, error) {
@@ -26,7 +28,7 @@ func NewServer(icmpAddr string, key int, maxconn int, maxprocessthread int, maxp
 	}
 
 	if maxprocessthread > 0 {
-		s.processtp = thread.NewThreadPool(maxprocessthread, maxprocessbuffer, func(v interface{}) {
+		s.processtp = thread.NewThreadPool(maxprocessthread, maxprocessbuffer, func(v any) {
 			packet := v.(*Packet)
 			s.processDataPacket(packet)
 		})
@@ -88,7 +90,6 @@ type ServerConn struct {
 }
 
 func (p *Server) Run() error {
-
 	var conn *PacketConn
 	var err error
 	if p.PacketListen != nil {
@@ -148,23 +149,22 @@ func (p *Server) Stop() {
 }
 
 func (p *Server) processPacket(packet *Packet) {
-
-	if packet.my.Key != (int32)(p.key) {
+	if packet.my.Key != int32(p.key) {
 		return
 	}
 
-	if packet.my.Type == (int32)(MyMsg_PING) {
+	if packet.my.Type == int32(MyMsg_PING) {
 		t := time.Time{}
 		t.UnmarshalBinary(packet.my.Data)
 		loggo.Info("ping from %s %s %d %d %d", packet.src.String(), t.String(), packet.my.Rproto, packet.echoId, packet.echoSeq)
-		sendICMP(packet.echoId, packet.echoSeq, *p.conn, packet.src, "", "", (uint32)(MyMsg_PING), packet.my.Data,
-			(int)(packet.my.Rproto), -1, p.key,
+		sendICMP(packet.echoId, packet.echoSeq, *p.conn, packet.src, "", "", uint32(MyMsg_PING), packet.my.Data,
+			int(packet.my.Rproto), -1, p.key,
 			0, 0, 0, 0, 0, 0,
 			0, p.cryptoConfig)
 		return
 	}
 
-	if packet.my.Type == (int32)(MyMsg_KICK) {
+	if packet.my.Type == int32(MyMsg_KICK) {
 		localConn := p.getServerConnById(packet.my.Id)
 		if localConn != nil {
 			p.close(localConn)
@@ -174,28 +174,27 @@ func (p *Server) processPacket(packet *Packet) {
 	}
 
 	if p.maxprocessthread > 0 {
-		p.processtp.AddJob((int)(common.HashString(packet.my.Id)), packet)
+		p.processtp.AddJob(int(common.HashString(packet.my.Id)), packet)
 	} else {
 		p.processDataPacket(packet)
 	}
 }
 
 func (p *Server) processDataPacketNewConn(id string, packet *Packet) *ServerConn {
-
 	now := common.GetNowUpdateInSecond()
 
 	loggo.Info("start add new connect  %s %s", id, packet.my.Target)
 
 	if p.maxconn > 0 && p.localConnMapSize.Load() >= p.maxconn {
 		loggo.Info("too many connections %d, server connected target fail %s", p.localConnMapSize.Load(), packet.my.Target)
-		p.remoteError(packet.echoId, packet.echoSeq, id, (int)(packet.my.Rproto), packet.src)
+		p.remoteError(packet.echoId, packet.echoSeq, id, int(packet.my.Rproto), packet.src)
 		return nil
 	}
 
 	addr := packet.my.Target
 	if p.isConnError(addr) {
 		loggo.Info("addr connect Error before: %s %s", id, addr)
-		p.remoteError(packet.echoId, packet.echoSeq, id, (int)(packet.my.Rproto), packet.src)
+		p.remoteError(packet.echoId, packet.echoSeq, id, int(packet.my.Rproto), packet.src)
 		return nil
 	}
 
@@ -210,7 +209,7 @@ func (p *Server) processDataPacketNewConn(id string, packet *Packet) *ServerConn
 		}
 		if err != nil {
 			loggo.Error("Error listening for tcp packets: %s %s", id, err.Error())
-			p.remoteError(packet.echoId, packet.echoSeq, id, (int)(packet.my.Rproto), packet.src)
+			p.remoteError(packet.echoId, packet.echoSeq, id, int(packet.my.Rproto), packet.src)
 			p.addConnError(addr)
 			return nil
 		}
@@ -223,13 +222,13 @@ func (p *Server) processDataPacketNewConn(id string, packet *Packet) *ServerConn
 			ipaddrTarget = c.RemoteAddr().(*net.TCPAddr)
 		}
 
-		fm := network.NewFrameMgr(FRAME_MAX_SIZE, FRAME_MAX_ID, (int)(packet.my.TcpmodeBuffersize), (int)(packet.my.TcpmodeMaxwin), (int)(packet.my.TcpmodeResendTimems), (int)(packet.my.TcpmodeCompress),
-			(int)(packet.my.TcpmodeStat))
+		fm := network.NewFrameMgr(FRAME_MAX_SIZE, FRAME_MAX_ID, int(packet.my.TcpmodeBuffersize), int(packet.my.TcpmodeMaxwin), int(packet.my.TcpmodeResendTimems), int(packet.my.TcpmodeCompress),
+			int(packet.my.TcpmodeStat))
 		if p.congestion == "bb" {
 			fm.SetCongestion(&network.BBCongestion{})
 		}
 
-		localConn := &ServerConn{timeout: (int)(packet.my.Timeout), tcpconn: c, tcpaddrTarget: ipaddrTarget, id: id, activeRecvTime: newAtomicTime(now), activeSendTime: newAtomicTime(now), rproto: (int)(packet.my.Rproto), fm: fm, tcpmode: (int)(packet.my.Tcpmode), activity: make(chan struct{}, 1)}
+		localConn := &ServerConn{timeout: int(packet.my.Timeout), tcpconn: c, tcpaddrTarget: ipaddrTarget, id: id, activeRecvTime: newAtomicTime(now), activeSendTime: newAtomicTime(now), rproto: int(packet.my.Rproto), fm: fm, tcpmode: int(packet.my.Tcpmode), activity: make(chan struct{}, 1)}
 
 		p.addServerConn(id, localConn)
 
@@ -240,7 +239,7 @@ func (p *Server) processDataPacketNewConn(id string, packet *Packet) *ServerConn
 		if p.forwardConfig != nil {
 			if p.forwardConfig.Scheme != "socks5" {
 				loggo.Error("UDP forwarding requires SOCKS5 proxy, got %s", p.forwardConfig.Scheme)
-				p.remoteError(packet.echoId, packet.echoSeq, id, (int)(packet.my.Rproto), packet.src)
+				p.remoteError(packet.echoId, packet.echoSeq, id, int(packet.my.Rproto), packet.src)
 				p.addConnError(addr)
 				return nil
 			}
@@ -248,13 +247,13 @@ func (p *Server) processDataPacketNewConn(id string, packet *Packet) *ServerConn
 			association, err := DialUDPThroughProxy(p.forwardConfig, time.Millisecond*time.Duration(p.connecttmeout))
 			if err != nil {
 				loggo.Error("Error creating udp forward association: %s %s", id, err.Error())
-				p.remoteError(packet.echoId, packet.echoSeq, id, (int)(packet.my.Rproto), packet.src)
+				p.remoteError(packet.echoId, packet.echoSeq, id, int(packet.my.Rproto), packet.src)
 				p.addConnError(addr)
 				return nil
 			}
 
 			localConn := &ServerConn{
-				timeout:        (int)(packet.my.Timeout),
+				timeout:        int(packet.my.Timeout),
 				conn:           association.UDPConn,
 				udpTargetAddr:  addr,
 				udpRelayAddr:   association.RelayAddr,
@@ -263,8 +262,8 @@ func (p *Server) processDataPacketNewConn(id string, packet *Packet) *ServerConn
 				id:             id,
 				activeRecvTime: newAtomicTime(now),
 				activeSendTime: newAtomicTime(now),
-				rproto:         (int)(packet.my.Rproto),
-				tcpmode:        (int)(packet.my.Tcpmode),
+				rproto:         int(packet.my.Rproto),
+				tcpmode:        int(packet.my.Tcpmode),
 			}
 
 			p.addServerConn(id, localConn)
@@ -277,14 +276,14 @@ func (p *Server) processDataPacketNewConn(id string, packet *Packet) *ServerConn
 		c, err := net.DialTimeout("udp", addr, time.Millisecond*time.Duration(p.connecttmeout))
 		if err != nil {
 			loggo.Error("Error listening for udp packets: %s %s", id, err.Error())
-			p.remoteError(packet.echoId, packet.echoSeq, id, (int)(packet.my.Rproto), packet.src)
+			p.remoteError(packet.echoId, packet.echoSeq, id, int(packet.my.Rproto), packet.src)
 			p.addConnError(addr)
 			return nil
 		}
 		targetConn := c.(*net.UDPConn)
 		ipaddrTarget := targetConn.RemoteAddr().(*net.UDPAddr)
 
-		localConn := &ServerConn{timeout: (int)(packet.my.Timeout), conn: targetConn, ipaddrTarget: ipaddrTarget, id: id, activeRecvTime: newAtomicTime(now), activeSendTime: newAtomicTime(now), rproto: (int)(packet.my.Rproto), tcpmode: (int)(packet.my.Tcpmode), udpTargetAddr: addr}
+		localConn := &ServerConn{timeout: int(packet.my.Timeout), conn: targetConn, ipaddrTarget: ipaddrTarget, id: id, activeRecvTime: newAtomicTime(now), activeSendTime: newAtomicTime(now), rproto: int(packet.my.Rproto), tcpmode: int(packet.my.Tcpmode), udpTargetAddr: addr}
 
 		p.addServerConn(id, localConn)
 
@@ -295,7 +294,6 @@ func (p *Server) processDataPacketNewConn(id string, packet *Packet) *ServerConn
 }
 
 func (p *Server) processDataPacket(packet *Packet) {
-
 	loggo.Debug("processPacket %s %s %d", packet.my.Id, packet.src.String(), len(packet.my.Data))
 
 	now := common.GetNowUpdateInSecond()
@@ -313,7 +311,7 @@ func (p *Server) processDataPacket(packet *Packet) {
 	localConn.echoId.Store(packet.echoId)
 	localConn.echoSeq.Store(packet.echoSeq)
 
-	if packet.my.Type == (int32)(MyMsg_DATA) {
+	if packet.my.Type == int32(MyMsg_DATA) {
 
 		if packet.my.Tcpmode > 0 {
 			f := &network.Frame{}
@@ -365,12 +363,11 @@ func (p *Server) processDataPacket(packet *Packet) {
 		}
 
 		p.recvPacket.Add(1)
-		p.recvPacketSize.Add((uint64)(len(packet.my.Data)))
+		p.recvPacketSize.Add(uint64(len(packet.my.Data)))
 	}
 }
 
 func (p *Server) RecvTCP(conn *ServerConn, id string, src *net.IPAddr) {
-
 	defer common.CrashLog()
 
 	p.workResultLock.Add(1)
@@ -391,12 +388,12 @@ func (p *Server) RecvTCP(conn *ServerConn, id string, src *net.IPAddr) {
 		for e := sendlist.Front(); e != nil; e = e.Next() {
 			f := e.Value.(*network.Frame)
 			mb, _ := conn.fm.MarshalFrame(f)
-			sendICMP(conn.echoId.Load(), conn.echoSeq.Load(), *p.conn, src, "", id, (uint32)(MyMsg_DATA), mb,
+			sendICMP(conn.echoId.Load(), conn.echoSeq.Load(), *p.conn, src, "", id, uint32(MyMsg_DATA), mb,
 				conn.rproto, -1, p.key, 0,
 				0, 0, 0, 0, 0,
 				0, p.cryptoConfig)
 			p.sendPacket.Add(1)
-			p.sendPacketSize.Add((uint64)(len(mb)))
+			p.sendPacketSize.Add(uint64(len(mb)))
 		}
 		now := common.GetNowUpdateInSecond()
 		diffclose := now.Sub(startConnectTime)
@@ -493,12 +490,12 @@ mainLoop:
 					loggo.Error("Error tcp Marshal %s %s %s", conn.id, conn.tcpaddrTarget.String(), err)
 					continue
 				}
-				sendICMP(conn.echoId.Load(), conn.echoSeq.Load(), *p.conn, src, "", id, (uint32)(MyMsg_DATA), mb,
+				sendICMP(conn.echoId.Load(), conn.echoSeq.Load(), *p.conn, src, "", id, uint32(MyMsg_DATA), mb,
 					conn.rproto, -1, p.key, 0,
 					0, 0, 0, 0, 0,
 					0, p.cryptoConfig)
 				p.sendPacket.Add(1)
-				p.sendPacketSize.Add((uint64)(len(mb)))
+				p.sendPacketSize.Add(uint64(len(mb)))
 			}
 		}
 
@@ -535,8 +532,8 @@ mainLoop:
 		diffsend := now.Sub(conn.activeSendTime.Load())
 		tcpdiffrecv := now.Sub(time.Unix(0, tcpActiveRecvUnix.Load()))
 		tcpdiffsend := now.Sub(tcpActiveSendTime)
-		if (diffrecv > time.Second*(time.Duration(conn.timeout)) && diffsend > time.Second*(time.Duration(conn.timeout))) ||
-			(tcpdiffrecv > time.Second*(time.Duration(conn.timeout)) && tcpdiffsend > time.Second*(time.Duration(conn.timeout))) {
+		if (diffrecv > time.Second*time.Duration(conn.timeout) && diffsend > time.Second*time.Duration(conn.timeout)) ||
+			(tcpdiffrecv > time.Second*time.Duration(conn.timeout) && tcpdiffsend > time.Second*time.Duration(conn.timeout)) {
 			loggo.Info("close inactive conn %s %s", conn.id, conn.tcpaddrTarget.String())
 			conn.fm.Close()
 			break
@@ -579,12 +576,12 @@ mainLoop:
 		for e := sendlist.Front(); e != nil; e = e.Next() {
 			f := e.Value.(*network.Frame)
 			mb, _ := conn.fm.MarshalFrame(f)
-			sendICMP(conn.echoId.Load(), conn.echoSeq.Load(), *p.conn, src, "", id, (uint32)(MyMsg_DATA), mb,
+			sendICMP(conn.echoId.Load(), conn.echoSeq.Load(), *p.conn, src, "", id, uint32(MyMsg_DATA), mb,
 				conn.rproto, -1, p.key, 0,
 				0, 0, 0, 0, 0,
 				0, p.cryptoConfig)
 			p.sendPacket.Add(1)
-			p.sendPacketSize.Add((uint64)(len(mb)))
+			p.sendPacketSize.Add(uint64(len(mb)))
 		}
 
 		nodatarecv := true
@@ -620,7 +617,6 @@ mainLoop:
 }
 
 func (p *Server) Recv(conn *ServerConn, id string, src *net.IPAddr) {
-
 	defer common.CrashLog()
 
 	p.workResultLock.Add(1)
@@ -665,13 +661,13 @@ func (p *Server) Recv(conn *ServerConn, id string, src *net.IPAddr) {
 			payload = parsedPayload
 		}
 
-		sendICMP(conn.echoId.Load(), conn.echoSeq.Load(), *p.conn, src, targetAddr, id, (uint32)(MyMsg_DATA), payload,
+		sendICMP(conn.echoId.Load(), conn.echoSeq.Load(), *p.conn, src, targetAddr, id, uint32(MyMsg_DATA), payload,
 			conn.rproto, -1, p.key, 0,
 			0, 0, 0, 0, 0,
 			0, p.cryptoConfig)
 
 		p.sendPacket.Add(1)
-		p.sendPacketSize.Add((uint64)(len(payload)))
+		p.sendPacketSize.Add(uint64(len(payload)))
 	}
 }
 
@@ -689,9 +685,8 @@ func (p *Server) close(conn *ServerConn) {
 }
 
 func (p *Server) checkTimeoutConn() {
-
 	tmp := make(map[string]*ServerConn)
-	p.localConnMap.Range(func(key, value interface{}) bool {
+	p.localConnMap.Range(func(key, value any) bool {
 		id := key.(string)
 		serverConn := value.(*ServerConn)
 		tmp[id] = serverConn
@@ -705,7 +700,7 @@ func (p *Server) checkTimeoutConn() {
 		}
 		diffrecv := now.Sub(conn.activeRecvTime.Load())
 		diffsend := now.Sub(conn.activeSendTime.Load())
-		if diffrecv > time.Second*(time.Duration(conn.timeout)) && diffsend > time.Second*(time.Duration(conn.timeout)) {
+		if diffrecv > time.Second*time.Duration(conn.timeout) && diffsend > time.Second*time.Duration(conn.timeout) {
 			conn.close.Store(true)
 		}
 	}
@@ -749,7 +744,7 @@ func sameUDPAddr(a *net.UDPAddr, b *net.UDPAddr) bool {
 
 func (p *Server) showNet() {
 	p.localConnMapSize.Store(0)
-	p.localConnMap.Range(func(key, value interface{}) bool {
+	p.localConnMap.Range(func(key, value any) bool {
 		p.localConnMapSize.Add(1)
 		return true
 	})
@@ -778,7 +773,7 @@ func (p *Server) deleteServerConn(uuid string) {
 }
 
 func (p *Server) remoteError(echoId int, echoSeq int, uuid string, rprpto int, src *net.IPAddr) {
-	sendICMP(echoId, echoSeq, *p.conn, src, "", uuid, (uint32)(MyMsg_KICK), []byte{},
+	sendICMP(echoId, echoSeq, *p.conn, src, "", uuid, uint32(MyMsg_KICK), []byte{},
 		rprpto, -1, p.key,
 		0, 0, 0, 0, 0, 0, 0,
 		p.cryptoConfig)
@@ -798,9 +793,8 @@ func (p *Server) isConnError(addr string) bool {
 }
 
 func (p *Server) updateConnError() {
-
 	tmp := make(map[string]time.Time)
-	p.connErrorMap.Range(func(key, value interface{}) bool {
+	p.connErrorMap.Range(func(key, value any) bool {
 		id := key.(string)
 		t := value.(time.Time)
 		tmp[id] = t

@@ -59,8 +59,7 @@ func TestH_DetourMoveTellsWhoMoved(t *testing.T) {
 
 func TestH_SettleMoves(t *testing.T) {
 	const settle = 300 * time.Millisecond
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	moves := make(chan DetourChange, 8)
 	var broken atomic.Bool
 	push := settleMoves(ctx, ctx.Done(), settle, broken.Load, func(change DetourChange) { moves <- change })

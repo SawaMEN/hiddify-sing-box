@@ -13,9 +13,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/crypto/scrypt"
-
 	"github.com/sagernet/sing-box/transport/compat/openflux/utils"
+
+	"golang.org/x/crypto/scrypt"
 )
 
 const (

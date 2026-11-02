@@ -11,11 +11,11 @@ type ExperimentalOptions struct {
 	V2RayAPI  *V2RayAPIOptions  `json:"v2ray_api,omitempty"`
 	Debug     *DebugOptions     `json:"debug,omitempty"`
 
-	Monitoring   *MonitoringOptions   `json:"monitoring,omitempty"`    //H
-	UnifiedDelay *UnifiedDelayOptions `json:"unified_delay,omitempty"` //H
+	Monitoring   *MonitoringOptions   `json:"monitoring,omitempty"`    // H
+	UnifiedDelay *UnifiedDelayOptions `json:"unified_delay,omitempty"` // H
 }
 
-type UnifiedDelayOptions struct { //H
+type UnifiedDelayOptions struct { // H
 	Enabled bool `json:"enabled,omitempty"`
 }
 
@@ -25,8 +25,8 @@ type CacheFileOptions struct {
 	CacheID           string                   `json:"cache_id,omitempty"`
 	StoreFakeIP       bool                     `json:"store_fakeip,omitempty"`
 	StoreDNS          bool                     `json:"store_dns,omitempty"`
-	StoreWARPConfig   bool                     `json:"store_warp_config,omitempty"`   //H
-	StoreMASQUEConfig bool                     `json:"store_masque_config,omitempty"` //H
+	StoreWARPConfig   bool                     `json:"store_warp_config,omitempty"`   // H
+	StoreMASQUEConfig bool                     `json:"store_masque_config,omitempty"` // H
 	BufferSize        *byteformats.MemoryBytes `json:"buffer_size,omitempty"`
 	FlushInterval     badoption.Duration       `json:"flush_interval,omitempty"`
 

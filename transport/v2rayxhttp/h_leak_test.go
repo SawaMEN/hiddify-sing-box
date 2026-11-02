@@ -10,6 +10,7 @@ import (
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,8 +29,7 @@ func (hHeaderReader) NewConnectionEx(ctx context.Context, conn net.Conn, source 
 // read the header from the upload queue forever, and the GET handler with its connection never
 // ended (issue hiddify-core#163).
 func TestH_XHTTPServerStreamDownClientGone(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	server, err := NewServer(ctx, logger.NOP(), hOptions(t, `{"mode":"packet-up",`+hBase+`}`), nil, hHeaderReader{})
 	require.NoError(t, err)
 	requestCtx, requestCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)

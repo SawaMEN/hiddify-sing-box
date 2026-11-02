@@ -7,8 +7,8 @@ package warpscan
 import (
 	"cmp"
 	"context"
-	"errors"
 	"crypto/rand"
+	"errors"
 	"math/big"
 	"net/netip"
 	"slices"
@@ -129,9 +129,7 @@ func Scan(ctx context.Context, logger logger.ContextLogger, request Request) ([]
 	}
 	queue := make(chan netip.AddrPort)
 	for range concurrency {
-		wait.Add(1)
-		go func() {
-			defer wait.Done()
+		wait.Go(func() {
 			for addrPort := range queue {
 				access.Lock()
 				skip := unreachable[family(addrPort)]
@@ -172,7 +170,7 @@ func Scan(ctx context.Context, logger logger.ContextLogger, request Request) ([]
 				}
 				access.Unlock()
 			}
-		}()
+		})
 	}
 feed:
 	for _, candidate := range candidates {

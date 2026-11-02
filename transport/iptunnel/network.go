@@ -5,12 +5,14 @@ package iptunnel
 import (
 	"context"
 	"fmt"
-	legacy "github.com/amnezia-vpn/amneziawg-go/tun"
-	"github.com/sagernet/sing-box/transport/iptunnel/netstack"
-	M "github.com/sagernet/sing/common/metadata"
 	"net"
 	"net/netip"
 	"sync"
+
+	"github.com/sagernet/sing-box/transport/iptunnel/netstack"
+	M "github.com/sagernet/sing/common/metadata"
+
+	legacy "github.com/amnezia-vpn/amneziawg-go/tun"
 )
 
 type Network struct {
@@ -34,6 +36,7 @@ func New(addresses []netip.Addr, mtu int, send func([]byte) error) (*Network, er
 	go n.pump(mtu)
 	return n, nil
 }
+
 func (n *Network) pump(mtu int) {
 	b := make([]byte, mtu+256)
 	for {
@@ -52,6 +55,7 @@ func (n *Network) Inject(p []byte) error { _, err := n.device.Write([][]byte{p},
 func (n *Network) DialContext(ctx context.Context, network string, dst M.Socksaddr) (net.Conn, error) {
 	return n.stack.DialContext(ctx, network, dst.String())
 }
+
 func (n *Network) ListenPacket(ctx context.Context, dst M.Socksaddr) (net.PacketConn, error) {
 	var local netip.Addr
 	for _, a := range n.addresses {
@@ -69,6 +73,7 @@ func (n *Network) ListenPacket(ctx context.Context, dst M.Socksaddr) (net.Packet
 	}
 	return &packetConn{PacketConn: p, ctx: ctx, resolve: n.Resolve}, nil
 }
+
 func (n *Network) Close() error {
 	n.once.Do(func() { close(n.done); n.err = n.device.Close() })
 	return n.err

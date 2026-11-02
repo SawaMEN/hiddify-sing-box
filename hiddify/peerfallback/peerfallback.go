@@ -40,8 +40,10 @@ type Options struct {
 }
 
 type Fallback struct {
-	options Options
-	cancel  context.CancelFunc
+	options  Options
+	wait     time.Duration // H
+	interval time.Duration // H
+	cancel   context.CancelFunc
 
 	access   sync.Mutex
 	index    int
@@ -56,7 +58,7 @@ func New(options Options) *Fallback {
 	if len(options.Addresses) < 2 {
 		return nil
 	}
-	return &Fallback{options: options, since: time.Now()}
+	return &Fallback{options: options, since: time.Now(), wait: Wait, interval: Interval} // H
 }
 
 // Start checks the address in use every few seconds, until ctx ends or Close.
@@ -69,7 +71,7 @@ func (f *Fallback) Start(ctx context.Context) {
 	f.cancel = cancel
 	f.access.Unlock()
 	go func() {
-		ticker := time.NewTicker(Interval)
+		ticker := time.NewTicker(f.interval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -105,7 +107,7 @@ func (f *Fallback) Check() {
 		f.answered = true
 		return
 	}
-	if time.Since(f.since) < Wait || tx == f.sinceTx {
+	if time.Since(f.since) < f.wait || tx == f.sinceTx {
 		return
 	}
 	failed := f.options.Addresses[f.index]

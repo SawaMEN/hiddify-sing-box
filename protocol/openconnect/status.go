@@ -1,12 +1,11 @@
 package openconnect
 
 import (
-	"context"
 	"net/http"
 	"slices"
 
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-openconnect"
+	openconnect "github.com/sagernet/sing-openconnect"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/service"
 )
@@ -124,51 +123,4 @@ func (e *Endpoint) notifyStatusUpdated() {
 func (e *Endpoint) notifyStatusUpdatedLocked() {
 	close(e.statusUpdated)
 	e.statusUpdated = make(chan struct{})
-}
-
-func (e *Endpoint) setTerminalError(err error) {
-	e.statusAccess.Lock()
-	e.terminalError = err.Error()
-	e.notifyStatusUpdatedLocked()
-	e.statusAccess.Unlock()
-}
-
-func (e *Endpoint) watchAuthForms(ctx context.Context) {
-	var loggedAuthChallengeID string
-	for {
-		authChallengeUpdated := e.client.AuthChallengeUpdated()
-		authChallenge := e.client.PendingAuthChallenge()
-		if authChallenge != nil && authChallenge.ID != loggedAuthChallengeID {
-			loggedAuthChallengeID = authChallenge.ID
-			if authChallenge.Browser != nil {
-				e.logger.Info("waiting for browser authentication")
-			} else {
-				e.logger.Info("waiting for authentication")
-			}
-		}
-		e.notifyStatusUpdated()
-		select {
-		case <-ctx.Done():
-			return
-		case <-authChallengeUpdated:
-		}
-	}
-}
-
-func (e *Endpoint) watchActiveTransport(ctx context.Context) {
-	for {
-		transportUpdated := e.client.ActiveTransportUpdated()
-		transport := e.client.ActiveTransport()
-		e.stateAccess.Lock()
-		e.updateState(func(state *clientState) {
-			state.tunnelInfo.Transport = transport
-		})
-		e.stateAccess.Unlock()
-		e.notifyStatusUpdated()
-		select {
-		case <-ctx.Done():
-			return
-		case <-transportUpdated:
-		}
-	}
 }

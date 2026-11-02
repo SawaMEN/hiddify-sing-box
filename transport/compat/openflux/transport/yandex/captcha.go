@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/sagernet/sing-box/transport/compat/openflux/netbind"
 	"io"
 	"math/rand"
 	"net/http"
@@ -16,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sagernet/sing-box/transport/compat/openflux/netbind"
 	"github.com/sagernet/sing-box/transport/compat/openflux/utils"
 )
 
@@ -41,9 +41,10 @@ func solveCaptcha(docURL string, jar http.CookieJar, userAgent string, dialFns .
 		userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:153.0) Gecko/20100101 Firefox/153.0"
 	}
 
-	client := &http.Client{Transport: netbind.HTTPTransport(dialFns...),
-		Jar:     jar,
-		Timeout: 30 * time.Second,
+	client := &http.Client{
+		Transport: netbind.HTTPTransport(dialFns...),
+		Jar:       jar,
+		Timeout:   30 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -53,7 +54,7 @@ func solveCaptcha(docURL string, jar http.CookieJar, userAgent string, dialFns .
 
 	captchaURL := ""
 	currentURL := docURL
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		utils.Debugf("[CAPTCHA] GET %s", safeVolgaURL(currentURL))
 		req, _ := http.NewRequest("GET", currentURL, nil)
 		setBrowserHeaders(req, userAgent)
@@ -246,46 +247,46 @@ func captchaCheckComplexity(h []byte, complexity int) bool {
 
 // ---- fingerprint ----
 
-func buildCaptchaFingerprint(nonceHex, userAgent string) map[string]interface{} {
-	return map[string]interface{}{
+func buildCaptchaFingerprint(nonceHex, userAgent string) map[string]any {
+	return map[string]any{
 		"b6": 8, "b7": 8, "b9": []string{"en-US", "en"},
-		"c2": "", "c4": "MacIntel", "c5": []interface{}{}, "c9": userAgent,
+		"c2": "", "c4": "MacIntel", "c5": []any{}, "c9": userAgent,
 		"f4": 1080, "f5": 1920, "f6": 24, "f7": 1080, "f8": true,
 		"f9": []int{1920, 1080}, "g1": 1920,
 		"g2": "Europe/Moscow", "g3": -180,
 		"j5": true,
-		"m2": map[string]interface{}{"mTP": 0, "tE": false, "tS": false},
+		"m2": map[string]any{"mTP": 0, "tE": false, "tS": false},
 		"n6": false,
 		"o2": 0, "o3": "srgb", "o4": 0, "o5": "en-US",
 		"o8": nil, "o9": nil,
 		"p1": nil, "p2": 0, "p3": nil, "p4": nil,
-		"p5": nil, "p6": nil, "p8": []interface{}{}, "p9": "111111111",
+		"p5": nil, "p6": nil, "p8": []any{}, "p9": "111111111",
 		"j6": 48000,
 		"a1": "",
-		"a2": map[string]interface{}{"w": false, "d": ""},
-		"a3": map[string]interface{}{
+		"a2": map[string]any{"w": false, "d": ""},
+		"a3": map[string]any{
 			"acos": 1.4444399284962483, "asin": 0.12349655394506357,
 			"atan": 0.4636476090008061, "cos": -0.8390715290095377,
 			"exp": 2.718281828459045, "log1p": 2.3978952727983707,
 			"sin": -0.9917788534431158, "tan": -0.23206847684369653,
 		},
-		"a4": map[string]interface{}{"minDelta": 0.1, "maxDelta": 1.2},
+		"a4": map[string]any{"minDelta": 0.1, "maxDelta": 1.2},
 		"a5": nil,
-		"k4": []interface{}{},
-		"j1": map[string]interface{}{
+		"k4": []any{},
+		"j1": map[string]any{
 			"vn": "WebKit", "vr": "WebKit WebGL", "vU": "",
 			"r": "Mozilla", "rU": "", "sLV": "WebGL GLSL ES 1.0 (1.0)",
 		},
-		"j2": map[string]interface{}{
-			"cA": []interface{}{}, "p": []interface{}{}, "sP": []interface{}{},
-			"e": []interface{}{}, "eP": []interface{}{},
+		"j2": map[string]any{
+			"cA": []any{}, "p": []any{}, "sP": []any{},
+			"e": []any{}, "eP": []any{},
 		},
 		"m10":     nonceHex,
 		"version": "1.5.0",
 	}
 }
 
-func encodeCaptchaFingerprint(fp map[string]interface{}) string {
+func encodeCaptchaFingerprint(fp map[string]any) string {
 	raw, _ := json.Marshal(fp)
 	var buf bytes.Buffer
 	w := gzip.NewWriter(&buf)
@@ -327,7 +328,7 @@ func hexDecode(s string) ([]byte, error) {
 		return nil, fmt.Errorf("odd hex length")
 	}
 	out := make([]byte, len(s)/2)
-	for i := 0; i < len(out); i++ {
+	for i := range out {
 		hi, lo := hexVal(s[i*2]), hexVal(s[i*2+1])
 		if hi < 0 || lo < 0 {
 			return nil, fmt.Errorf("invalid hex")
@@ -360,7 +361,7 @@ func putU64LE(b []byte, v uint64) {
 	b[7] = byte(v >> 56)
 }
 
-func mustMarshal(v interface{}) []byte {
+func mustMarshal(v any) []byte {
 	b, _ := json.Marshal(v)
 	return b
 }

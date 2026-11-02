@@ -21,11 +21,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gorilla/websocket"
-
 	"github.com/sagernet/sing-box/transport/compat/openflux/netbind"
 	"github.com/sagernet/sing-box/transport/compat/openflux/transport"
 	"github.com/sagernet/sing-box/transport/compat/openflux/utils"
+
+	"github.com/gorilla/websocket"
 )
 
 const mailruUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36"
@@ -50,7 +50,7 @@ type MailruDocsInfo struct {
 	FileType     string
 	DocURL       string
 	DocTitle     string
-	Permissions  map[string]interface{}
+	Permissions  map[string]any
 	CallbackURL  string
 	EditorUserID string
 }
@@ -110,8 +110,8 @@ func normalizeWeblink(weblink string) string {
 		"https://cloud.mail.ru/",
 		"http://cloud.mail.ru/",
 	} {
-		if strings.HasPrefix(weblink, prefix) {
-			return strings.Trim(strings.TrimPrefix(weblink, prefix), "/")
+		if after, ok := strings.CutPrefix(weblink, prefix); ok {
+			return strings.Trim(after, "/")
 		}
 	}
 	return weblink
@@ -233,23 +233,23 @@ func (t *MailruDocsTransport) connectToDoc(attempt int) {
 		auth1 := fmt.Sprintf(`40{"token":"%s"}`, info.Token)
 		session.safeWrite(websocket.TextMessage, []byte(auth1))
 
-		authMsg := map[string]interface{}{
+		authMsg := map[string]any{
 			"type":                "auth",
 			"docid":               info.DocKey,
 			"documentCallbackUrl": info.CallbackURL,
 			"token":               "fghhfgsjdgfjs",
-			"user": map[string]interface{}{
+			"user": map[string]any{
 				"id":        info.EditorUserID,
 				"username":  userID,
 				"indexUser": -1,
 			},
 			"editorType":         0,
 			"lastOtherSaveTime":  -1,
-			"block":              []interface{}{},
+			"block":              []any{},
 			"documentFormatSave": 65,
 			"view":               false,
 			"isCloseCoAuthoring": false,
-			"openCmd": map[string]interface{}{
+			"openCmd": map[string]any{
 				"c":               "open",
 				"id":              info.DocKey,
 				"userid":          info.EditorUserID,
@@ -270,7 +270,7 @@ func (t *MailruDocsTransport) connectToDoc(attempt int) {
 			"time":                  1000,
 			"supportAuthChangesAck": true,
 		}
-		messagePart, _ := json.Marshal([]interface{}{"message", authMsg})
+		messagePart, _ := json.Marshal([]any{"message", authMsg})
 		session.safeWrite(websocket.TextMessage, []byte(fmt.Sprintf("42%s", string(messagePart))))
 
 		connectedAt := time.Now()
@@ -481,14 +481,8 @@ func reconnectBackoff(n int) time.Duration {
 	if n < 1 {
 		n = 1
 	}
-	shift := n - 1
-	if shift > 5 {
-		shift = 5
-	}
-	d := 500 * time.Millisecond * time.Duration(1<<uint(shift))
-	if d > 15*time.Second {
-		d = 15 * time.Second
-	}
+	shift := min(n-1, 5)
+	d := min(500*time.Millisecond*time.Duration(1<<uint(shift)), 15*time.Second)
 	d += time.Duration(rand.Int63n(int64(d/2) + 1))
 	return d
 }
@@ -537,7 +531,7 @@ func (t *MailruDocsTransport) fetchDocInfo(weblink string) (MailruDocsInfo, erro
 
 	bodyBytes, _ := io.ReadAll(resp.Body)
 
-	var res map[string]interface{}
+	var res map[string]any
 	if err := json.Unmarshal(bodyBytes, &res); err != nil {
 		return MailruDocsInfo{}, fmt.Errorf("failed to parse JSON: %w", err)
 	}
@@ -545,7 +539,7 @@ func (t *MailruDocsTransport) fetchDocInfo(weblink string) (MailruDocsInfo, erro
 	apiBase, _ := res["api"].(string)
 	token, _ := res["token"].(string)
 
-	document, ok := res["document"].(map[string]interface{})
+	document, ok := res["document"].(map[string]any)
 	if !ok || document == nil {
 		return MailruDocsInfo{}, fmt.Errorf("document object missing")
 	}
@@ -554,18 +548,18 @@ func (t *MailruDocsTransport) fetchDocInfo(weblink string) (MailruDocsInfo, erro
 	fileType, _ := document["fileType"].(string)
 	docURL, _ := document["url"].(string)
 	docTitle, _ := document["title"].(string)
-	permissions, _ := document["permissions"].(map[string]interface{})
+	permissions, _ := document["permissions"].(map[string]any)
 	if permissions == nil {
-		permissions = make(map[string]interface{})
+		permissions = make(map[string]any)
 	}
 
-	editorConfig, ok := res["editorConfig"].(map[string]interface{})
+	editorConfig, ok := res["editorConfig"].(map[string]any)
 	if !ok || editorConfig == nil {
 		return MailruDocsInfo{}, fmt.Errorf("editorConfig object missing")
 	}
 	callbackURL, _ := editorConfig["callbackUrl"].(string)
 
-	userObj, _ := editorConfig["user"].(map[string]interface{})
+	userObj, _ := editorConfig["user"].(map[string]any)
 	var editorUserID string
 	if userObj != nil {
 		editorUserID, _ = userObj["id"].(string)

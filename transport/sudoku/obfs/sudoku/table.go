@@ -8,9 +8,7 @@ import (
 	"strings"
 )
 
-var (
-	ErrInvalidSudokuMapMiss = errors.New("INVALID_SUDOKU_MAP_MISS")
-)
+var ErrInvalidSudokuMapMiss = errors.New("INVALID_SUDOKU_MAP_MISS")
 
 type Table struct {
 	EncodeTable [256][][4]byte
@@ -111,7 +109,7 @@ func newSingleDirectionTable(key string, mode string, customPattern string) (*Ta
 	combine(0, 4, []int{})
 
 	// 构建映射表
-	for byteVal := 0; byteVal < 256; byteVal++ {
+	for byteVal := range 256 {
 		targetGrid := shuffledGrids[byteVal]
 		for _, positions := range combinations {
 			var currentHints [4]byte

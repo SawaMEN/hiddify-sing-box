@@ -159,20 +159,6 @@ func (m *Manager) ResetNetwork() {
 	}
 }
 
-func (m *Manager) close() error {
-	m.access.Lock()
-	defer m.access.Unlock()
-	var err error
-	for _, transport := range m.managedTransports {
-		err = E.Append(err, transport.close(), func(err error) error {
-			return E.Cause(err, "close http client")
-		})
-	}
-	m.managedTransports = nil
-	m.sharedTransports = nil
-	return err
-}
-
 func (m *Manager) References() []string {
 	m.access.Lock()
 	defer m.access.Unlock()

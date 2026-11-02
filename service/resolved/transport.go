@@ -49,6 +49,7 @@ type Transport struct {
 	timeout                time.Duration
 	attempts               int
 	rotate                 bool
+	ndots                  int // H
 	service                *Service
 	linkAccess             sync.RWMutex
 	linkServers            map[*TransportLink]*LinkServers
@@ -80,6 +81,7 @@ func NewTransport(ctx context.Context, logger log.ContextLogger, tag string, opt
 		// rotate:                 options.Rotate,
 		timeout:     5 * time.Second,
 		attempts:    2,
+		ndots:       1, // H
 		linkServers: make(map[*TransportLink]*LinkServers),
 	}, nil
 }
@@ -216,6 +218,7 @@ func (t *Transport) updateTransports(link *TransportLink) error {
 			UDPFragmentDefault: true,
 		},
 	}))
+	serverScope := adapter.NewScope(t.ctx, t.logger) // H
 	var transports []adapter.DNSTransport
 	for _, address := range link.address {
 		serverAddr, ok := netip.AddrFromSlice(address.Address)
@@ -260,6 +263,12 @@ func (t *Transport) updateTransports(link *TransportLink) error {
 				serverPort = 53
 			}
 			transports = append(transports, transport.NewUDPRaw(t.logger, t.TransportAdapter, serverDialer, M.SocksaddrFrom(serverAddr, serverPort)))
+		}
+	}
+	for _, child := range transports {
+		if err := serverScope.Start("resolved/"+child.Tag(), child, adapter.StartStateStart); err != nil {
+			_ = serverScope.Close()
+			return err
 		}
 	}
 	t.linkServers[link] = &LinkServers{

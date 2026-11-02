@@ -1,14 +1,13 @@
 package main
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"os"
 	"strings"
-
-	_ "embed"
 
 	"github.com/oschwald/geoip2-golang"
 )
@@ -24,7 +23,7 @@ func main() {
 	defer db.Close()
 	added := map[string]struct{}{}
 	result := map[string][]string{}
-	for _, line := range strings.Split(resolvers, "\n") {
+	for line := range strings.SplitSeq(resolvers, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || line[0] == '#' {
 			continue
@@ -45,6 +44,5 @@ func main() {
 	j, _ := json.MarshalIndent(result, "", "  ")
 	fmt.Println(string(j))
 
-	os.WriteFile("ips_by_country.json", j, 0644)
-
+	os.WriteFile("ips_by_country.json", j, 0o644)
 }

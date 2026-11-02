@@ -18,18 +18,28 @@ const laterInterval = time.Second
 func (b *bind_adapter) openLater(port uint16) ([]conn.ReceiveFunc, uint16, error) {
 	done := make(chan struct{})
 	b.later = done
-	peer := b.peer
 	var peerConn net.PacketConn // only the receive loop uses it
 	return []conn.ReceiveFunc{func(packets [][]byte, sizes []int, eps []conn.Endpoint) (int, error) {
 		if peerConn == nil {
 			select {
 			case <-done:
 				return 0, net.ErrClosed
-			case <-time.After(laterInterval):
+			default:
 			}
+			// Connect immediately on first use instead of delaying the first
+			// handshake. Retry only failed attempts, and always use the
+			// current peer after a fallback or network change.
+			b.mutex.Lock()
+			peer := b.peer
+			b.mutex.Unlock()
 			dialed, err := b.connect(peer.Addr(), peer.Port())
 			if err != nil {
-				return 0, nil // the receive loop calls again
+				select {
+				case <-done:
+					return 0, net.ErrClosed
+				case <-time.After(laterInterval):
+					return 0, nil
+				}
 			}
 			b.mutex.Lock()
 			select {

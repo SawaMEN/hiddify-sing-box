@@ -33,54 +33,54 @@ func NewConsistentHashing(outbounds []adapter.Outbound, options option.BalancerO
 
 var _ Strategy = (*ConsistentHashing)(nil)
 
-func (s *ConsistentHashing) Now() string {
+func (receiver *ConsistentHashing) Now() string {
 	return ""
 }
-func (s *ConsistentHashing) UpdateOutboundsInfo(history map[string]*adapter.URLTestHistory) bool {
-	_, minDelay := getMinDelay(s.outbounds, history)
+
+func (receiver *ConsistentHashing) UpdateOutboundsInfo(history map[string]*adapter.URLTestHistory) bool {
+	_, minDelay := getMinDelay(receiver.outbounds, history)
 	delayMap := getDelayMap(history)
 	res := map[string]uint16{}
 	for net, d := range minDelay {
-		acceptableDelay := uint16(math.Max(100, float64(d)) * s.delayAcceptableRatio)
+		acceptableDelay := uint16(math.Min(65535, math.Max(100, float64(d))*receiver.delayAcceptableRatio))
 		res[net] = acceptableDelay
 	}
-	s.mu.Lock()
-	s.delays = delayMap
-	s.maxAcceptableDelay = res
-	s.mu.Unlock()
+	receiver.mu.Lock()
+	receiver.delays = delayMap
+	receiver.maxAcceptableDelay = res
+	receiver.mu.Unlock()
 	return true
 }
-func (g *ConsistentHashing) Select(metadata adapter.InboundContext, net string, touch bool) adapter.Outbound {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+
+func (receiver *ConsistentHashing) Select(metadata adapter.InboundContext, net string, touch bool) adapter.Outbound {
+	receiver.mu.Lock()
+	defer receiver.mu.Unlock()
 	if net != N.NetworkTCP && net != N.NetworkUDP {
 		net = N.NetworkTCP
 	}
-	key := g.hash.Hash(getKey(&metadata))
-	buckets := int32(len(g.outbounds[net]))
-	for i := 0; i < g.maxRetry; i, key = i+1, key+1 {
+	key := receiver.hash.Hash(getKey(&metadata))
+	buckets := int32(len(receiver.outbounds[net]))
+	for i := 0; i < receiver.maxRetry; i, key = i+1, key+1 {
 		idx := jumpHash(key, buckets)
-		proxy := g.outbounds[net][idx]
-		if g.Alive(proxy, net) {
+		proxy := receiver.outbounds[net][idx]
+		if receiver.Alive(proxy, net) {
 			return proxy
 		}
 	}
 
 	// when availability is poor, traverse the entire list to get the available nodes
-	for _, proxy := range g.outbounds[net] {
-		if g.Alive(proxy, net) {
+	for _, proxy := range receiver.outbounds[net] {
+		if receiver.Alive(proxy, net) {
 			return proxy
 		}
 	}
 	idx := jumpHash(key, buckets)
-	return g.outbounds[net][idx]
-
+	return receiver.outbounds[net][idx]
 }
 
-func (s *ConsistentHashing) Alive(proxy adapter.Outbound, net string) bool {
-	if delay, ok := s.delays[proxy.Tag()]; ok {
-		return delay <= s.maxAcceptableDelay[net]
+func (receiver *ConsistentHashing) Alive(proxy adapter.Outbound, net string) bool {
+	if delay, ok := receiver.delays[proxy.Tag()]; ok {
+		return delay <= receiver.maxAcceptableDelay[net]
 	}
 	return false
-
 }

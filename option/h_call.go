@@ -36,7 +36,7 @@ func ParseCookieHeader(header string) CallCookieList {
 		return nil
 	}
 	var list CallCookieList
-	for _, part := range strings.Split(header, ";") {
+	for part := range strings.SplitSeq(header, ";") {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue

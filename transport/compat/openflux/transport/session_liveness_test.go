@@ -21,12 +21,6 @@ func blackhole(wires ...*startCountingWire) {
 	}
 }
 
-func sentCount(w *startCountingWire) int {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return len(w.packets)
-}
-
 func startPair(t *testing.T, client, exit *Session) {
 	t.Helper()
 	if err := exit.Start(); err != nil {
@@ -75,15 +69,22 @@ func TestSessionPrefersHigherPriorityCarrier(t *testing.T) {
 	exit.Receive(func([]byte) { got.Add(1) })
 	startPair(t, client, exit)
 
-	before := sentCount(cw["yandex"])
-	for i := 0; i < 5; i++ {
+	// A completed handshake does not guarantee that the preferred carrier
+	// has already been heard from. First establish that it is live, then
+	// blackhole the standby carrier: data routed to the standby will be
+	// lost, while unrelated handshake/keepalive packets are harmless.
+	eventually(t, "preferred carrier to become active", func() bool {
+		return client.ActiveTransport() == "direct"
+	})
+	blackhole(cw["yandex"])
+	for range 5 {
 		if err := client.Send(testIPv4(40, 6)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	eventually(t, "data delivery", func() bool { return got.Load() == 5 })
-	if after := sentCount(cw["yandex"]); after != before {
-		t.Fatalf("lower-priority carrier carried data while the preferred one was live (%d -> %d)", before, after)
+	eventually(t, "data delivery over preferred carrier", func() bool { return got.Load() == 5 })
+	if active := client.ActiveTransport(); active != "direct" {
+		t.Fatalf("active transport = %q, want direct", active)
 	}
 }
 

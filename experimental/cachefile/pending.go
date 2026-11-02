@@ -80,6 +80,44 @@ func (c *CacheFile) Flush() {
 		c.logger.Warn("save cache: ", err)
 	}
 	c.pendingAccess.Lock()
+	if err != nil {
+		// A failed transaction must not evict cached entries. Keep newer writes
+		// made during the flush, and requeue older values only when absent.
+		for key, entry := range writing.dnsCache {
+			if _, exists := c.pending.dnsCache[key]; !exists {
+				c.pending.dnsCache[key] = entry
+				c.pending.count++
+				c.pending.size += len(key.QuestionName) + len(entry.value)
+			}
+		}
+		for key := range writing.rdrc {
+			if _, exists := c.pending.rdrc[key]; !exists {
+				c.pending.rdrc[key] = struct{}{}
+				c.pending.count++
+				c.pending.size += len(key.QuestionName)
+			}
+		}
+		for addr, domain := range writing.fakeIPDomain {
+			if _, exists := c.pending.fakeIPDomain[addr]; !exists {
+				c.pending.fakeIPDomain[addr] = domain
+				c.pending.count++
+				c.pending.size += len(domain)
+			}
+		}
+		for domain, addr := range writing.fakeIPAddress4 {
+			if _, exists := c.pending.fakeIPAddress4[domain]; !exists {
+				c.pending.fakeIPAddress4[domain] = addr
+			}
+		}
+		for domain, addr := range writing.fakeIPAddress6 {
+			if _, exists := c.pending.fakeIPAddress6[domain]; !exists {
+				c.pending.fakeIPAddress6[domain] = addr
+			}
+		}
+		if c.pending.fakeIPMetadata == nil {
+			c.pending.fakeIPMetadata = writing.fakeIPMetadata
+		}
+	}
 	c.writing = nil
 	c.pendingAccess.Unlock()
 }

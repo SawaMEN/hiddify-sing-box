@@ -120,10 +120,7 @@ func TestRecordConn_KeyUpdate_FullDuplex(t *testing.T) {
 		buf := make([]byte, 32*1024)
 		var remain int64 = totalBytes
 		for remain > 0 {
-			n := int64(len(buf))
-			if n > remain {
-				n = remain
-			}
+			n := min(int64(len(buf)), remain)
 			_, err := io.ReadFull(rcClient, buf[:n])
 			if err != nil {
 				readDone <- err
@@ -139,10 +136,7 @@ func TestRecordConn_KeyUpdate_FullDuplex(t *testing.T) {
 	buf := make([]byte, 32*1024)
 	var remain int64 = totalBytes
 	for remain > 0 {
-		n := int64(len(buf))
-		if n > remain {
-			n = remain
-		}
+		n := min(int64(len(buf)), remain)
 		_, _ = rng.Read(buf[:n])
 		_, _ = writeH.Write(buf[:n])
 		if err := connutil.WriteFull(rcClient, buf[:n]); err != nil {

@@ -138,10 +138,8 @@ func TestSudokuTunnel_Standard(t *testing.T) {
 	// 5. Verify Data Transfer
 	message := "Hello, Sudoku!"
 	var wg sync.WaitGroup
-	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		buf := make([]byte, 1024)
 		n, err := conn.Read(buf)
 		if err != nil {
@@ -152,7 +150,7 @@ func TestSudokuTunnel_Standard(t *testing.T) {
 		if received != message {
 			t.Errorf("Client received wrong message: got %q, want %q", received, message)
 		}
-	}()
+	})
 
 	_, err = conn.Write([]byte(message))
 	if err != nil {

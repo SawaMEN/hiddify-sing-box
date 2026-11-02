@@ -11,10 +11,10 @@ import "encoding/json"
 // Params is a free-form bag for the rest (tokens, room lists, dial
 // addresses, etc.).
 type TransportConfig struct {
-	Name   string                 `json:"name"`
-	Type   string                 `json:"type"`
-	URL    string                 `json:"url,omitempty"`
-	Params map[string]interface{} `json:"params,omitempty"`
+	Name   string         `json:"name"`
+	Type   string         `json:"type"`
+	URL    string         `json:"url,omitempty"`
+	Params map[string]any `json:"params,omitempty"`
 }
 
 // Encode serializes the config to JSON.

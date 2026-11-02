@@ -9,11 +9,12 @@ import (
 	"sync"
 	"time"
 
-	connectip "github.com/Diniboy1123/connect-ip-go"
 	"github.com/sagernet/quic-go/http3"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
+
+	connectip "github.com/Diniboy1123/connect-ip-go"
 )
 
 type TunnelDevice interface {
@@ -32,7 +33,12 @@ type Tunnel struct {
 	tr      *http3.Transport
 	ipConn  *connectip.Conn
 
-	mtx sync.Mutex
+	mtx            sync.Mutex
+	endpointAccess sync.Mutex   // H
+	autoAccess     sync.Mutex   // H
+	http2Until     time.Time    // H
+	http2Step      int          // H
+	failures       map[bool]int // H
 }
 
 func NewTunnel(ctx context.Context, logger logger.ContextLogger, options TunnelOptions) (*Tunnel, error) {
@@ -52,6 +58,7 @@ func NewTunnel(ctx context.Context, logger logger.ContextLogger, options TunnelO
 		ctx:          ctx,
 		logger:       logger,
 		options:      options,
+		failures:     make(map[bool]int), // H
 		tunDevice:    tunDevice,
 		tunnelDevice: NewNetstackAdapter(tunDevice),
 	}, nil
@@ -119,7 +126,7 @@ func (e *Tunnel) maintainTunnel() {
 					}
 					continue
 				}
-				e.logger.ErrorContext(e.ctx, fmt.Errorf("Error writing to IP connection: %v, continuing...", err))
+				e.logger.ErrorContext(e.ctx, fmt.Errorf("error writing to IP connection: %v, continuing", err))
 				continue
 			}
 			if len(icmp) > 0 {
@@ -128,7 +135,7 @@ func (e *Tunnel) maintainTunnel() {
 						e.logger.ErrorContext(e.ctx, fmt.Errorf("connection closed while writing ICMP to TUN device: %v", err))
 						continue
 					}
-					e.logger.ErrorContext(e.ctx, fmt.Errorf("Error writing ICMP to TUN device: %v, continuing...", err))
+					e.logger.ErrorContext(e.ctx, fmt.Errorf("error writing ICMP to TUN device: %v, continuing", err))
 				}
 			}
 		}
@@ -148,7 +155,7 @@ func (e *Tunnel) maintainTunnel() {
 					}
 					continue
 				}
-				e.logger.ErrorContext(e.ctx, fmt.Errorf("Error reading from IP connection: %v, continuine...", err))
+				e.logger.ErrorContext(e.ctx, fmt.Errorf("error reading from IP connection: %v, continuine", err))
 				continue
 			}
 			if err := e.tunnelDevice.WritePacket(buf[:n]); err != nil {
@@ -169,52 +176,15 @@ func (e *Tunnel) getIpConn() (*connectip.Conn, error) {
 		return e.ipConn, nil
 	}
 	e.logger.InfoContext(e.ctx, "Establishing MASQUE connection to ", e.options.Endpoint)
-	timer := time.NewTimer(0)
-	defer timer.Stop()
-	for {
-		e.logger.InfoContext(e.ctx, fmt.Errorf("Establishing MASQUE connection to %s", e.options.Endpoint))
-		udpConn, tr, ipConn, rsp, err := ConnectTunnel(
-			e.ctx,
-			e.options.Dialer,
-			e.options.TLSConfig,
-			DefaultQuicConfig(e.options.UDPKeepalivePeriod, e.options.UDPInitialPacketSize),
-			"https://cloudflareaccess.com",
-			e.options.Endpoint,
-			e.options.UseHTTP2,
-		)
-		if err != nil {
-			e.logger.ErrorContext(e.ctx, fmt.Errorf("Failed to connect tunnel: %v", err))
-			timer.Reset(e.options.ReconnectDelay)
-			select {
-			case <-e.ctx.Done():
-				return nil, err
-			case <-timer.C:
-			}
-			continue
-		}
-		if rsp.StatusCode != 200 {
-			e.logger.ErrorContext(e.ctx, fmt.Errorf("Tunnel connection failed: %s", rsp.Status))
-			ipConn.Close()
-			if udpConn != nil {
-				udpConn.Close()
-			}
-			if tr != nil {
-				tr.Close()
-			}
-			timer.Reset(e.options.ReconnectDelay)
-			select {
-			case <-e.ctx.Done():
-				return nil, err
-			case <-timer.C:
-			}
-			continue
-		}
-		e.udpConn = udpConn
-		e.tr = tr
-		e.ipConn = ipConn
-		e.logger.InfoContext(e.ctx, "Connected to MASQUE server", e.options.Endpoint)
-		return ipConn, nil
+	activeConn, err := e.connect()
+	if err != nil {
+		return nil, err
 	}
+	e.udpConn = activeConn.udpConn
+	e.tr = activeConn.tr
+	e.ipConn = activeConn.ipConn
+	e.logger.InfoContext(e.ctx, "Connected to MASQUE server", e.options.Endpoint)
+	return activeConn.ipConn, nil
 }
 
 func (e *Tunnel) closeIpConn(ipConn *connectip.Conn) bool {

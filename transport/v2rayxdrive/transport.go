@@ -119,6 +119,7 @@ func NewServer(ctx context.Context, _ logger.ContextLogger, options Config, tlsC
 	ctx, cancel := context.WithCancel(ctx)
 	return &Server{ctx: ctx, cancel: cancel, options: &streamOptions{ProtocolSettings: &options, ctx: ctx, dialer: nativeDialer}, handler: handler}, nil
 }
+
 func (s *Server) Start() error {
 	listener, err := listenSessions(s.ctx, s.options, func(conn net.Conn) {
 		go s.handler.NewConnectionEx(log.ContextWithNewID(s.ctx), conn, M.Socksaddr{}, M.Socksaddr{}, nil)
@@ -158,6 +159,7 @@ func NewClient(ctx context.Context, nativeDialer N.Dialer, _ M.Socksaddr, option
 	ctx, cancel := context.WithCancel(ctx)
 	return &Client{ctx: ctx, cancel: cancel, options: &streamOptions{ProtocolSettings: &options, ctx: ctx, dialer: nativeDialer}}, nil
 }
+
 func (c *Client) DialContext(ctx context.Context) (net.Conn, error) {
 	if err := c.ctx.Err(); err != nil {
 		return nil, err
@@ -186,6 +188,7 @@ func (c *Client) DialContext(ctx context.Context) (net.Conn, error) {
 	c.mu.Unlock()
 	return tracked, nil
 }
+
 func (c *Client) Close() error {
 	c.cancel()
 	c.mu.Lock()

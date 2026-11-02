@@ -7,14 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ameshkov/dnscrypt/v2"
-	"github.com/ameshkov/dnsstamps"
 	"github.com/sagernet/sing-box/adapter"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/json"
 
+	"github.com/ameshkov/dnscrypt/v2"
+	"github.com/ameshkov/dnsstamps"
 	mDNS "github.com/miekg/dns"
 	"github.com/stretchr/testify/require"
 )
@@ -75,7 +75,7 @@ func hQuery() *mDNS.Msg {
 func TestH_SDNSExchangeDNSCrypt(t *testing.T) {
 	t.Parallel()
 	transport := hNewSDNS(t, hStartDNSCryptServer(t))
-	require.NoError(t, transport.Start(adapter.StartStateStart))
+	require.NoError(t, transport.Start(adapter.StartStateStart, nil))
 	defer transport.Close()
 
 	response, err := transport.Exchange(context.Background(), hQuery())
@@ -151,7 +151,6 @@ func TestH_SDNSOptionsJSON(t *testing.T) {
 }
 
 func TestH_SDNSAdapterMetadata(t *testing.T) {
-	t.Skip("BUG: sdns.go NewSDNSTransport never initializes the embedded dns.TransportAdapter, so Tag() and Type() are empty")
 	t.Parallel()
 	transport := hNewSDNS(t, "sdns://")
 	require.Equal(t, "sdns-test", transport.Tag())

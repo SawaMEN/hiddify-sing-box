@@ -13,8 +13,8 @@ import (
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/transport/sip003"
-	"github.com/sagernet/sing-shadowsocks2"
-	"github.com/sagernet/sing-shadowsocks2/shadowaead_2022" //H
+	shadowsocks "github.com/sagernet/sing-shadowsocks2"
+	"github.com/sagernet/sing-shadowsocks2/shadowaead_2022" // H
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/bufio"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -178,16 +178,16 @@ func (h *shadowsocksDialer) DialContext(ctx context.Context, network string, des
 		if err != nil {
 			return nil, err
 		}
-		if _, is2022 := h.method.(*shadowaead_2022.Method); is2022 { //H
-			return dialShadowsocks2022(ctx, h.method, outConn, destination) //H
-		} //H
+		if _, is2022 := h.method.(*shadowaead_2022.Method); is2022 { // H
+			return dialShadowsocks2022(ctx, h.method, outConn, destination) // H
+		} // H
 		return h.method.DialEarlyConn(outConn, destination), nil
 	case N.NetworkUDP:
 		outConn, err := h.dialer.DialContext(ctx, N.NetworkUDP, h.serverAddr)
 		if err != nil {
 			return nil, err
 		}
-		return bufio.NewBindPacketConn(wholepacket.Wrap(h.method.DialPacketConn(outConn)), destination), nil //H
+		return bufio.NewBindPacketConn(wholepacket.Wrap(h.method.DialPacketConn(outConn)), destination), nil // H
 	default:
 		return nil, E.Extend(N.ErrUnknownNetwork, network)
 	}
@@ -201,5 +201,5 @@ func (h *shadowsocksDialer) ListenPacket(ctx context.Context, destination M.Sock
 	if err != nil {
 		return nil, err
 	}
-	return wholepacket.Wrap(h.method.DialPacketConn(outConn)), nil //H: QUIC through Shadowsocks cut full packets off
+	return wholepacket.Wrap(h.method.DialPacketConn(outConn)), nil // H: QUIC through Shadowsocks cut full packets off
 }

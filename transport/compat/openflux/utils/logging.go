@@ -116,7 +116,7 @@ func Sensitive() bool {
 
 // Verbosef logs at hexdump level (LevelHexdump / -ddd). Kept for call sites
 // that emit their own detailed dumps instead of network.LogPacket.
-func Verbosef(format string, args ...interface{}) {
+func Verbosef(format string, args ...any) {
 	if Level() >= LevelHexdump {
 		emit(fmt.Sprintf(format, args...))
 	}
@@ -124,7 +124,7 @@ func Verbosef(format string, args ...interface{}) {
 
 // Sensitivef logs only when --sensitive is on and operational logs are
 // enabled (LevelDebug and up). For secrets that must never appear otherwise.
-func Sensitivef(format string, args ...interface{}) {
+func Sensitivef(format string, args ...any) {
 	if Level() >= LevelDebug && sensitive.Load() {
 		emit(fmt.Sprintf(format, args...))
 	}
@@ -144,14 +144,14 @@ func Redact(label string, b []byte) string {
 }
 
 // Packetf logs a packet-movement line (LevelPackets and up).
-func Packetf(format string, args ...interface{}) {
+func Packetf(format string, args ...any) {
 	if Level() >= LevelPackets {
 		emit(fmt.Sprintf(format, args...))
 	}
 }
 
 // Debugf logs an operational message (LevelDebug and up).
-func Debugf(format string, args ...interface{}) {
+func Debugf(format string, args ...any) {
 	if Level() >= LevelDebug {
 		emit(fmt.Sprintf(format, args...))
 	}
@@ -174,7 +174,7 @@ func emit(message string) {
 // With a log sink set (an embedding app: the Android and iOS bridges) the
 // line goes there, so the app's log screen shows the same status lines as
 // the CLI's output; otherwise to the standard log.
-func Infof(format string, args ...interface{}) {
+func Infof(format string, args ...any) {
 	message := fmt.Sprintf(format, args...)
 	logSinkMu.RLock()
 	sink := logSink

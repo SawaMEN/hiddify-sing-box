@@ -26,12 +26,13 @@ type hClient struct {
 	config *stdtls.Config
 }
 
-func (c *hClient) ServerName() string                        { return c.config.ServerName }
-func (c *hClient) SetServerName(name string)                 { c.config.ServerName = name }
-func (c *hClient) NextProtos() []string                      { return c.config.NextProtos }
-func (c *hClient) SetNextProtos(nextProto []string)          { c.config.NextProtos = nextProto }
-func (c *hClient) STDConfig() (*stdtls.Config, error)        { return c.config, nil }
-func (c *hClient) Client(conn net.Conn) (aTLS.Conn, error)   { return stdtls.Client(conn, c.config), nil }
+func (c *hClient) ServerName() string                      { return c.config.ServerName }
+func (c *hClient) SetServerName(name string)               { c.config.ServerName = name }
+func (c *hClient) NextProtos() []string                    { return c.config.NextProtos }
+func (c *hClient) SetNextProtos(nextProto []string)        { c.config.NextProtos = nextProto }
+func (c *hClient) STDConfig() (*stdtls.Config, error)      { return c.config, nil }
+func (c *hClient) Client(conn net.Conn) (aTLS.Conn, error) { return stdtls.Client(conn, c.config), nil }
+
 func (c *hClient) Clone() aTLS.Config                        { return &hClient{config: c.config.Clone()} }
 func (c *hClient) HandshakeTimeout() time.Duration           { return 0 }
 func (c *hClient) SetHandshakeTimeout(timeout time.Duration) {}

@@ -37,7 +37,7 @@ func (m *OutboundMonitoring) buildRegistry(previous *monitoringRegistry) (*monit
 			state.lastURL = old.lastURL
 			state.invalid = old.invalid
 			state.from_cache = old.from_cache
-			state.ipInfoFromCache = old.ipInfoFromCache //H
+			state.ipInfoFromCache = old.ipInfoFromCache // H
 			old.mu.Unlock()
 		}
 		registry.outbounds[outbound.Tag()] = state

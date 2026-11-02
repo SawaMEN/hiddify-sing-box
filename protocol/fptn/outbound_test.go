@@ -11,11 +11,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/gorilla/websocket"
-	"github.com/sagernet/sing-box/internal/paneltest"
-	"github.com/sagernet/sing-box/option"
-	wire "github.com/sagernet/sing-box/transport/fptn"
-	M "github.com/sagernet/sing/common/metadata"
 	"io"
 	"math/big"
 	"net"
@@ -24,6 +19,13 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/sagernet/sing-box/internal/paneltest"
+	"github.com/sagernet/sing-box/option"
+	wire "github.com/sagernet/sing-box/transport/fptn"
+	M "github.com/sagernet/sing/common/metadata"
+
+	"github.com/gorilla/websocket"
 )
 
 // Independent server implementation of FPTN's packed C++ obfuscator header.
@@ -61,6 +63,7 @@ func (c *serverWire) Read(p []byte) (int, error) {
 	c.pending = b[:n]
 	return c.Read(p)
 }
+
 func (c *serverWire) Write(p []byte) (int, error) {
 	if !c.handshake.Load() {
 		return c.Conn.Write(p)
@@ -106,9 +109,11 @@ type testDialer struct{}
 func (testDialer) DialContext(ctx context.Context, n string, d M.Socksaddr) (net.Conn, error) {
 	return (&net.Dialer{}).DialContext(ctx, n, d.String())
 }
+
 func (testDialer) ListenPacket(ctx context.Context, d M.Socksaddr) (net.PacketConn, error) {
 	return net.ListenPacket("udp", "127.0.0.1:0")
 }
+
 func TestPinnedTLSProtobufTCPUDP(t *testing.T) {
 	key, e := rsa.GenerateKey(rand.Reader, 2048)
 	if e != nil {
@@ -192,7 +197,6 @@ func TestPinnedTLSProtobufTCPUDP(t *testing.T) {
 			}
 			paneltest.Echo(t, c)
 		}
-
 	}
 
 	packet, e := h.ListenPacket(ctx, M.SocksaddrFrom(netip.MustParseAddr("10.23.0.1"), 8081))

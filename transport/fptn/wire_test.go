@@ -24,6 +24,7 @@ func TestSessionIDMarker(t *testing.T) {
 		}
 	}
 }
+
 func TestTLS2WireRecord(t *testing.T) {
 	a, b := net.Pipe()
 	defer a.Close()

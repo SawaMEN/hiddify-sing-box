@@ -6,14 +6,14 @@ import (
 	"net/netip"
 	"sync"
 
-	legacy "github.com/amnezia-vpn/amneziawg-go/tun"
-	"github.com/amnezia-vpn/amneziawg-go/tun/netstack"
-	"github.com/amnezia-vpn/amneziawg-go/v3/tun"
 	"github.com/sagernet/sing/common/metadata"
+
+	"github.com/amnezia-vpn/amneziawg-go/v3/tun"
+	"github.com/amnezia-vpn/amneziawg-go/v3/tun/netstack"
 )
 
 type networkTun struct {
-	legacy.Device
+	tun.Device
 	conn      *netstack.Net
 	events    chan tun.Event
 	done      chan struct{}
@@ -32,8 +32,7 @@ func newNetworkTun(address []netip.Prefix, mtu uint32) (tunAdapter, error) {
 		return nil, err
 	}
 
-	// Keep the existing sing-box-compatible gVisor stack while using AWG v3's
-	// wire protocol. Its only nominal interface difference is the Event type.
+	// Use the same v3 netstack and device types as the AWG engine and MTU discovery.
 	result := &networkTun{Device: device, conn: conn, events: make(chan tun.Event, 1), done: make(chan struct{})}
 	go func() {
 		defer close(result.events)

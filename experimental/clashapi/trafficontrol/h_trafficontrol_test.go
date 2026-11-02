@@ -33,6 +33,7 @@ func (f *fakeOutbound) IsReady() bool          { return true }
 func (f *fakeOutbound) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
 	return nil, errors.New("unsupported")
 }
+
 func (f *fakeOutbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
 	return nil, errors.New("unsupported")
 }

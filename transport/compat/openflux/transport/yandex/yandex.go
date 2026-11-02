@@ -16,11 +16,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gorilla/websocket"
-
 	"github.com/sagernet/sing-box/transport/compat/openflux/netbind"
 	"github.com/sagernet/sing-box/transport/compat/openflux/transport"
 	"github.com/sagernet/sing-box/transport/compat/openflux/utils"
+
+	"github.com/gorilla/websocket"
 )
 
 // ErrCaptchaRequired signals that the transport hit a SmartCaptcha challenge
@@ -128,7 +128,7 @@ func (t *YandexDocsTransport) buildSaveChanges(session *DocSession, seq int) []b
 	}
 	excelJSON, _ := json.Marshal(excelInfo)
 
-	msg := map[string]interface{}{
+	msg := map[string]any{
 		"type":                "saveChanges",
 		"changes":             string(changesJSON),
 		"startSaveChanges":    true,
@@ -140,7 +140,7 @@ func (t *YandexDocsTransport) buildSaveChanges(session *DocSession, seq int) []b
 		"unlock":              false,
 		"releaseLocks":        true,
 	}
-	body, _ := json.Marshal([]interface{}{"message", msg})
+	body, _ := json.Marshal([]any{"message", msg})
 	return append([]byte("42"), body...)
 }
 
@@ -155,8 +155,8 @@ type YandexDocsInfo struct {
 	Origin       string
 	Host         string
 	WsURL        string
-	Permissions  map[string]interface{}
-	OpenCmd      map[string]interface{}
+	Permissions  map[string]any
+	OpenCmd      map[string]any
 }
 
 type DocSession struct {
@@ -361,13 +361,13 @@ func (t *YandexDocsTransport) connectToDoc(attempt int) {
 		auth1 := fmt.Sprintf(`40{"token":"%s"}`, info.Token)
 		session.safeWrite(websocket.TextMessage, []byte(auth1))
 
-		authData := map[string]interface{}{
+		authData := map[string]any{
 			"type": "auth", "docid": info.DocID, "token": "fghhfgsjdgfjs",
-			"user": map[string]interface{}{"id": userID}, "editorType": 0,
+			"user": map[string]any{"id": userID}, "editorType": 0,
 			"lastOtherSaveTime": -1, "permissions": info.Permissions,
 			"openCmd": info.OpenCmd, "coEditingMode": "fast", "jwtOpen": info.Token,
 		}
-		messagePart, _ := json.Marshal([]interface{}{"message", authData})
+		messagePart, _ := json.Marshal([]any{"message", authData})
 		session.safeWrite(websocket.TextMessage, []byte(fmt.Sprintf("42%s", string(messagePart))))
 
 		connectedAt := time.Now()
@@ -633,14 +633,8 @@ func reconnectBackoff(n int) time.Duration {
 	if n < 1 {
 		n = 1
 	}
-	shift := n - 1
-	if shift > 4 {
-		shift = 4
-	}
-	d := 1500 * time.Millisecond * time.Duration(1<<uint(shift))
-	if d > 30*time.Second {
-		d = 30 * time.Second
-	}
+	shift := min(n-1, 4)
+	d := min(1500*time.Millisecond*time.Duration(1<<uint(shift)), 30*time.Second)
 	// add up to +50% jitter
 	d += time.Duration(rand.Int63n(int64(d/2) + 1))
 	return d
@@ -721,8 +715,9 @@ func (t *YandexDocsTransport) fetchDocInfo(url, userID string) (YandexDocsInfo, 
 		}
 	}
 
-	client := &http.Client{Transport: netbind.HTTPTransport(t.DialContext),
-		Jar: jar,
+	client := &http.Client{
+		Transport: netbind.HTTPTransport(t.DialContext),
+		Jar:       jar,
 		// НЕ следуем редиректам автоматически — обрабатываем вручную.
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
@@ -737,7 +732,7 @@ func (t *YandexDocsTransport) fetchDocInfo(url, userID string) (YandexDocsInfo, 
 	var resp *http.Response
 	var err error
 
-	for hop := 0; hop < 10; hop++ {
+	for hop := range 10 {
 		utils.Debugf("[YDOCS] hop %d: GET %s", hop, shortStr(currentURL, 120))
 
 		req, _ := http.NewRequest("GET", currentURL, nil)
@@ -832,17 +827,17 @@ func (t *YandexDocsTransport) fetchDocInfo(url, userID string) (YandexDocsInfo, 
 			hint, resp.StatusCode, resp.Request.URL.String())
 	}
 
-	var config map[string]interface{}
+	var config map[string]any
 	if err := json.Unmarshal([]byte(matches[1]), &config); err != nil {
 		return YandexDocsInfo{}, fmt.Errorf("client-config is not valid JSON: %w", err)
 	}
 
-	officeAction, ok := config["officeActionData"].(map[string]interface{})
+	officeAction, ok := config["officeActionData"].(map[string]any)
 	if !ok || officeAction == nil {
 		return YandexDocsInfo{}, fmt.Errorf("officeActionData missing - will reconnect")
 	}
 
-	editorConfigRaw, ok := officeAction["editor_config"].(map[string]interface{})
+	editorConfigRaw, ok := officeAction["editor_config"].(map[string]any)
 	if !ok || editorConfigRaw == nil {
 		return YandexDocsInfo{}, fmt.Errorf("editor_config nil - will reconnect")
 	}
@@ -853,7 +848,7 @@ func (t *YandexDocsTransport) fetchDocInfo(url, userID string) (YandexDocsInfo, 
 	}
 	host := strings.TrimPrefix(balancerURL, "https://")
 
-	document, ok := editorConfigRaw["document"].(map[string]interface{})
+	document, ok := editorConfigRaw["document"].(map[string]any)
 	if !ok || document == nil {
 		return YandexDocsInfo{}, fmt.Errorf("editor_config.document missing - will reconnect")
 	}
@@ -868,16 +863,16 @@ func (t *YandexDocsTransport) fetchDocInfo(url, userID string) (YandexDocsInfo, 
 		return YandexDocsInfo{}, fmt.Errorf("editor_config.document.key missing - will reconnect")
 	}
 
-	perms, _ := document["permissions"].(map[string]interface{})
+	perms, _ := document["permissions"].(map[string]any)
 	if perms == nil {
-		perms = make(map[string]interface{})
+		perms = make(map[string]any)
 	}
 
 	// editor_config.user.id — настоящий id участника в документе: под него
 	// сервер подписывает presence/курсоры, и именно его нужно нести в
 	// saveChanges (иначе auth-сессия и saveChanges разойдутся).
 	editorUserID := ""
-	if userObj, ok := editorConfigRaw["user"].(map[string]interface{}); ok {
+	if userObj, ok := editorConfigRaw["user"].(map[string]any); ok {
 		if s, ok := userObj["id"].(string); ok {
 			editorUserID = s
 		}
@@ -895,7 +890,7 @@ func (t *YandexDocsTransport) fetchDocInfo(url, userID string) (YandexDocsInfo, 
 		IsExcel:      isExcel,
 		WsURL:        fmt.Sprintf("wss://%s/2024.1.1-375/doc/%s/c/?EIO=4&transport=websocket", host, docKey),
 		Permissions:  perms,
-		OpenCmd: map[string]interface{}{
+		OpenCmd: map[string]any{
 			"c":      "open",
 			"id":     docKey,
 			"userid": userID,

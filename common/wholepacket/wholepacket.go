@@ -19,7 +19,7 @@ import (
 // maxUDPPacket is the largest UDP payload.
 const maxUDPPacket = 65535
 
-var buffers = sync.Pool{New: func() any { return make([]byte, maxUDPPacket) }}
+var buffers = sync.Pool{New: func() any { return new([maxUDPPacket]byte) }}
 
 // Wrap returns conn reading whole packets in ReadFrom. A UDP socket, or a connection already
 // wrapped, is returned as it is; the buffer-based packet methods are kept.
@@ -38,9 +38,9 @@ func readWhole(conn net.PacketConn, p []byte) (int, net.Addr, error) {
 	if len(p) >= maxUDPPacket {
 		return conn.ReadFrom(p)
 	}
-	buffer := buffers.Get().([]byte)
+	buffer := buffers.Get().(*[maxUDPPacket]byte)
 	defer buffers.Put(buffer)
-	n, addr, err := conn.ReadFrom(buffer)
+	n, addr, err := conn.ReadFrom(buffer[:])
 	return copy(p, buffer[:n]), addr, err
 }
 

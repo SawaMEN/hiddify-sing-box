@@ -20,8 +20,8 @@ with this application without prior consent.
 package sudoku
 
 import (
+	crypto_rand "crypto/rand"
 	"io"
-	"math/rand"
 	"net"
 	"testing"
 	"time"
@@ -61,7 +61,7 @@ func BenchmarkSudokuWrite(b *testing.B) {
 	conn := NewConn(mock, table, 10, 20, false)
 
 	data := make([]byte, 1024)
-	rand.Read(data)
+	crypto_rand.Read(data)
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -79,7 +79,7 @@ func BenchmarkSudokuRead(b *testing.B) {
 	mock := &MockConn{}
 	writerConn := NewConn(mock, table, 10, 20, false)
 	data := make([]byte, 1024)
-	rand.Read(data)
+	crypto_rand.Read(data)
 	writerConn.Write(data)
 	encodedData := mock.writeBuf
 
@@ -101,7 +101,7 @@ func BenchmarkPackedWrite(b *testing.B) {
 	conn := NewPackedConn(mock, table, 10, 20)
 
 	data := make([]byte, 63*1024)
-	rand.Read(data)
+	crypto_rand.Read(data)
 
 	b.SetBytes(int64(len(data)))
 	b.ResetTimer()
@@ -121,7 +121,7 @@ func BenchmarkPackedRead(b *testing.B) {
 	mock := &MockConn{}
 	writerConn := NewPackedConn(mock, table, 10, 20)
 	data := make([]byte, 63*1024)
-	rand.Read(data)
+	crypto_rand.Read(data)
 	if _, err := writerConn.Write(data); err != nil {
 		b.Fatal(err)
 	}

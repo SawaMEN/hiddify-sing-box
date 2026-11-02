@@ -43,8 +43,8 @@ func trimProxyRulePrefix(raw string) (string, bool) {
 func trimRulePrefix(raw string, prefixes ...string) (string, bool) {
 	raw = strings.TrimSpace(raw)
 	for _, prefix := range prefixes {
-		if strings.HasPrefix(raw, prefix) {
-			raw = strings.TrimSpace(strings.TrimPrefix(raw, prefix))
+		if after, ok := strings.CutPrefix(raw, prefix); ok {
+			raw = strings.TrimSpace(after)
 			return raw, raw != ""
 		}
 	}

@@ -3,8 +3,6 @@ package olcrtc
 import (
 	"context"
 	"errors"
-	"github.com/sagernet/sing-box/adapter"
-	M "github.com/sagernet/sing/common/metadata"
 	"net"
 	goruntime "runtime"
 	"strings"
@@ -13,17 +11,23 @@ import (
 	"testing"
 	"time"
 
-	upstream "github.com/openlibrecommunity/olcrtc/mobile"
+	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/option"
+	M "github.com/sagernet/sing/common/metadata"
+
+	upstream "github.com/openlibrecommunity/olcrtc/mobile"
 )
 
 const fixtureKey = "d823fa01cb3e0609b67322f7cf984c4ee2e4ce2e294936fc24ef38c9e59f4799"
 
 func TestValidOlcRtcOutbound(t *testing.T) {
 	for _, tc := range []struct{ provider, transport string }{
-		{"jitsi", "datachannel"}, {"jitsi", "vp8channel"},
-		{"wbstream", "vp8channel"}, {"wbstream", "seichannel"},
-		{"telemost", "vp8channel"}, {"telemost", "videochannel"},
+		{"jitsi", "datachannel"},
+		{"jitsi", "vp8channel"},
+		{"wbstream", "vp8channel"},
+		{"wbstream", "seichannel"},
+		{"telemost", "vp8channel"},
+		{"telemost", "videochannel"},
 	} {
 		if err := validate(option.OlcRTCOutboundOptions{
 			Provider: tc.provider, Transport: tc.transport, RoomID: "room", Key: fixtureKey,
@@ -139,15 +143,13 @@ func TestCanceledRequestDoesNotStartRuntime(t *testing.T) {
 func TestConcurrentWaitersShareReadinessAndCloseUnblocksThem(t *testing.T) {
 	h, runtime := lifecycleFixture()
 	var wg sync.WaitGroup
-	for i := 0; i < 64; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 64 {
+		wg.Go(func() {
 			_, err := h.ensure(context.Background())
 			if !errors.Is(err, net.ErrClosed) {
 				t.Errorf("want closed, got %v", err)
 			}
-		}()
+		})
 	}
 	deadline := time.After(time.Second)
 	for runtime.waits.Load() == 0 {

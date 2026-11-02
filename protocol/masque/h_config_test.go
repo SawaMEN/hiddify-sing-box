@@ -23,6 +23,7 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/service"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -177,7 +178,7 @@ func TestH_OutboundStartHandlerFailureModes(t *testing.T) {
 			ctx, cache := hCachedContext(t, config)
 			logger := &hErrorLogger{ContextLogger: log.NewNOPFactory().NewLogger("masque")}
 			out := hNewOutbound(t, ctx, logger, options)
-			require.NoError(t, out.Start(adapter.StartStatePostStart))
+			require.NoError(t, out.Start(adapter.StartStatePostStart, nil))
 			_, err := out.DialContext(ctx, N.NetworkTCP, M.ParseSocksaddr("1.1.1.1:80"))
 			require.ErrorContains(t, err, "tunnel not initialized")
 			require.Equal(t, []string{"masque-out"}, cache.loads)
@@ -197,7 +198,7 @@ func TestH_OutboundMalformedCache(t *testing.T) {
 	require.Len(t, logger.logged(), 1)
 	_, err := out.ListenPacket(context.Background(), M.ParseSocksaddr("1.1.1.1:53"))
 	require.ErrorContains(t, err, "tunnel not initialized")
-	require.ErrorContains(t, out.Close(), "tunnel not initialized")
+	require.NoError(t, out.Close(), "closing after failed initialization must be safe")
 }
 
 func TestH_OutboundWaitsForStartup(t *testing.T) {
@@ -205,7 +206,7 @@ func TestH_OutboundWaitsForStartup(t *testing.T) {
 	require.Equal(t, C.TypeMASQUE, out.Type())
 	require.Equal(t, "masque-out", out.Tag())
 	require.Equal(t, []string{N.NetworkTCP, N.NetworkUDP, N.NetworkICMP}, out.Network())
-	require.NoError(t, out.Start(adapter.StartStateStart), "only post-start triggers the handler")
+	require.NoError(t, out.Start(adapter.StartStateStart, nil), "only post-start triggers the handler")
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	_, err := out.DialContext(ctx, N.NetworkTCP, M.ParseSocksaddr("1.1.1.1:80"))

@@ -159,7 +159,7 @@ func (c *CacheFile) Start(stage adapter.StartStage, scope *adapter.Scope) error 
 		if err != nil {
 			return err
 		}
-		scope.Add(c.Close) //H: c.start already launches loopFlush
+		scope.Add(c.Close) // H: c.start already launches loopFlush
 
 	case adapter.StartStateStart:
 		c.startCacheCleanup(scope.Context())
@@ -311,8 +311,7 @@ func (c *CacheFile) batch(fn func(tx *bbolt.Tx) error) (err error) {
 		}
 	}()
 	err = db.Batch(fn)
-	var panicErr bbolt.PanickedError
-	if errors.As(err, &panicErr) {
+	if panicErr, ok := errors.AsType[bbolt.PanickedError](err); ok {
 		c.resetDB(db, panicErr.Reason)
 		return E.New("database corrupted: ", panicErr.Reason)
 	}

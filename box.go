@@ -2,10 +2,9 @@ package box
 
 import (
 	"context"
+	"fmt"
 	"io"
-	"net/http"
 	"os"
-	"runtime/debug"
 	"sync"
 	"time"
 
@@ -47,6 +46,7 @@ var _ adapter.SimpleLifecycle = (*Box)(nil)
 
 type Box struct {
 	ctx                 context.Context // H: hot reload creates components with it
+	scope               *adapter.Scope  // H
 	createdAt           time.Time
 	debugOptions        option.DebugOptions
 	logFactory          log.Factory
@@ -62,6 +62,7 @@ type Box struct {
 	connection          *route.ConnectionManager
 	router              *route.Router
 	referenceManager    *route.ReferenceManager
+	ntpService          *ntp.Service // H
 	httpClientService   adapter.LifecycleService
 	internalService     []adapter.LifecycleService
 	done                chan struct{}
@@ -223,7 +224,7 @@ func New(options Options) (*Box, error) {
 	}
 	service.MustRegister[adapter.DNSRouter](ctx, dnsRouter)
 	service.MustRegister[adapter.DNSRuleSetUpdateValidator](ctx, dnsRouter)
-	connectionManager := route.NewConnectionManager(logFactory.NewLogger("connection"))
+	connectionManager := route.NewConnectionManager(ctx, logFactory.NewLogger("connection"))
 	service.MustRegister[adapter.ConnectionManager](ctx, connectionManager)
 	networkManager, err := route.NewNetworkManager(ctx, logFactory.NewLogger("network"), routeOptions, dnsOptions)
 	if err != nil {
@@ -253,13 +254,14 @@ func New(options Options) (*Box, error) {
 		service.MustRegisterPtr(ctx, clashMode)
 		internalServices = append(internalServices, clashMode)
 	}
-	if needClashAPI { //H the hiddify clash server keeps its own per-outbound traffic manager
+	if needClashAPI { // H the hiddify clash server keeps its own per-outbound traffic manager
 		service.MustRegisterPtr(ctx, clashtrafficontrol.NewManager())
 	}
 	referenceManager := route.NewReferenceManager(ctx, logFactory.NewLogger("reference"), options.Options)
 	internalServices = append(internalServices, referenceManager)
 	ntpOptions := common.PtrValueOrDefault(options.NTP)
 	var timeService *tls.TimeServiceWrapper
+	var ntpService *ntp.Service // H
 	if ntpOptions.Enabled {
 		timeService = new(tls.TimeServiceWrapper)
 		service.MustRegister[ntp.TimeService](ctx, timeService)
@@ -531,6 +533,7 @@ func New(options Options) (*Box, error) {
 	}
 	return &Box{
 		ctx:                 ctx,
+		scope:               adapter.NewScope(ctx, logFactory.Logger()), // H
 		network:             networkManager,
 		endpoint:            endpointManager,
 		inbound:             inboundManager,
@@ -542,6 +545,7 @@ func New(options Options) (*Box, error) {
 		connection:          connectionManager,
 		router:              router,
 		referenceManager:    referenceManager,
+		ntpService:          ntpService,
 		httpClientService:   httpClientService,
 		createdAt:           createdAt,
 		debugOptions:        debugOptions,
@@ -725,54 +729,10 @@ func (s *Box) Close() error {
 	default:
 		close(s.done)
 	}
-	closeTimeout := time.Second * 10
-	var err error
-	if s.debugHTTPServer != nil {
-		err = E.Append(err, s.debugHTTPServer.Close(), func(err error) error {
-			return E.Cause(err, "close debug HTTP server")
-		})
-		s.debugHTTPServer = nil
-	}
-	for _, closeItem := range []struct {
-		name    string
-		service adapter.Lifecycle
-	}{
-		{"service", s.service},
-		{"inbound", s.inbound},
-		{"certificate-provider", s.certificateProvider},
-		{"endpoint", s.endpoint},
-		{"outbound", s.outbound},
-		{"router", s.router},
-		{"connection", s.connection},
-		{"dns-router", s.dnsRouter},
-		{"dns-transport", s.dnsTransport},
-		{"network", s.network},
-	} {
-		cerr := s.closeWithTimeout(closeItem.name, closeTimeout, closeItem.service.Close)
-		err = E.Append(err, cerr, func(err error) error {
-			return E.Cause(err, "close ", closeItem.name)
-		})
-	}
-	if s.httpClientService != nil {
-		s.logger.Trace("close ", s.httpClientService.Name())
-		startTime := time.Now()
-		err = E.Append(err, s.httpClientService.Close(), func(err error) error {
-			return E.Cause(err, "close ", s.httpClientService.Name())
-		})
-		s.logger.Trace("close ", s.httpClientService.Name(), " completed (", F.Seconds(time.Since(startTime).Seconds()), "s)")
-	}
-	for _, lifecycleService := range s.internalService {
-		cerr := s.closeWithTimeout(lifecycleService.Name(), closeTimeout, lifecycleService.Close)
-		err = E.Append(err, cerr, func(err error) error {
-			return E.Cause(err, "close ", lifecycleService.Name())
-		})
-	}
-	cerr := s.closeWithTimeout("logger", closeTimeout, s.logFactory.Close)
-	err = E.Append(err, cerr, func(err error) error {
-		return E.Cause(err, "close logger")
-	})
-	return err
+	err := s.scope.Close()
+	return E.Errors(err, s.logFactory.Close())
 }
+
 func (s *Box) closeWithTimeout(name string, timeout time.Duration, closeFn func() error) (err error) {
 	s.logger.Trace("closeing ", name)
 	startTime := time.Now()
@@ -802,8 +762,8 @@ func (s *Box) closeWithTimeout(name string, timeout time.Duration, closeFn func(
 	case <-time.After(timeout):
 		return fmt.Errorf("close %s timed out after %s", name, timeout)
 	}
-
 }
+
 func (s *Box) Network() adapter.NetworkManager {
 	return s.network
 }
@@ -819,6 +779,7 @@ func (s *Box) Inbound() adapter.InboundManager {
 func (s *Box) Outbound() adapter.OutboundManager {
 	return s.outbound
 }
+
 func (s *Box) Endpoint() adapter.EndpointManager {
 	return s.endpoint
 }

@@ -28,7 +28,7 @@ func TestHandshakeReplayProtector_DedupWithinTTL(t *testing.T) {
 	t.Parallel()
 
 	var nonce [kipHelloNonceSize]byte
-	for i := 0; i < len(nonce); i++ {
+	for i := range len(nonce) {
 		nonce[i] = byte(i)
 	}
 

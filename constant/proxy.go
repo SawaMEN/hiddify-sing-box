@@ -17,7 +17,7 @@ const (
 	TypeTrojan             = "trojan"
 	TypeNaive              = "naive"
 	TypeWireGuard          = "wireguard"
-	TypeLegacyWireGuard    = "wireguard_legacy" //H
+	TypeLegacyWireGuard    = "wireguard_legacy" // H
 	TypeHysteria           = "hysteria"
 	TypeTor                = "tor"
 	TypeSSH                = "ssh"
@@ -53,25 +53,28 @@ const (
 	TypePsiphon            = "psiphon"
 	TypeTunnelClient       = "tunnel_client"
 	TypeTunnelServer       = "tunnel_server"
+	TypeCall               = "call"   // H
+	TypeSudoku             = "sudoku" // H
 
-	TypeHInvalidConfig = "hinvalid"        //H
-	TypeXray           = "xray"            //H
-	TypeCustom         = "custom"          //H
-	TypeAwg            = "awg"             //H
-	TypeBalancer       = "balancer"        //H
-	TypeFallback       = "fallback"       //H
-	TypeDNSTT          = "dnstt"           //H
-	TypeGooseRelay     = "gooserelay"      //H
-	TypeSmartDNSPool   = "smart_dns_pool"  //H — local recursive-resolver pool with AIMD throttling + recovery probing (github.com/hiddify/hmrd_multi_resolver_dns)
+	TypeHInvalidConfig = "hinvalid"       // H
+	TypeXray           = "xray"           // H
+	TypeCustom         = "custom"         // H
+	TypeAwg            = "awg"            // H
+	TypeBalancer       = "balancer"       // H
+	TypeFallback       = "fallback"       // H
+	TypeDNSTT          = "dnstt"          // H
+	TypeGooseRelay     = "gooserelay"     // H
+	TypeSmartDNSPool   = "smart_dns_pool" // H — local recursive-resolver pool with AIMD throttling + recovery probing (github.com/hiddify/hmrd_multi_resolver_dns)
 	TypeTrustTunnel    = "trusttunnel"
 	TypeOlcRTC         = "olcrtc"
 	TypeVetrOFF        = "vetroff"
+	TypeBond           = "bond"
 )
 
 const (
-	TypeSelector = "selector"
-	TypeURLTest  = "urltest"
-	URLTestModeFailover = "failover" //H
+	TypeSelector        = "selector"
+	TypeURLTest         = "urltest"
+	URLTestModeFailover = "failover" // H
 )
 
 // Display names of a warp endpoint, and of a masque outbound to WARP, by tunnel. //H
@@ -184,6 +187,8 @@ func ProxyDisplayName(proxyType string) string {
 		return "olcRTC"
 	case TypeVetrOFF:
 		return "VetrOFFProxy"
+	case TypeBond:
+		return "Bond"
 	case TypeSelector:
 		return "Selector"
 	case TypeURLTest:

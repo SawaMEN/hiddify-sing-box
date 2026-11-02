@@ -17,7 +17,7 @@ type Conn struct {
 func (c *Conn) Close() error {
 	c.group.access.Lock()
 	c.group.connections.Remove(c.element)
-	c.group.access.Unlock() //H: never leave the group locked when closing asynchronously
+	c.group.access.Unlock() // H: never leave the group locked when closing asynchronously
 	go c.Conn.Close()
 	return nil
 }
@@ -72,7 +72,7 @@ type SingPacketConn struct {
 func (c *SingPacketConn) Close() error {
 	c.group.access.Lock()
 	c.group.connections.Remove(c.element)
-	c.group.access.Unlock() //H: closing a connection may block; do it outside the lock
+	c.group.access.Unlock() // H: closing a connection may block; do it outside the lock
 	return c.PacketConn.Close()
 }
 

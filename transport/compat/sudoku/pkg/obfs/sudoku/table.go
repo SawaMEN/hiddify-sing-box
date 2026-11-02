@@ -30,9 +30,7 @@ import (
 	"github.com/sagernet/sing-box/transport/compat/sudoku/pkg/logx"
 )
 
-var (
-	ErrInvalidSudokuMapMiss = errors.New("INVALID_SUDOKU_MAP_MISS")
-)
+var ErrInvalidSudokuMapMiss = errors.New("INVALID_SUDOKU_MAP_MISS")
 
 type Table struct {
 	EncodeTable [256][][4]byte
@@ -117,7 +115,7 @@ func newSingleDirectionTable(key string, mode string, customPattern string) (*Ta
 	})
 
 	// Build encoding/decoding maps
-	for byteVal := 0; byteVal < 256; byteVal++ {
+	for byteVal := range 256 {
 		targetGrid := shuffledGrids[byteVal]
 		for _, positions := range hintPositions {
 			var rawParts [4]hintPart

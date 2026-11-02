@@ -51,6 +51,7 @@ type MuxDialer struct {
 func (d *MuxDialer) Dial(destAddrStr string) (net.Conn, error) {
 	return d.DialContext(context.Background(), destAddrStr)
 }
+
 func (d *MuxDialer) DialContext(ctx context.Context, destAddrStr string) (net.Conn, error) {
 	var addrBuf bytes.Buffer
 	if err := protocol.WriteAddress(&addrBuf, destAddrStr); err != nil {

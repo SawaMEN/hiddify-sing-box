@@ -23,7 +23,7 @@ func TestLoadConfig(t *testing.T) {
 		"loglevel": "debug"
 	}`
 
-	if err := os.WriteFile(configPath, []byte(jsonContent), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(jsonContent), 0o644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
@@ -71,7 +71,7 @@ func TestLoadConfig_NonExistent(t *testing.T) {
 func TestLoadConfig_InvalidJSON(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "invalid.json")
-	if err := os.WriteFile(configPath, []byte(`{invalid`), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(`{invalid`), 0o644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 

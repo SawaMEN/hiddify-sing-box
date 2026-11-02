@@ -22,32 +22,32 @@ type Int32Range struct {
 }
 
 // MarshalJSON implements encoding/json.Marshaler.MarshalJSON
-func (v *Int32Range) MarshalJSON() ([]byte, error) {
-	return json.Marshal(v.String())
+func (receiver *Int32Range) MarshalJSON() ([]byte, error) {
+	return json.Marshal(receiver.String())
 }
 
-func (v Int32Range) String() string {
-	if v.Left == v.Right {
-		return strconv.Itoa(int(v.Left))
+func (receiver Int32Range) String() string {
+	if receiver.Left == receiver.Right {
+		return strconv.Itoa(int(receiver.Left))
 	} else {
-		return fmt.Sprintf("%d-%d", v.Left, v.Right)
+		return fmt.Sprintf("%d-%d", receiver.Left, receiver.Right)
 	}
 }
 
 // UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON
-func (v *Int32Range) UnmarshalJSON(data []byte) error {
-	defer v.ensureOrder()
+func (receiver *Int32Range) UnmarshalJSON(data []byte) error {
+	defer receiver.ensureOrder()
 	var str string
 	var rawint int32
 	if err := json.Unmarshal(data, &str); err == nil {
 		left, right, err := ParseRangeString(str)
 		if err == nil {
-			v.Left, v.Right = int32(left), int32(right)
+			receiver.Left, receiver.Right = int32(left), int32(right)
 			return nil
 		}
 	} else if err := json.Unmarshal(data, &rawint); err == nil {
-		v.Left = rawint
-		v.Right = rawint
+		receiver.Left = rawint
+		receiver.Right = rawint
 		return nil
 	}
 
@@ -55,10 +55,10 @@ func (v *Int32Range) UnmarshalJSON(data []byte) error {
 }
 
 // ensureOrder() gives value to .From & .To and make sure .From < .To
-func (r *Int32Range) ensureOrder() {
-	r.From, r.To = r.Left, r.Right
-	if r.From > r.To {
-		r.From, r.To = r.To, r.From
+func (receiver *Int32Range) ensureOrder() {
+	receiver.From, receiver.To = receiver.Left, receiver.Right
+	if receiver.From > receiver.To {
+		receiver.From, receiver.To = receiver.To, receiver.From
 	}
 }
 

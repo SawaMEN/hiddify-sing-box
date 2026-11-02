@@ -13,27 +13,28 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/sagernet/gvisor/pkg/tcpip"
+	"github.com/sagernet/gvisor/pkg/tcpip/adapters/gonet"
+	"github.com/sagernet/gvisor/pkg/tcpip/header"
+	"github.com/sagernet/gvisor/pkg/tcpip/stack"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/endpoint"
 	"github.com/sagernet/sing-box/common/dialer"
 	"github.com/sagernet/sing-box/common/iponly"
 	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/gvisor/pkg/tcpip"
-	"github.com/sagernet/gvisor/pkg/tcpip/adapters/gonet"
-	"github.com/sagernet/gvisor/pkg/tcpip/header"
-	"github.com/sagernet/gvisor/pkg/tcpip/stack"
 	"github.com/sagernet/sing-box/dns"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
-	R "github.com/sagernet/sing-box/route/rule"
 	"github.com/sagernet/sing-box/protocol/tailscale/tailssh"
+	R "github.com/sagernet/sing-box/route/rule"
 	"github.com/sagernet/sing-box/service/oomkiller"
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/bufio"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -47,6 +48,7 @@ import (
 	"github.com/sagernet/tailscale/ipn"
 	"github.com/sagernet/tailscale/ipn/ipnlocal"
 	tsDNS "github.com/sagernet/tailscale/net/dns"
+	nDNSResolver "github.com/sagernet/tailscale/net/dns/resolver"
 	"github.com/sagernet/tailscale/net/tsaddr"
 	tsTUN "github.com/sagernet/tailscale/net/tstun"
 	"github.com/sagernet/tailscale/tailcfg"
@@ -111,7 +113,6 @@ type Endpoint struct {
 	sshServerOptions  *option.TailscaleSSHServerOptions
 	taildrop          *taildropManager
 	udpTimeout        time.Duration
-	icmpTimeout       time.Duration
 	localBackend      atomic.Pointer[ipnlocal.LocalBackend]
 	keyAuth           bool
 	onDemand          bool
@@ -265,16 +266,10 @@ func (t *Endpoint) References() []string {
 	return []string{t.detour}
 }
 
-func (t *Endpoint) References() []string {
-	if t.detour == "" {
-		return nil
-	}
-	return []string{t.detour}
-}
-
 func (t *Endpoint) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	switch stage {
 	case adapter.StartStateInitialize:
+		scope.Add(t.Close)
 		t.server.NetstackMemoryPressure = oomkiller.MemoryPressure(t.ctx)
 		mkdirErr := filemanager.MkdirAll(t.ctx, t.server.Dir, 0o700)
 		if mkdirErr != nil {
@@ -295,7 +290,7 @@ func (t *Endpoint) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	return nil
 }
 
-func (t *Endpoint) start() error {
+func (t *Endpoint) start(scope *adapter.Scope) error {
 	binding, err := newSystemBinding(t.ctx, t.logger)
 	if err != nil {
 		return err
@@ -358,7 +353,7 @@ func (t *Endpoint) start() error {
 	return nil
 }
 
-func (t *Endpoint) postStart() error {
+func (t *Endpoint) postStart(scope *adapter.Scope) error {
 	err := t.server.Start()
 	if err != nil {
 		return err
@@ -609,14 +604,6 @@ func (t *Endpoint) Close() error {
 	if runtime.GOOS == "android" {
 		setAndroidProtectFunc(nil)
 	}
-	if t.fallbackTCPCloser != nil {
-		t.fallbackTCPCloser()
-		t.fallbackTCPCloser = nil
-	}
-	if t.systemTun != nil {
-		t.systemTun.Close()
-		t.systemTun = nil
-	}
 	return err
 }
 
@@ -789,12 +776,12 @@ func (t *Endpoint) DialContext(ctx context.Context, network string, destination 
 		return nil, E.New("missing Tailscale address for ", destination)
 	}
 	bind := tcpip.FullAddress{
-		NIC:  tun.DefaultNIC,
-		Addr: tun.AddressFromAddr(local),
+		NIC:  1, // userspace netstack NIC
+		Addr: tcpip.AddrFromSlice(local.AsSlice()),
 	}
 	addr := tcpip.FullAddress{
-		NIC:  tun.DefaultNIC,
-		Addr: tun.AddressFromAddr(destination.Addr),
+		NIC:  1, // userspace netstack NIC
+		Addr: tcpip.AddrFromSlice(destination.Addr.AsSlice()),
 		Port: destination.Port,
 	}
 	var networkProtocol tcpip.NetworkProtocolNumber
@@ -841,8 +828,8 @@ func (t *Endpoint) listenPacketWithAddress(ctx context.Context, destination M.So
 		return nil, E.New("missing Tailscale address for ", destination)
 	}
 	bind := tcpip.FullAddress{
-		NIC:  tun.DefaultNIC,
-		Addr: tun.AddressFromAddr(local),
+		NIC:  1, // userspace netstack NIC
+		Addr: tcpip.AddrFromSlice(local.AsSlice()),
 	}
 	var networkProtocol tcpip.NetworkProtocolNumber
 	if local.Is4() {

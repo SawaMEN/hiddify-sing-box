@@ -101,13 +101,11 @@ func TestSudokuTunnel_StandardDialer(t *testing.T) {
 
 	message := "hello"
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		buf := make([]byte, len(message))
 		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 		_, _ = io.ReadFull(conn, buf)
-	}()
+	})
 	_, _ = conn.Write([]byte(message))
 	wg.Wait()
 }

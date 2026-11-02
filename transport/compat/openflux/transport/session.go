@@ -500,9 +500,7 @@ func (s *Session) startLink(link *transportLink) error {
 }
 
 func (s *Session) superviseLink(link *transportLink) {
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
+	s.wg.Go(func() {
 		delay := s.restartMin
 		attempt := 0
 		for {
@@ -531,7 +529,7 @@ func (s *Session) superviseLink(link *transportLink) {
 				delay = s.restartMax
 			}
 		}
-	}()
+	})
 }
 
 // helloBackoff is when the hello pace drops from helloInterval to

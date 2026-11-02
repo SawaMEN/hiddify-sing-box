@@ -18,7 +18,7 @@ import (
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/service/oomkiller"
 	"github.com/sagernet/sing-box/transport/wireguard"
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/bufio"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -46,7 +46,7 @@ type Endpoint struct {
 	dnsRouter      adapter.DNSRouter
 	logger         logger.ContextLogger
 	localAddresses []netip.Prefix
-	peerUsers      *peeruser.Users //H
+	peerUsers      *peeruser.Users // H
 	endpoint       *wireguard.Endpoint
 	onDemand       bool
 	bindAccess     sync.Mutex
@@ -54,12 +54,12 @@ type Endpoint struct {
 }
 
 func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.WireGuardEndpointOptions) (adapter.Endpoint, error) {
-	if options.AWG.IsAvailble() { //H: it was ignored, so the endpoint ran plain WireGuard
-		return nil, E.New(`the awg block is not read by "type": "wireguard", use "type": "awg"`) //H
-	} //H
-	if err := options.Noise.FakePacket.Validate(); err != nil { //H: a bad template fails the config, not the handshake
-		return nil, E.Cause(err, "wireguard") //H
-	} //H
+	if options.AWG.IsAvailble() { // H: it was ignored, so the endpoint ran plain WireGuard
+		return nil, E.New(`the awg block is not read by "type": "wireguard", use "type": "awg"`) // H
+	} // H
+	if err := options.Noise.FakePacket.Validate(); err != nil { // H: a bad template fails the config, not the handshake
+		return nil, E.Cause(err, "wireguard") // H
+	} // H
 	ep := &Endpoint{
 		Adapter:        endpoint.NewAdapterWithDialerOptions(C.TypeWireGuard, tag, []string{N.NetworkTCP, N.NetworkUDP, N.NetworkICMP}, options.DialerOptions),
 		ctx:            ctx,
@@ -69,7 +69,7 @@ func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextL
 		localAddresses: options.Address,
 		onDemand:       options.OnDemand,
 	}
-	ep.peerUsers = peeruser.New(common.Map(options.Peers, func(it option.WireGuardPeer) peeruser.Peer { //H
+	ep.peerUsers = peeruser.New(common.Map(options.Peers, func(it option.WireGuardPeer) peeruser.Peer { // H
 		return peeruser.Peer{User: it.Username, AllowedIPs: it.AllowedIPs}
 	}))
 	if options.Detour != "" && options.ListenPort != 0 {
@@ -77,7 +77,7 @@ func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextL
 	}
 	// H: let the kernel fragment WireGuard's UDP, as official WireGuard does; with DF a packet
 	// larger than the path MTU (a tunnel inside another tunnel) is dropped
-	options.UDPFragmentDefault = true //H
+	options.UDPFragmentDefault = true // H
 	outboundDialer, err := dialer.NewWithOptions(dialer.Options{
 		Context: ctx,
 		Options: options.DialerOptions,
@@ -95,10 +95,10 @@ func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextL
 	} else {
 		udpTimeout = C.UDPTimeout
 	}
-	fallback, err := peerFallback(options) //H
-	if err != nil {                        //H
-		return nil, err //H
-	} //H
+	fallback, err := peerFallback(options) // H
+	if err != nil {                        // H
+		return nil, err // H
+	} // H
 	networkManager := service.FromContext[adapter.NetworkManager](ctx)
 	wgEndpoint, err := wireguard.NewEndpoint(wireguard.EndpointOptions{
 		Context:         ctx,
@@ -146,8 +146,9 @@ func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextL
 				Reserved:                    it.Reserved,
 			}
 		}),
-		Workers: options.Workers,
-		Noise:   options.Noise,
+		Workers:      options.Workers,
+		Noise:        options.Noise,
+		PeerFallback: fallback, // H
 	})
 	if err != nil {
 		return nil, err
@@ -267,7 +268,7 @@ func (w *Endpoint) NewConnectionEx(ctx context.Context, conn net.Conn, source M.
 	metadata.Inbound = w.Tag()
 	metadata.InboundType = w.Type()
 	metadata.Source = source
-	metadata.User = w.peerUsers.Lookup(source.Addr) //H
+	metadata.User = w.peerUsers.Lookup(source.Addr) // H
 	for _, localPrefix := range w.localAddresses {
 		if localPrefix.Contains(destination.Addr) {
 			metadata.OriginDestination = destination
@@ -290,7 +291,7 @@ func (w *Endpoint) NewPacketConnectionEx(ctx context.Context, conn N.PacketConn,
 	metadata.Inbound = w.Tag()
 	metadata.InboundType = w.Type()
 	metadata.Source = source
-	metadata.User = w.peerUsers.Lookup(source.Addr) //H
+	metadata.User = w.peerUsers.Lookup(source.Addr) // H
 	metadata.Destination = destination
 	for _, localPrefix := range w.localAddresses {
 		if localPrefix.Contains(destination.Addr) {

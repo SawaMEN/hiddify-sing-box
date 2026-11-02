@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sync"
@@ -69,9 +70,7 @@ func (s *CookieStore) Load(key string) map[string]string {
 		return nil
 	}
 	out := make(map[string]string, len(src))
-	for k, v := range src {
-		out[k] = v
-	}
+	maps.Copy(out, src)
 	return out
 }
 
@@ -86,9 +85,7 @@ func (s *CookieStore) Save(key string, jar map[string]string) error {
 		delete(s.jar, key)
 	} else {
 		cp := make(map[string]string, len(jar))
-		for k, v := range jar {
-			cp[k] = v
-		}
+		maps.Copy(cp, jar)
 		s.jar[key] = cp
 	}
 	return s.persistLocked()
@@ -112,9 +109,7 @@ func (s *CookieStore) All() map[string]map[string]string {
 	out := make(map[string]map[string]string, len(s.jar))
 	for k, v := range s.jar {
 		cp := make(map[string]string, len(v))
-		for kk, vv := range v {
-			cp[kk] = vv
-		}
+		maps.Copy(cp, v)
 		out[k] = cp
 	}
 	return out

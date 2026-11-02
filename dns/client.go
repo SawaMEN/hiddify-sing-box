@@ -67,10 +67,7 @@ type ClientOptions struct {
 }
 
 func NewClient(options ClientOptions) *Client {
-	cacheCapacity := options.CacheCapacity
-	if cacheCapacity < 1024 {
-		cacheCapacity = 1024
-	}
+	cacheCapacity := max(options.CacheCapacity, 1024)
 	client := &Client{
 		ctx:               options.Context,
 		timeout:           options.Timeout,
@@ -300,16 +297,16 @@ func (c *Client) beginExchange(ctx context.Context, transport adapter.DNSTranspo
 		for {
 			// H: each wait ends by rejoining here, so after a failed query the waiters share one
 			// new query (under the current environment) instead of each sending their own
-			cacheKey := c.newCacheKey(transport, question, message, options)               //H
-			operation.cacheKey = cacheKey                                                  //H
-			exchangeKey := dnsExchangeKey{dnsCacheKey: cacheKey, timeout: options.Timeout} //H
-			cond, loaded := c.cacheLock.LoadOrStore(exchangeKey, make(chan struct{}))      //H
-			if !loaded {                                                                   //H
-				operation.releaseCond = func() { //H
-					c.cacheLock.Delete(exchangeKey) //H
-					close(cond)                     //H
-				} //H
-			} //H
+			cacheKey := c.newCacheKey(transport, question, message, options)               // H
+			operation.cacheKey = cacheKey                                                  // H
+			exchangeKey := dnsExchangeKey{dnsCacheKey: cacheKey, timeout: options.Timeout} // H
+			cond, loaded := c.cacheLock.LoadOrStore(exchangeKey, make(chan struct{}))      // H
+			if !loaded {                                                                   // H
+				operation.releaseCond = func() { // H
+					c.cacheLock.Delete(exchangeKey) // H
+					close(cond)                     // H
+				} // H
+			} // H
 			response, ttl, isStale := c.loadResponse(cacheKey)
 			if response != nil && (!isStale || !options.DisableOptimisticCache) {
 				operation.release()
@@ -467,9 +464,10 @@ func (c *Client) Lookup(ctx context.Context, transport adapter.DNSTransport, dom
 	if options.LookupStrategy != C.DomainStrategyAsIS {
 		lookupOptions.Strategy = strategy
 	}
-	if strategy == C.DomainStrategyIPv4Only {
+	switch strategy {
+	case C.DomainStrategyIPv4Only:
 		return c.lookupToExchange(ctx, transport, dnsName, dns.TypeA, lookupOptions, responseChecker)
-	} else if strategy == C.DomainStrategyIPv6Only {
+	case C.DomainStrategyIPv6Only:
 		return c.lookupToExchange(ctx, transport, dnsName, dns.TypeAAAA, lookupOptions, responseChecker)
 	}
 	var response4 []netip.Addr
@@ -488,7 +486,7 @@ func (c *Client) Lookup(ctx context.Context, transport adapter.DNSTransport, dom
 			return err
 		}
 		response4 = response
-		if len(response) > 0 { //H
+		if len(response) > 0 { // H
 			if strategy == C.DomainStrategyPreferIPv6 {
 				stopTimer4 = time.AfterFunc(time.Second, stopLookup)
 			} else {
@@ -503,7 +501,7 @@ func (c *Client) Lookup(ctx context.Context, transport adapter.DNSTransport, dom
 			return err
 		}
 		response6 = response
-		if len(response) > 0 { //H
+		if len(response) > 0 { // H
 			if strategy == C.DomainStrategyPreferIPv6 {
 				stopLookup()
 			} else {
@@ -649,10 +647,7 @@ func (c *Client) loadResponse(key dnsCacheKey) (*dns.Msg, int, bool) {
 		c.cache.Remove(key)
 		return nil, 0, false
 	}
-	nowTTL := int(expireAt.Sub(timeNow).Seconds())
-	if nowTTL < 0 {
-		nowTTL = 0
-	}
+	nowTTL := max(int(expireAt.Sub(timeNow).Seconds()), 0)
 	response = response.Copy()
 	normalizeTTL(response, uint32(nowTTL))
 	return response, nowTTL, false
@@ -679,10 +674,7 @@ func (c *Client) loadPersistentResponse(key dnsCacheKey) (*dns.Msg, int, bool) {
 		}
 		return nil, 0, false
 	}
-	nowTTL := int(expireAt.Sub(timeNow).Seconds())
-	if nowTTL < 0 {
-		nowTTL = 0
-	}
+	nowTTL := max(int(expireAt.Sub(timeNow).Seconds()), 0)
 	normalizeTTL(response, uint32(nowTTL))
 	return response, nowTTL, false
 }
@@ -794,8 +786,7 @@ func (c *Client) exchangeToTransport(ctx context.Context, transport adapter.DNST
 		stripDNSPadding(response)
 		return response, nil
 	}
-	var rcodeError RcodeError
-	if errors.As(err, &rcodeError) {
+	if rcodeError, ok := errors.AsType[RcodeError](err); ok {
 		return FixedResponseStatus(message, int(rcodeError)), nil
 	}
 	return nil, err
@@ -808,8 +799,7 @@ func (c *Client) exchangeToTransportAsync(ctx context.Context, transport adapter
 			callback(response, nil)
 			return
 		}
-		var rcodeError RcodeError
-		if errors.As(err, &rcodeError) {
+		if rcodeError, ok := errors.AsType[RcodeError](err); ok {
 			callback(FixedResponseStatus(message, int(rcodeError)), nil)
 			return
 		}

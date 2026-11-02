@@ -64,16 +64,4 @@ func (s *ClientService) Start(stage adapter.StartStage, scope *adapter.Scope) er
 	return nil
 }
 
-func (s *ClientService) References() []string {
-	if s.detour == "" {
-		return nil
-	}
-	return []string{s.detour}
-}
 
-func (s *ClientService) References() []string {
-	if s.detour == "" {
-		return nil
-	}
-	return []string{s.detour}
-}

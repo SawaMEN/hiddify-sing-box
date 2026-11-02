@@ -5,20 +5,19 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
-	"net"
 	"net/netip"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/amnezia-vpn/amneziawg-go/v3/device"
-	"github.com/amnezia-vpn/amneziawg-go/v3/tun/netstack"
 	"github.com/sagernet/sing-box/common/interrupt"
 	"github.com/sagernet/sing-box/hiddify/mtusearch"
 	"github.com/sagernet/sing-box/hiddify/peerfallback"
 	"github.com/sagernet/sing/common/logger"
-	N "github.com/sagernet/sing/common/network"
+
+	"github.com/amnezia-vpn/amneziawg-go/v3/device"
+	"github.com/amnezia-vpn/amneziawg-go/v3/tun/netstack"
 )
 
 // The path of the tunnel, as in the WireGuard transport (transport/wireguard/h_mtu_discovery.go and
@@ -105,7 +104,9 @@ func (p *devicePath) start(d *Device) {
 }
 
 func (p *devicePath) close() {
-	p.fallback.Close()
+	if p.fallback != nil {
+		p.fallback.Close()
+	}
 	p.access.Lock()
 	defer p.access.Unlock()
 	if p.cancel != nil {
@@ -115,17 +116,9 @@ func (p *devicePath) close() {
 	p.running, p.again = false, false
 }
 
-// track keeps a TCP connection made through the device, to close it when the MTU is lowered.
-func (p *devicePath) track(network string, conn net.Conn, err error) (net.Conn, error) {
-	if p == nil || p.stack == nil || err != nil || N.NetworkName(network) != N.NetworkTCP {
-		return conn, err
-	}
-	return p.tcp.NewConn(conn, true), nil
-}
-
 // pathChanged is called each time the bind connects again after the first.
 func (p *devicePath) pathChanged() {
-	if p.fallback.PathChanged() {
+	if p.fallback != nil && p.fallback.PathChanged() {
 		return // the bind connects to the first address, which calls pathChanged again
 	}
 	if p.stack == nil {
@@ -258,7 +251,7 @@ func peerPublicKey(ipcConfig string) (device.NoisePublicKey, bool) {
 		key   device.NoisePublicKey
 		count int
 	)
-	for _, line := range strings.Split(ipcConfig, "\n") {
+	for line := range strings.SplitSeq(ipcConfig, "\n") {
 		if value, found := strings.CutPrefix(line, "public_key="); found {
 			count++
 			if decoded, err := hex.DecodeString(value); err == nil && len(decoded) == len(key) {

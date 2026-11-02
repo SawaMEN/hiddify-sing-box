@@ -5,9 +5,9 @@ import (
 	"net/netip"
 	"testing"
 
-	"github.com/gofrs/uuid/v5"
 	M "github.com/sagernet/sing/common/metadata"
 
+	"github.com/gofrs/uuid/v5"
 	"github.com/stretchr/testify/require"
 )
 

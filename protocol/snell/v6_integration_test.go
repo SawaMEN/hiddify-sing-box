@@ -4,19 +4,21 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/log"
-	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-snell/snellv6"
-	"github.com/sagernet/sing/common/buf"
-	M "github.com/sagernet/sing/common/metadata"
-	N "github.com/sagernet/sing/common/network"
 	"io"
 	"net"
 	"os"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/adapter/htest"
+	"github.com/sagernet/sing-box/log"
+	"github.com/sagernet/sing-box/option"
+	"github.com/sagernet/sing-snell/snellv6"
+	"github.com/sagernet/sing/common/buf"
+	M "github.com/sagernet/sing/common/metadata"
+	N "github.com/sagernet/sing/common/network"
 )
 
 const v6TestPSK = "snell-v6-integration-psk"
@@ -32,6 +34,7 @@ func (r *v6EchoRouter) record(user string) {
 	defer r.mu.Unlock()
 	r.users = append(r.users, user)
 }
+
 func (r *v6EchoRouter) RouteConnectionEx(ctx context.Context, conn net.Conn, m adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	r.record(m.User)
 	go func() {
@@ -42,6 +45,7 @@ func (r *v6EchoRouter) RouteConnectionEx(ctx context.Context, conn net.Conn, m a
 		}
 	}()
 }
+
 func (r *v6EchoRouter) RoutePacketConnectionEx(ctx context.Context, conn N.PacketConn, m adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	r.record(m.User)
 	go func() {
@@ -74,9 +78,11 @@ type v6TestDialer struct{}
 func (v6TestDialer) DialContext(ctx context.Context, network string, dest M.Socksaddr) (net.Conn, error) {
 	return (&net.Dialer{}).DialContext(ctx, network, dest.String())
 }
+
 func (v6TestDialer) ListenPacket(context.Context, M.Socksaddr) (net.PacketConn, error) {
 	return net.ListenPacket("udp", "127.0.0.1:0")
 }
+
 func startV6TestInbound(t *testing.T, mode string) (M.Socksaddr, *v6EchoRouter) {
 	t.Helper()
 	router := &v6EchoRouter{}
@@ -99,11 +105,9 @@ func startV6TestInbound(t *testing.T, mode string) (M.Socksaddr, *v6EchoRouter) 
 				return
 			}
 			active.Store(conn, struct{}{})
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				inbound.(*Inbound).NewConnection(context.Background(), conn, adapter.InboundContext{Source: M.SocksaddrFromNet(conn.RemoteAddr())}, func(error) { active.Delete(conn) })
-			}()
+			})
 		}
 	}()
 	t.Cleanup(func() {
@@ -111,10 +115,11 @@ func startV6TestInbound(t *testing.T, mode string) (M.Socksaddr, *v6EchoRouter) 
 		<-acceptDone
 		active.Range(func(k, v any) bool { k.(net.Conn).Close(); return true })
 		wg.Wait()
-		inbound.Close()
+		_ = htest.Close(inbound)
 	})
 	return M.SocksaddrFromNet(listener.Addr()), router
 }
+
 func v6TestClient(t *testing.T, server M.Socksaddr, mode, key string, reuse bool) *snellv6.Client {
 	t.Helper()
 	parsed, _ := snellv6.ParseMode(mode)
@@ -125,13 +130,14 @@ func v6TestClient(t *testing.T, server M.Socksaddr, mode, key string, reuse bool
 	t.Cleanup(func() { client.Close() })
 	return client
 }
+
 func TestSnellV6TCPReconnect(t *testing.T) {
 	for _, mode := range []string{"default", "unshaped"} {
 		for _, reuse := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/reuse=%v", mode, reuse), func(t *testing.T) {
 				server, router := startV6TestInbound(t, mode)
 				client := v6TestClient(t, server, mode, "alice-key", reuse)
-				for i := 0; i < 120; i++ {
+				for i := range 120 {
 					if i == 60 {
 						client.Reset()
 					}
@@ -179,6 +185,7 @@ func TestSnellV6TCPReconnect(t *testing.T) {
 		}
 	}
 }
+
 func TestSnellV6UDPAndAuthentication(t *testing.T) {
 	for _, mode := range []string{"default", "unshaped"} {
 		t.Run(mode, func(t *testing.T) {
@@ -196,7 +203,7 @@ func TestSnellV6UDPAndAuthentication(t *testing.T) {
 					t.Fatal(err)
 				}
 				dest := M.ParseSocksaddrHostPort("127.0.0.1", 53)
-				for i := 0; i < 100; i++ {
+				for i := range 100 {
 					payload := bytes.Repeat([]byte{byte(i)}, 1400+i)
 					_, err = packet.WriteTo(payload, dest)
 					if err != nil {
@@ -231,6 +238,7 @@ func TestSnellV6UDPAndAuthentication(t *testing.T) {
 		})
 	}
 }
+
 func TestSnellV6RejectsInvalidTCPKeys(t *testing.T) {
 	for _, mode := range []string{"default", "unshaped"} {
 		t.Run(mode, func(t *testing.T) {
@@ -264,6 +272,7 @@ func TestSnellV6RejectsInvalidTCPKeys(t *testing.T) {
 		})
 	}
 }
+
 func TestSnellV6OutboundTCPAndUDP(t *testing.T) {
 	for _, mode := range []string{"default", "unshaped"} {
 		t.Run(mode, func(t *testing.T) {
@@ -317,6 +326,7 @@ func TestSnellV6OutboundTCPAndUDP(t *testing.T) {
 		})
 	}
 }
+
 func TestSnellV6IdleRecovery(t *testing.T) {
 	durationText := os.Getenv("SNELL_V6_IDLE_TEST")
 	if durationText == "" {
@@ -381,7 +391,7 @@ func TestSnellV6IdleRecovery(t *testing.T) {
 				timer := time.NewTimer(idle)
 				defer timer.Stop()
 				<-timer.C
-				for i := 0; i < 20; i++ {
+				for range 20 {
 					exchange()
 				}
 			})

@@ -21,6 +21,7 @@ import (
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+
 	"golang.org/x/net/http2"
 )
 
@@ -40,15 +41,15 @@ type Client struct {
 }
 
 func NewClient(ctx context.Context, dialer N.Dialer, serverAddr M.Socksaddr, options option.V2RayHTTPOptions, tlsConfig tls.Config) (adapter.V2RayClientTransport, error) {
-	useHTTP2 := tlsConfig != nil && options.Version != 1 //H
+	useHTTP2 := tlsConfig != nil && options.Version != 1 // H
 	var transport http.RoundTripper
 	if !useHTTP2 {
-		if tlsConfig != nil { //H
-			if len(tlsConfig.NextProtos()) == 0 { //H
-				tlsConfig.SetNextProtos([]string{"http/1.1"}) //H
-			} //H
-			dialer = tls.NewDialer(dialer, tlsConfig) //H
-		} //H
+		if tlsConfig != nil { // H
+			if len(tlsConfig.NextProtos()) == 0 { // H
+				tlsConfig.SetNextProtos([]string{"http/1.1"}) // H
+			} // H
+			dialer = tls.NewDialer(dialer, tlsConfig) // H
+		} // H
 		transport = &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				return dialer.DialContext(ctx, network, M.ParseSocksaddr(addr))
@@ -87,13 +88,13 @@ func NewClient(ctx context.Context, dialer N.Dialer, serverAddr M.Socksaddr, opt
 	}
 	headers := options.Headers.Build()
 
-	if host := headers.Get("Host"); host != "" { //H
-		headers.Del("Host")    //H
-		requestURL.Host = host //H
+	if host := headers.Get("Host"); host != "" { // H
+		headers.Del("Host")    // H
+		requestURL.Host = host // H
 	}
-	if headers.Get("User-Agent") == "" { //H
-		headers.Set("User-Agent", C.DefaultBrowserAgent) //H
-	} //H
+	if headers.Get("User-Agent") == "" { // H
+		headers.Set("User-Agent", C.DefaultBrowserAgent) // H
+	} // H
 	client := &Client{
 		ctx:        ctx,
 		dialer:     dialer,

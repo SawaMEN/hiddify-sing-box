@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	sdk "github.com/SawaMEN/VetroffProxy"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
 	C "github.com/sagernet/sing-box/constant"
@@ -16,6 +15,8 @@ import (
 	"github.com/sagernet/sing-box/option"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+
+	sdk "github.com/SawaMEN/VetroffProxy"
 )
 
 // RegisterOutbound adds the in-process VetrOFFProxy client. No executable,
@@ -150,12 +151,14 @@ func (p *packetConn) SetDeadline(t time.Time) error {
 	p.mu.Unlock()
 	return nil
 }
+
 func (p *packetConn) SetReadDeadline(t time.Time) error {
 	p.mu.Lock()
 	p.readDeadline = t
 	p.mu.Unlock()
 	return nil
 }
+
 func (p *packetConn) SetWriteDeadline(t time.Time) error {
 	p.mu.Lock()
 	p.writeDeadline = t

@@ -14,7 +14,7 @@ import (
 	"github.com/sagernet/sing-box/common/tls"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-quic"
+	qtls "github.com/sagernet/sing-quic"
 	"github.com/sagernet/sing/common"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
@@ -39,6 +39,20 @@ type clientConnection struct {
 	access    sync.Mutex
 	streams   int
 	closeIdle *atomic.Bool
+}
+
+func (c *clientConnection) active() bool { // H
+	return c.Conn.Context().Err() == nil
+}
+
+func (c *clientConnection) acquireStream() bool { // H
+	c.access.Lock()
+	defer c.access.Unlock()
+	if !c.active() {
+		return false
+	}
+	c.streams++
+	return true
 }
 
 func (c *clientConnection) releaseStream(keepSession bool) {
@@ -124,16 +138,6 @@ func (c *Client) DialContext(ctx context.Context) (net.Conn, error) {
 		keepSession := adapter.KeepSessionFromContext(ctx)
 		return &StreamWrapper{Conn: conn.Conn, Stream: stream, onClose: func() { conn.releaseStream(keepSession) }}, nil
 	}
-	conn.access.Lock()
-	conn.streams++
-	conn.access.Unlock()
-	stream, err := conn.OpenStream()
-	if err != nil {
-		conn.releaseStream(false)
-		return nil, err
-	}
-	keepSession := adapter.KeepSessionFromContext(ctx)
-	return &StreamWrapper{Conn: conn.Conn, Stream: stream, onClose: func() { conn.releaseStream(keepSession) }}, nil
 }
 
 func (c *Client) MultiplexEnabled() bool {

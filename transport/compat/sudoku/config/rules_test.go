@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestDefaultPACRuleURLs(t *testing.T) {
 	urls := DefaultPACRuleURLs()
@@ -14,13 +17,7 @@ func TestDefaultPACRuleURLs(t *testing.T) {
 		}
 	}
 
-	foundReject := false
-	for _, url := range urls {
-		if url == RejectRulePrefix+DefaultPACRejectRuleURL {
-			foundReject = true
-			break
-		}
-	}
+	foundReject := slices.Contains(urls, RejectRulePrefix+DefaultPACRejectRuleURL)
 	if !foundReject {
 		t.Fatalf("expected default PAC reject rule")
 	}

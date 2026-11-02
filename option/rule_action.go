@@ -219,7 +219,7 @@ type AbstractDNSRouteActionOptions struct {
 	ClientSubnet           *badoption.Prefixable `json:"client_subnet,omitempty"`
 	RemoveClientSubnet     bool                  `json:"remove_client_subnet,omitempty"`
 
-	BypassIfFailed bool `json:"bypass_if_failed,omitempty"` //H
+	BypassIfFailed bool `json:"bypass_if_failed,omitempty"` // H
 }
 
 type DNSRouteOptionsActionOptions AbstractDNSRouteActionOptions

@@ -49,10 +49,12 @@ func newPeerFallback(e *Endpoint, bind conn.Bind) *peerFallback {
 // pathChanged is called when the path to the peer may have changed: the fallback starts again
 // from the peer's own address, and MTU discovery runs again.
 func (e *Endpoint) pathChanged() {
-	if e.fallback.PathChanged() {
+	if e.fallback != nil && e.fallback.PathChanged() {
 		return // the bind dials the first address, which calls pathChanged again
 	}
-	e.mtuProbe.pathChanged()
+	if e.mtuProbe != nil {
+		e.mtuProbe.pathChanged()
+	}
 }
 
 // moveTo makes the bind send to address: the connection through the dialer is made again.

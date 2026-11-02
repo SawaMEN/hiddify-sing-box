@@ -18,7 +18,7 @@ import (
 	"github.com/sagernet/sing-box/common/taskmonitor"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/control"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -62,6 +62,7 @@ type NetworkManager struct {
 	environmentUpdateAccess sync.Mutex
 	environmentUpdateTimer  *time.Timer
 	startedCtx              context.Context
+	startedCancel           context.CancelFunc
 	interfaceUpdateAccess   sync.Mutex
 	interfaceUpdateCancel   context.CancelFunc
 	networkResetPending     bool
@@ -164,7 +165,7 @@ func (r *NetworkManager) Start(stage adapter.StartStage, scope *adapter.Scope) e
 			if err != nil {
 				return err
 			}
-			r.interfaceUpdateElement = r.interfaceMonitor.RegisterCallback(r.notifyInterfaceUpdate)
+			r.interfaceMonitor.RegisterCallback(r.notifyInterfaceUpdate)
 		}
 	case adapter.StartStateStart:
 		if C.IsAndroid && r.platformInterface == nil {
@@ -484,7 +485,6 @@ func (r *NetworkManager) ResetNetwork(ctx context.Context) {
 			listener.InterfaceUpdated(ctx)
 		}
 	}
-
 }
 
 func (r *NetworkManager) ReleaseMemory(ctx context.Context) {
@@ -618,4 +618,9 @@ func (r *NetworkManager) cancelPowerUpdate() {
 
 func (r *NetworkManager) OnPackagesUpdated(packages int, sharedUsers int) {
 	r.logger.Info("updated packages list: ", packages, " packages, ", sharedUsers, " shared users")
+}
+
+// FlushSystemDNSCache invalidates network-dependent resolver results. //H
+func (r *NetworkManager) FlushSystemDNSCache() {
+	r.networkChanged()
 }

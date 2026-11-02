@@ -69,16 +69,21 @@ func NewWithOptions(options Options) (N.Dialer, error) {
 		}
 	}
 	// H: Xray-style final mask, inside the resolve dialer so its interfaces stay visible
-	masks, err := finalmask.Build(dialOptions.FinalMask)
+	//nolint:staticcheck // TLSFragment is intentionally read to support legacy subscriptions.
+	maskOptions, err := withTLSFragment(dialOptions.FinalMask, dialOptions.TLSFragment, dialOptions.TCPFastOpen)
+	if err != nil {
+		return nil, err
+	}
+	masks, err := finalmask.Build(maskOptions)
 	if err != nil {
 		return nil, err
 	}
 	dialer = newFinalMaskDialer(dialer, masks)
 	if options.RemoteIsDomain && (!hasDetour || options.ResolverOnDetour || dialOptions.DomainResolver != nil && dialOptions.DomainResolver.Server != "") {
 		var (
-			server               string
-			defaultServer        bool // H: follow the current default DNS server
-			dnsQueryOptions      adapter.DNSQueryOptions
+			server          string
+			defaultServer   bool // H: follow the current default DNS server
+			dnsQueryOptions adapter.DNSQueryOptions
 		)
 		hasDomainResolver := dialOptions.DomainResolver != nil && dialOptions.DomainResolver.Server != ""
 		if options.DirectResolver && !hasDomainResolver {

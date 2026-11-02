@@ -13,6 +13,7 @@ import (
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
 
+	"github.com/amnezia-vpn/amneziawg-go/v3/device"
 	"github.com/stretchr/testify/require"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
@@ -62,16 +63,25 @@ func TestH_DeviceCloseWithStalledDetour(t *testing.T) {
 	require.NoError(t, err)
 	peer := netip.MustParseAddrPort("127.0.0.1:" + strconv.Itoa(int(hFreeUDPPort(t))))
 	stalled := &hStalledConn{closed: make(chan struct{}), writing: make(chan struct{}, 1)}
+	defer stalled.Close()
 	ipc := "private_key=" + hKeyHex(key) +
 		"\npublic_key=" + hKeyHex(peerKey.PublicKey()) +
 		"\nendpoint=" + peer.String() +
-		"\npersistent_keepalive_interval=1" +
 		"\nallowed_ip=0.0.0.0/0"
-	device, err := NewDevice(context.Background(), logger.NOP(), &hStalledDialer{conn: stalled}, ipc, DeviceOpts{
+	tunnel, err := NewDevice(context.Background(), logger.NOP(), &hStalledDialer{conn: stalled}, ipc, DeviceOpts{
 		Address: []netip.Prefix{netip.MustParsePrefix("10.78.0.2/32")}, MTU: 1408, Peer: peer,
 	})
 	require.NoError(t, err)
-	go device.Start(adapter.StartStateStart) // its first keepalive is sent at once, and stalls
+	require.NoError(t, tunnel.Start(adapter.StartStateStart))
+	bind := tunnel.bind.(*bind_adapter)
+	require.Eventually(t, func() bool {
+		bind.mutex.Lock()
+		defer bind.mutex.Unlock()
+		return bind.conn4 != nil
+	}, 3*time.Second, 10*time.Millisecond, "deferred bind must connect before sending")
+	peerDevice := tunnel.awgDevice.LookupPeer(device.NoisePublicKey(peerKey.PublicKey()))
+	require.NotNil(t, peerDevice)
+	go peerDevice.SendHandshakeInitiation(false)
 	select {
 	case <-stalled.writing:
 	case <-time.After(5 * time.Second):
@@ -80,7 +90,7 @@ func TestH_DeviceCloseWithStalledDetour(t *testing.T) {
 
 	closed := make(chan struct{})
 	go func() {
-		device.Close()
+		tunnel.Close()
 		close(closed)
 	}()
 	select {

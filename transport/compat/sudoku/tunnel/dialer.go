@@ -51,6 +51,7 @@ type BaseDialer struct {
 func (d *BaseDialer) DialBaseContext(ctx context.Context) (net.Conn, error) {
 	return d.dialBaseContext(ctx)
 }
+
 func (d *BaseDialer) DialBase() (net.Conn, error) {
 	return d.dialBaseWithUplinkMode(ObfsUplinkPure)
 }

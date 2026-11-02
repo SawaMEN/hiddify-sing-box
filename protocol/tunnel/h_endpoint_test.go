@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofrs/uuid/v5"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
 	C "github.com/sagernet/sing-box/constant"
@@ -17,6 +16,7 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 
+	"github.com/gofrs/uuid/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -244,7 +244,7 @@ func TestH_ServerConnHandlerUnknownDestinationUserReleasesLock(t *testing.T) {
 	t.Parallel()
 	server := hNewServer(newHFakeRouter(), map[uuid.UUID]uuid.UUID{hUUIDB: hUUIDA})
 	unknown := uuid.Must(uuid.FromString("dddddddd-dddd-dddd-dddd-dddddddddddd"))
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		serverSide, clientSide := net.Pipe()
 		defer clientSide.Close()
 		go func() {

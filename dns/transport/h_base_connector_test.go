@@ -160,13 +160,11 @@ func TestH_ConnectorSingleflight(t *testing.T) {
 	results := make([]*hConn, workers)
 	var wg sync.WaitGroup
 	for i := range workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			conn, err := connector.Get(hTestCtx(t))
 			require.NoError(t, err)
 			results[i] = conn
-		}()
+		})
 	}
 	time.Sleep(20 * time.Millisecond)
 	close(release)

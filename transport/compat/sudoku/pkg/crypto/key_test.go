@@ -75,7 +75,6 @@ func TestKeyDerivation(t *testing.T) {
 	} else {
 		t.Logf("Recovered from Origin %s :\n %s", EncodePoint(pair.Public), EncodePoint(recoveredFromOrigin))
 	}
-
 }
 
 func TestHomomorphicProperty(t *testing.T) {

@@ -129,7 +129,6 @@ func getIpOfSslip(sni string) []netip.Addr {
 	ipstr := ""
 	if len(submatches) > 1 {
 		ipstr = strings.ReplaceAll(submatches[1], "-", ".")
-
 	} else {
 		submatches := ipv6Regex.FindStringSubmatch(sni)
 		if len(submatches) > 1 {

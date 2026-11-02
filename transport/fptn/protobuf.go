@@ -2,24 +2,28 @@ package fptn
 
 import (
 	"fmt"
-	"google.golang.org/protobuf/encoding/protowire"
 	"net/netip"
+
+	"google.golang.org/protobuf/encoding/protowire"
 )
 
 func bytesField(b []byte, n protowire.Number, data []byte) []byte {
 	b = protowire.AppendTag(b, n, protowire.BytesType)
 	return protowire.AppendBytes(b, data)
 }
+
 func message(kind uint64, field protowire.Number, data []byte) []byte {
 	b := []byte{8, 1, 16}
 	b = protowire.AppendVarint(b, kind)
 	return bytesField(b, field, data)
 }
+
 func EncodePacket(packet []byte) []byte {
 	inner := message(1, 4, bytesField(nil, 1, packet))
 	batch := bytesField(nil, 1, inner)
 	return message(3, 6, batch)
 }
+
 func fields(b []byte) (map[protowire.Number][][]byte, map[protowire.Number]uint64, error) {
 	data := map[protowire.Number][][]byte{}
 	nums := map[protowire.Number]uint64{}
@@ -57,12 +61,14 @@ func fields(b []byte) (map[protowire.Number][][]byte, map[protowire.Number]uint6
 	}
 	return data, nums, nil
 }
+
 func one(m map[protowire.Number][][]byte, n protowire.Number) []byte {
 	if len(m[n]) == 0 {
 		return nil
 	}
 	return m[n][len(m[n])-1]
 }
+
 func DecodeAssignment(b []byte) ([]netip.Addr, error) {
 	d, n, e := fields(b)
 	if e != nil {
@@ -85,6 +91,7 @@ func DecodeAssignment(b []byte) ([]netip.Addr, error) {
 	}
 	return []netip.Addr{a4, a6}, nil
 }
+
 func DecodePackets(b []byte) ([][]byte, error) {
 	d, n, e := fields(b)
 	if e != nil {

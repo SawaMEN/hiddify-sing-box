@@ -41,6 +41,7 @@ func (f *fakeOutbound) DialContext(ctx context.Context, network string, destinat
 	}
 	return nil, errors.New("fake: unreachable")
 }
+
 func (f *fakeOutbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
 	return nil, errors.New("fake: unsupported")
 }

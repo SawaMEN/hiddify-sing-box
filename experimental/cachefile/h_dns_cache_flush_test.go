@@ -47,4 +47,3 @@ func TestH_DNSCacheFlushFailurePreservesPendingValue(t *testing.T) {
 	require.Equal(t, rawMessage, actualMessage)
 	require.Equal(t, expireAt.Unix(), actualExpireAt.Unix())
 }
-

@@ -81,12 +81,12 @@ func TestRefreshAuthKeepsOldSessionOnFailure(t *testing.T) {
 
 func TestStalledTrafficRequiresSustainedUnansweredSends(t *testing.T) {
 	var detector stalledTraffic
-	for i := 0; i < 12; i++ {
+	for range 12 {
 		if detector.Observe(0, 0) {
 			t.Fatal("idle traffic triggered reconnect")
 		}
 	}
-	for i := 0; i < 11; i++ {
+	for i := range 11 {
 		if detector.Observe(1, 0) {
 			t.Fatalf("reconnect triggered early at interval %d", i)
 		}
@@ -104,7 +104,7 @@ func TestStalledTrafficDetectsSingleUnansweredRequest(t *testing.T) {
 	if detector.Observe(1, 0) {
 		t.Fatal("triggered before timeout")
 	}
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		if detector.Observe(0, 0) {
 			t.Fatalf("triggered early at interval %d", i)
 		}

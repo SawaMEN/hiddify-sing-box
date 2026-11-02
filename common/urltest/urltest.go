@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sagernet/sing-anytls"
+	anytls "github.com/sagernet/sing-anytls"
 	"github.com/sagernet/sing-box/adapter"
 	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-mux"
-	"github.com/sagernet/sing-snell"
+	mux "github.com/sagernet/sing-mux"
+	snell "github.com/sagernet/sing-snell"
 	"github.com/sagernet/sing/common"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
@@ -212,7 +212,7 @@ func urlTest(ctx context.Context, link string, detour N.Dialer) (t uint16, err e
 			return
 		}
 		resp.Body.Close()
-		t = uint16(time.Since(second) / time.Millisecond) //to avid timeout in the second call
+		t = uint16(time.Since(second) / time.Millisecond) // to avid timeout in the second call
 	}
 	return
 }

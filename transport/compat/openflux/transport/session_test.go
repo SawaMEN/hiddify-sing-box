@@ -99,7 +99,7 @@ func TestSessionHandshakeAndData(t *testing.T) {
 	errs := make(chan error, 2)
 	go func() { errs <- a.Start() }()
 	go func() { errs <- b.Start() }()
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		select {
 		case err := <-errs:
 			if err != nil {
@@ -140,7 +140,7 @@ func TestSessionControlRoundTrip(t *testing.T) {
 	errs := make(chan error, 2)
 	go func() { errs <- a.Start() }()
 	go func() { errs <- b.Start() }()
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if err := <-errs; err != nil {
 			t.Fatal(err)
 		}
@@ -174,7 +174,7 @@ func TestSessionReplayWindow(t *testing.T) {
 	errs := make(chan error, 2)
 	go func() { errs <- a.Start() }()
 	go func() { errs <- b.Start() }()
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if err := <-errs; err != nil {
 			t.Fatal(err)
 		}

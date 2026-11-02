@@ -6,7 +6,7 @@ import (
 	"net/netip"
 	"sync"
 
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/buf"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -36,8 +36,8 @@ func newStackDevice(options Options) (*stackDevice, error) {
 	device.memoryTun = tun.NewMemoryTun(tun.MemoryTunOptions{
 		MTU:       int(options.MTU),
 		Headroom:  options.PacketHeadroom,
-		RearSpace: 0, //H: the current MemoryTun has its own inbound rear-space management
-		Outbound: func(packets []*buf.Buffer) { //H: MemoryTun uses an ownership-taking callback without a return value
+		RearSpace: 0, // H: the current MemoryTun has its own inbound rear-space management
+		Outbound: func(packets []*buf.Buffer) { // H: MemoryTun uses an ownership-taking callback without a return value
 			_ = device.writeOutbound(packets)
 		},
 	})
@@ -65,11 +65,11 @@ func (d *stackDevice) UpdateConfiguration(configuration Configuration) error {
 	return nil
 }
 
-func (d *stackDevice) WaitWriteInboundBuffers(packetBuffers []*buf.Buffer) error { //H
+func (d *stackDevice) WaitWriteInboundBuffers(packetBuffers []*buf.Buffer) error { // H
 	return d.memoryTun.WaitWritePackets(common.Map(packetBuffers, (*buf.Buffer).Bytes))
 }
 
-func (d *stackDevice) NewOutboundQueue(handler func(packetBuffers []*buf.Buffer)) *tun.OutboundQueue { //H
+func (d *stackDevice) NewOutboundQueue(handler func(packetBuffers []*buf.Buffer)) *tun.OutboundQueue { // H
 	return d.memoryTun.NewOutboundQueue(handler)
 }
 

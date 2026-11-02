@@ -11,12 +11,14 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/endpoint"
+	"github.com/sagernet/sing-box/adapter/htest"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/service"
+
 	"github.com/stretchr/testify/require"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
@@ -183,7 +185,7 @@ func TestH_NewWARPEndpointMetadata(t *testing.T) {
 	require.Equal(t, "warp-tag", ep.Tag())
 	require.Equal(t, []string{N.NetworkTCP, N.NetworkUDP}, ep.Network())
 	require.Equal(t, []string{"wg-out", "profile-out"}, ep.Dependencies())
-	require.NoError(t, ep.Start(adapter.StartStateStart))
+	require.NoError(t, htest.Start(ep, adapter.StartStateStart))
 	require.False(t, ep.IsReady(), "readiness must return before bootstrap starts")
 	require.NoError(t, ep.Close())
 }
@@ -207,7 +209,7 @@ func TestH_WARPStartPostStartRunsHandler(t *testing.T) {
 	options := option.WARPEndpointOptions{WARPConfig: hWARPConfig(t, hWARPConfigJSON), AWG: &option.AwgOptions{Jc: 3}}
 	options.Detour = "missing-detour"
 	ep := hNewWARP(t, hTestContext(t), options)
-	require.NoError(t, ep.Start(adapter.StartStatePostStart))
+	require.NoError(t, htest.Start(ep, adapter.StartStatePostStart))
 	done := make(chan bool, 1)
 	go func() { done <- ep.IsReady() }()
 	select {
@@ -277,12 +279,13 @@ func (d *hBlockingProfileDialer) DialContext(ctx context.Context, _ string, _ M.
 	<-ctx.Done()
 	return nil, ctx.Err()
 }
+
 func TestH_WARPReadinessAndCloseDuringBlockedRegistration(t *testing.T) {
 	detour := &hBlockingProfileDialer{entered: make(chan struct{})}
 	ctx := service.ContextWith[adapter.OutboundManager](context.Background(), &hBlockingProfileManager{detour: detour})
 	ep := hNewWARP(t, ctx, option.WARPEndpointOptions{Profile: option.WARPProfile{Detour: "bootstrap"}})
 	defer ep.Close()
-	require.NoError(t, ep.Start(adapter.StartStatePostStart))
+	require.NoError(t, htest.Start(ep, adapter.StartStatePostStart))
 	select {
 	case <-detour.entered:
 	case <-time.After(time.Second):
@@ -314,7 +317,7 @@ func TestH_WARPReadinessAndCloseDuringBlockedRegistration(t *testing.T) {
 		t.Fatal("Close did not cancel registration")
 	}
 	require.False(t, ep.IsReady())
-	require.ErrorIs(t, ep.Start(adapter.StartStatePostStart), net.ErrClosed)
+	require.ErrorIs(t, htest.Start(ep, adapter.StartStatePostStart), net.ErrClosed)
 }
 
 type hBlockingProfileManager struct {
@@ -325,7 +328,9 @@ type hBlockingProfileManager struct {
 func (m *hBlockingProfileManager) Outbound(tag string) (adapter.Outbound, bool) {
 	return m.detour, tag == "bootstrap"
 }
+
 func (m *hBlockingProfileManager) Outbounds() []adapter.Outbound { return []adapter.Outbound{m.detour} }
+
 func TestH_WARPCloseBeforeBootstrapPreventsLateStart(t *testing.T) {
 	ep := hNewWARP(t, context.Background(), option.WARPEndpointOptions{WARPConfig: hWARPConfig(t, hWARPConfigJSON)})
 	require.NoError(t, ep.Close())

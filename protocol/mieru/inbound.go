@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/netip"
 	"sync"
+	"time"
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/inbound"
@@ -26,7 +27,6 @@ import (
 	mierumodel "github.com/enfein/mieru/v3/apis/model"
 	mieruserver "github.com/enfein/mieru/v3/apis/server"
 	mierupb "github.com/enfein/mieru/v3/pkg/appctl/appctlpb"
-	"google.golang.org/protobuf/proto"
 )
 
 func RegisterInbound(registry *inbound.Registry) {
@@ -74,7 +74,7 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 	return inboundInstance, nil
 }
 
-func (h *Inbound) Start(stage adapter.StartStage, scope *adapter.Scope) error { //H
+func (h *Inbound) Start(stage adapter.StartStage, scope *adapter.Scope) error { // H
 	if stage != adapter.StartStateStart {
 		return nil
 	}
@@ -86,7 +86,7 @@ func (h *Inbound) Start(stage adapter.StartStage, scope *adapter.Scope) error { 
 		return fmt.Errorf("failed to start mieru server: %w", err)
 	}
 
-	scope.Add(h.Close) //H
+	scope.Add(h.Close) // H
 	h.logger.Info("mieru server is started")
 	go h.acceptLoop()
 	return nil
@@ -103,14 +103,33 @@ func (h *Inbound) Close() error {
 }
 
 func (h *Inbound) acceptLoop() {
+	const initialBackoff = 50 * time.Millisecond
+	const maxBackoff = 2 * time.Second
+	backoff := initialBackoff
 	for {
+		if h.ctx.Err() != nil {
+			return
+		}
 		conn, request, err := h.server.Accept()
 		if err != nil {
-			if !h.server.IsRunning() {
+			if !h.server.IsRunning() || h.ctx.Err() != nil {
 				return
 			}
 			h.logger.Debug("failed to accept mieru connection: ", err)
+			timer := time.NewTimer(backoff)
+			select {
+			case <-h.ctx.Done():
+				timer.Stop()
+				return
+			case <-timer.C:
+			}
+			backoff = min(backoff*2, maxBackoff)
 			continue
+		}
+		backoff = initialBackoff
+		if h.ctx.Err() != nil {
+			conn.Close()
+			return
 		}
 		go h.handleConnection(conn, request)
 	}
@@ -245,7 +264,7 @@ func (c *mieruPacketConn) WritePacket(buffer *buf.Buffer, destination M.Socksadd
 	common.Must(header.WriteZeroN(3))
 
 	var addr mierumodel.AddrSpec
-	if destination.IsFqdn() {
+	if destination.IsDomain() {
 		addr.FQDN = destination.Fqdn
 	} else {
 		addr.IP = destination.Addr.AsSlice()
@@ -283,8 +302,8 @@ func buildMieruServerConfig(_ context.Context, options option.MieruInboundOption
 	var userNames []string
 	for _, user := range options.Users {
 		users = append(users, &mierupb.User{
-			Name:     proto.String(user.Name),
-			Password: proto.String(user.Password),
+			Name:     new(user.Name),
+			Password: new(user.Password),
 		})
 		userNames = append(userNames, user.Name)
 	}
@@ -302,7 +321,7 @@ func validateMieruInboundOptions(options option.MieruInboundOptions) error {
 		return fmt.Errorf("either server_port or transport must be set")
 	}
 	if options.ListenPort != 0 && (len(options.PortBindings) != 1 || options.PortBindings[0].Port != options.ListenPort) {
-		return fmt.Errorf("Transport of Server Port is not defined!")
+		return fmt.Errorf("transport of Server Port is not defined")
 	}
 	if len(options.Users) == 0 {
 		return E.New("users is empty")

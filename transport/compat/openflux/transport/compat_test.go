@@ -51,6 +51,7 @@ func (w *asyncWire) Receive(cb func([]byte)) {
 	w.cb = cb
 	w.mu.Unlock()
 }
+
 func (w *asyncWire) Send(p []byte) error {
 	if !w.down.Load() {
 		w.out <- append([]byte(nil), p...)
@@ -69,7 +70,7 @@ const compatSecret = "compat test secret 0123456789"
 
 func oldClassic(t *testing.T, w Transport, codec, context string, exit bool) peer {
 	t.Helper()
-	var inner Transport = w
+	inner := w
 	if codec == CodecLegacy {
 		inner = NewCompressedTransport(inner)
 	} else {
@@ -289,7 +290,7 @@ func TestSessionClassicCompat(t *testing.T) {
 		_ = cl.Start()
 		defer cl.Stop()
 		defer ex.Stop()
-		for i := 0; i < 20; i++ {
+		for range 20 {
 			_ = cl.Send(testIPv4(60, 6))
 			time.Sleep(20 * time.Millisecond)
 		}
@@ -327,7 +328,8 @@ func TestKDFContextsRule(t *testing.T) {
 		{"explicit", "x", "https://u", nil, "x"},
 		{"--url", "", "https://u", []ContextSource{{Type: "mailru", URL: "https://m"}}, "https://u"},
 		{"highest priority", "", ContextPlaceholder, []ContextSource{
-			{Type: "mailru", URL: "https://m", Priority: 10}, {Type: "vyandex", URL: "https://v", Priority: 100}}, "https://v"},
+			{Type: "mailru", URL: "https://m", Priority: 10}, {Type: "vyandex", URL: "https://v", Priority: 100},
+		}, "https://v"},
 		{"classic cups rooms as --url", "", "rooms", []ContextSource{{Type: "cupsonline", URL: "rooms"}}, ContextPlaceholder},
 		{"direct address", "", ContextPlaceholder, []ContextSource{{Type: "direct", URL: "1.2.3.4:9443"}}, ContextPlaceholder},
 	}

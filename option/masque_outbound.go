@@ -4,9 +4,8 @@ import (
 	"github.com/sagernet/sing/common/json/badoption"
 )
 
-//H — WARP-flavored MASQUE outbound, tunnels through Cloudflare's consumer WARP service
-
-type MASQUEOutboundTLSOptions struct { //H
+// H — WARP-flavored MASQUE outbound, tunnels through Cloudflare's consumer WARP service
+type MASQUEOutboundTLSOptions struct { // H
 	Insecure              bool                                `json:"insecure,omitempty"`
 	CipherSuites          badoption.Listable[string]          `json:"cipher_suites,omitempty"`
 	CurvePreferences      badoption.Listable[CurvePreference] `json:"curve_preferences,omitempty"`
@@ -17,11 +16,16 @@ type MASQUEOutboundTLSOptions struct { //H
 	KernelRx              bool                                `json:"kernel_rx,omitempty"`
 }
 
-type MASQUEOutboundOptions struct { //H
+type MASQUEOutboundOptions struct { // H
 	DialerOptions
 	Profile                  CloudflareProfile        `json:"profile,omitempty"`
+	Device                   *MASQUEDeviceOptions     `json:"device,omitempty"`
+	MTU                      uint32                   `json:"mtu,omitempty"`
+	ServerName               string                   `json:"server_name,omitempty"`
 	MASQUEOutboundTLSOptions MASQUEOutboundTLSOptions `json:"tls,omitempty"`
 	UseHTTP2                 bool                     `json:"use_http2,omitempty"`
+	VHTTP                    string                   `json:"vhttp,omitempty"`   // H
+	Scanner                  *WARPScannerOptions      `json:"scanner,omitempty"` // H
 	UseIPv6                  bool                     `json:"use_ipv6,omitempty"`
 	UDPTimeout               badoption.Duration       `json:"udp_timeout,omitempty"`
 	UDPKeepalivePeriod       badoption.Duration       `json:"udp_keepalive_period,omitempty"`

@@ -44,7 +44,6 @@ func (c *hStalledConn) Close() error {
 }
 
 type hStalledDialer struct {
-	hLoopbackDialer
 	conn *hStalledConn
 }
 

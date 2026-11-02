@@ -156,14 +156,12 @@ func makeRing(ctx context.Context, store slotStore, session string, p params) (r
 		err     error
 	)
 	create := func(id *string, name string) {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			var e error
 			if *id, e = store.makeSlot(ctx, name); e != nil {
 				errOnce.Do(func() { err = e })
 			}
-		}()
+		})
 	}
 	for _, t := range []struct {
 		table  *slotTable

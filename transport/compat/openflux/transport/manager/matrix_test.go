@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"maps"
 	"sync"
 	"testing"
 	"time"
@@ -197,9 +198,7 @@ func (e *wireEnd) FetchCookies() (map[string]string, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	out := make(map[string]string, len(e.jar))
-	for k, v := range e.jar {
-		out[k] = v
-	}
+	maps.Copy(out, e.jar)
 	return out, nil
 }
 
@@ -250,7 +249,7 @@ func startPair(t *testing.T, o pairOpts) *pair {
 		}
 		p.wires[w.name] = w
 	}
-	for side := 0; side < 2; side++ {
+	for side := range 2 {
 		exit := side == 1
 		sess, err := transport.NewSession(params, exit)
 		if err != nil {
@@ -385,7 +384,7 @@ func TestMatrixEveryCombination(t *testing.T) {
 	n := len(matrixTypes)
 	for mask := 1; mask < 1<<n; mask++ {
 		var types []int
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if mask&(1<<i) != 0 {
 				types = append(types, i)
 			}

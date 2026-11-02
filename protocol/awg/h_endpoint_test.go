@@ -20,6 +20,7 @@ import (
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+
 	"github.com/stretchr/testify/require"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
@@ -268,7 +269,9 @@ func TestH_EndpointReadinessAndDialValidation(t *testing.T) {
 
 	_, err := ep.DialContext(context.Background(), N.NetworkTCP, M.Socksaddr{Port: 80})
 	require.ErrorContains(t, err, "invalid destination")
-	require.NoError(t, ep.Start(adapter.StartStateInitialize))
+	scope := adapter.NewScope(context.Background(), log.NewNOPFactory().NewLogger("test"))
+	t.Cleanup(func() { require.NoError(t, scope.Close()) })
+	require.NoError(t, ep.Start(adapter.StartStateInitialize, scope))
 }
 
 func TestH_RegisterEndpoint(t *testing.T) {

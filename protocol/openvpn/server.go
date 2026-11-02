@@ -22,7 +22,7 @@ import (
 	"github.com/sagernet/sing-box/transport/device"
 	ovpntransport "github.com/sagernet/sing-box/transport/openvpn"
 	ovpn "github.com/sagernet/sing-openvpn"
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common/buf"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
@@ -157,7 +157,7 @@ func validateServerTopology(topology string) error {
 	}
 }
 
-func (s *ServerEndpoint) Start(stage adapter.StartStage) error {
+func (s *ServerEndpoint) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage == adapter.StartStateInitialize {
 		s.deviceOptions.MemoryPressure = oomkiller.MemoryPressure(s.ctx)
 		tunnelDevice, err := device.New(*s.deviceOptions)
@@ -166,6 +166,7 @@ func (s *ServerEndpoint) Start(stage adapter.StartStage) error {
 		}
 		tunnelDevice.SetPacketWriter(s.writePacketBuffersByDestination)
 		s.device = tunnelDevice
+		scope.Add(s.Close) // H
 		s.deviceOptions = nil
 		return nil
 	}
@@ -240,10 +241,7 @@ func (s *ServerEndpoint) Start(stage adapter.StartStage) error {
 	}
 	serverOptions.Transport.Listener = streamListener
 	serverOptions.Transport.PacketConn = packetConn
-	serverOptions.NewOutboundQueue = func(write func(buffers []*buf.Buffer)) ovpn.OutboundQueue {
-		return s.device.NewOutboundQueue(write)
-	}
-	serverOptions.IncomingPacketHeadroom = s.device.FrontHeadroom
+	serverOptions.DataChannel.PacketHeadroom = s.device.FrontHeadroom() // H: supported by sing-openvpn v5
 	server, err := ovpn.NewServer(serverOptions)
 	if err != nil {
 		if packetConn != nil {
@@ -678,11 +676,6 @@ func (s *ServerEndpoint) WritePackets(packets [][]byte) error {
 	return err
 }
 
-func (s *ServerEndpoint) routeOutbound(packet []byte) *tun.OutboundQueue {
-	outboundQueue, _ := s.server.RouteOutbound(packet).(*tun.OutboundQueue)
-	return outboundQueue
-}
-
 func (s *ServerEndpoint) writePacketBuffersByDestination(packetBuffers []*buf.Buffer) error {
 	routeMisses, err := s.server.WriteDataPacketBuffersByDestination(packetBuffers)
 	if len(routeMisses) > 0 {
@@ -698,8 +691,8 @@ func (s *ServerEndpoint) writeRouteMisses(routeMisses []*ovpn.RouteMissError) {
 	for _, routeMiss := range routeMisses {
 		sourceAddress := packetSourceAddress(routeMiss.Packet, inet4Address, inet6Address)
 		reply, built := tun.BuildICMPError(routeMiss.Packet, tun.ICMPErrorNoRoute, sourceAddress, 0, headroom)
-		if built {
-			replies = append(replies, reply)
+		if !built {
+			continue
 		}
 		replyBuffer := buf.As(reply)
 		replyBuffer.Advance(headroom)
@@ -774,4 +767,15 @@ func (s *ServerEndpoint) ListenPacketWithDestination(ctx context.Context, destin
 func (s *ServerEndpoint) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
 	packetConn, _, err := s.ListenPacketWithDestination(ctx, destination)
 	return packetConn, err
+}
+
+// Close releases the server device and the endpoint's background loop.
+// The scoped server and listeners are closed by their own lifecycle cleanups.
+func (s *ServerEndpoint) Close() error {
+	s.cancelLoop()
+	s.started.Store(false)
+	if s.device != nil {
+		return s.device.Close()
+	}
+	return nil
 }

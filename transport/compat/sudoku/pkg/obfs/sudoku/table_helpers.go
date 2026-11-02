@@ -30,7 +30,7 @@ type hintPart struct {
 
 func buildHintPositions() [][4]byte {
 	positions := make([][4]byte, 0, hintPositionsCount)
-	for a := 0; a < 13; a++ {
+	for a := range 13 {
 		for b := a + 1; b < 14; b++ {
 			for c := b + 1; c < 15; c++ {
 				for d := c + 1; d < 16; d++ {

@@ -3,7 +3,7 @@ package device
 import (
 	"net/netip"
 
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing-tun/gtcpip/header"
 	"github.com/sagernet/sing/common/buf"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -54,11 +54,11 @@ func (d *systemStackDevice) UpdateConfiguration(configuration Configuration) err
 	return d.stackDevice.UpdateConfiguration(configuration)
 }
 
-func (d *systemStackDevice) WaitWriteInboundBuffers(packetBuffers []*buf.Buffer) error { //H
+func (d *systemStackDevice) WaitWriteInboundBuffers(packetBuffers []*buf.Buffer) error { // H
 	return d.WriteInboundBuffers(packetBuffers)
 }
 
-func (d *systemStackDevice) NewOutboundQueue(handler func(packetBuffers []*buf.Buffer)) *tun.OutboundQueue { //H
+func (d *systemStackDevice) NewOutboundQueue(handler func(packetBuffers []*buf.Buffer)) *tun.OutboundQueue { // H
 	return d.stackDevice.NewOutboundQueue(handler)
 }
 

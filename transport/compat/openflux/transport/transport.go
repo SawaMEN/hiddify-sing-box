@@ -2,11 +2,12 @@ package transport
 
 import (
 	"context"
-	"github.com/sagernet/sing-box/transport/compat/openflux/netbind"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/sagernet/sing-box/transport/compat/openflux/netbind"
 )
 
 type TransportConfig struct {
@@ -134,7 +135,7 @@ func (b *BaseTransport) CallReceive(data []byte) {
 	}
 }
 
-func (b *BaseTransport) GetSession(accessor func(interface{})) {
+func (b *BaseTransport) GetSession(accessor func(any)) {
 	b.Mu.RLock()
 	defer b.Mu.RUnlock()
 	// This is a helper for subclasses

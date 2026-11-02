@@ -9,9 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/amnezia-vpn/amneziawg-go/v3/conn"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+
+	"github.com/amnezia-vpn/amneziawg-go/v3/conn"
 	"github.com/stretchr/testify/require"
 )
 

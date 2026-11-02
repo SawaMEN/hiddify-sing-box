@@ -7,6 +7,17 @@ import (
 	E "github.com/sagernet/sing/common/exceptions"
 )
 
+func singlePeer(peers []option.AwgPeerOptions) netip.AddrPort {
+	if len(peers) != 1 || peers[0].Port == 0 {
+		return netip.AddrPort{}
+	}
+	address, err := netip.ParseAddr(peers[0].Address)
+	if err != nil {
+		return netip.AddrPort{}
+	}
+	return netip.AddrPortFrom(address, peers[0].Port)
+}
+
 // peerFallback is the only peer's fallback addresses, on its port (see transport/awg/h_path.go).
 // They need a single peer given by an IP address and a port.
 func peerFallback(options option.AwgEndpointOptions) ([]netip.AddrPort, error) {

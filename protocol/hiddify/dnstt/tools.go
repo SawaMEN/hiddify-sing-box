@@ -1,15 +1,15 @@
 package dnstt
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
 
-	_ "embed"
+	"github.com/sagernet/sing-box/option"
 
 	dnstt "github.com/net2share/vaydns/client"
-	"github.com/sagernet/sing-box/option"
 )
 
 var (
@@ -46,9 +46,8 @@ func getConfigResolvers(options option.DnsttOptions) ([]ResolverS, error) {
 	resolvers := []ResolverS{}
 	for _, resolverAddr := range options.Resolvers {
 		if resolverAddr == "" || resolverAddr == "auto" {
-			for ip, _ := range resolverCountry {
+			for ip := range resolverCountry {
 				resolver, err := getResolver(options, fmt.Sprint(ip, ":53"))
-
 				if err != nil {
 					return nil, fmt.Errorf("invalid resolver address %s: %w", ip, err)
 				}
@@ -71,6 +70,7 @@ func getConfigResolvers(options option.DnsttOptions) ([]ResolverS, error) {
 	}
 	return resolvers, nil
 }
+
 func getResolver(options option.DnsttOptions, s string) (dnstt.Resolver, error) {
 	var resolver dnstt.Resolver
 	var err error

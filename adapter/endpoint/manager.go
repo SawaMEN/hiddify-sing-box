@@ -92,18 +92,25 @@ func (m *Manager) Remove(tag string) error {
 
 func (m *Manager) Create(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, outboundType string, options any) error {
 	endpoint, err := m.registry.Create(ctx, router, logger, tag, outboundType, options)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	m.access.Lock()
 	started, scope := m.started, m.scope
 	m.access.Unlock()
 	if started {
-		if err = adapter.StartLate(scope, "endpoint/"+endpoint.Type()+"["+endpoint.Tag()+"]", endpoint); err != nil { return err }
+		if err = adapter.StartLate(scope, "endpoint/"+endpoint.Type()+"["+endpoint.Tag()+"]", endpoint); err != nil {
+			return err
+		}
 	}
 	m.access.Lock()
 	old, replaced := m.endpointByTag[tag]
 	if replaced {
 		index := slices.Index(m.endpoints, old)
-		if index < 0 { m.access.Unlock(); return E.New("invalid endpoint index: ", tag) }
+		if index < 0 {
+			m.access.Unlock()
+			return E.New("invalid endpoint index: ", tag)
+		}
 		m.endpoints = slices.Clone(m.endpoints)
 		m.endpoints[index] = endpoint
 	} else {

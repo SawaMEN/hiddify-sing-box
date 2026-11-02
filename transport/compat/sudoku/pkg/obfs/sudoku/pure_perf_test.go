@@ -21,8 +21,8 @@ package sudoku
 
 import (
 	"bytes"
+	crypto_rand "crypto/rand"
 	"io"
-	"math/rand"
 	"net"
 	"testing"
 	"time"
@@ -43,7 +43,7 @@ func benchmarkPureWriteThroughput(b *testing.B, pMin, pMax int) {
 	table := NewTable("pure-throughput-key", "prefer_ascii")
 	conn := NewConn(discardConn{}, table, pMin, pMax, false)
 	data := make([]byte, 32*1024)
-	_, _ = rand.Read(data)
+	_, _ = crypto_rand.Read(data)
 
 	b.SetBytes(int64(len(data)))
 	b.ReportAllocs()
@@ -71,7 +71,7 @@ func benchmarkPackedWriteThroughput(b *testing.B, pMin, pMax int) {
 	table := NewTable("packed-throughput-key", "prefer_ascii")
 	conn := NewPackedConn(discardConn{}, table, pMin, pMax)
 	data := make([]byte, 32*1024)
-	_, _ = rand.Read(data)
+	_, _ = crypto_rand.Read(data)
 
 	b.SetBytes(int64(len(data)))
 	b.ReportAllocs()
@@ -94,7 +94,7 @@ func BenchmarkPackedWriteThroughput_DefaultPadding(b *testing.B) {
 func benchmarkPureReadThroughput(b *testing.B, pMin, pMax int) {
 	table := NewTable("pure-throughput-key", "prefer_ascii")
 	data := make([]byte, 32*1024)
-	_, _ = rand.Read(data)
+	_, _ = crypto_rand.Read(data)
 
 	var encoded bytes.Buffer
 	writer := NewConn(writeOnlyConn{Writer: &encoded}, table, pMin, pMax, false)
@@ -126,7 +126,7 @@ func BenchmarkPureReadThroughput_DefaultPadding(b *testing.B) {
 func benchmarkPackedReadThroughput(b *testing.B, pMin, pMax int) {
 	table := NewTable("packed-throughput-key", "prefer_ascii")
 	data := make([]byte, 32*1024)
-	_, _ = rand.Read(data)
+	_, _ = crypto_rand.Read(data)
 
 	var encoded bytes.Buffer
 	writer := NewPackedConn(writeOnlyConn{Writer: &encoded}, table, pMin, pMax)

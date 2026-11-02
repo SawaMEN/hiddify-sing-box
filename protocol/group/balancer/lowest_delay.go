@@ -10,26 +10,30 @@ import (
 )
 
 type LowestDelay struct {
-	outbounds map[string][]adapter.Outbound
+	outbounds        map[string][]adapter.Outbound
 	selectedOutbound map[string]adapter.Outbound
-	tolerance uint16
-	toleranceRatio float64
-	mu sync.Mutex
+	tolerance        uint16
+	toleranceRatio   float64
+	mu               sync.Mutex
 }
 
 func NewLowestDelay(outbounds []adapter.Outbound, options option.BalancerOutboundOptions) *LowestDelay {
 	available := convertOutbounds(outbounds)
 	tolerance := options.Tolerance
-	if tolerance == 0 { tolerance = defaultTolerance }
+	if tolerance == 0 {
+		tolerance = defaultTolerance
+	}
 	ratio := options.ToleranceRatio
-	if ratio <= 0 { ratio = defaultToleranceRatio }
+	if ratio <= 0 {
+		ratio = defaultToleranceRatio
+	}
 	return &LowestDelay{
 		outbounds: available,
 		selectedOutbound: map[string]adapter.Outbound{
 			N.NetworkUDP: available[N.NetworkUDP][0],
 			N.NetworkTCP: available[N.NetworkTCP][0],
 		},
-		tolerance: tolerance,
+		tolerance:      tolerance,
 		toleranceRatio: ratio,
 	}
 }
@@ -39,7 +43,9 @@ var _ Strategy = (*LowestDelay)(nil)
 func (s *LowestDelay) Now() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if selected := s.selectedOutbound[N.NetworkTCP]; selected != nil { return selected.Tag() }
+	if selected := s.selectedOutbound[N.NetworkTCP]; selected != nil {
+		return selected.Tag()
+	}
 	return ""
 }
 
@@ -50,7 +56,7 @@ func (s *LowestDelay) UpdateOutboundsInfo(history map[string]*adapter.URLTestHis
 	for network, available := range s.outbounds {
 		selected := s.selectedOutbound[network]
 		best := selected
-		var bestDelay uint16 = monitoring.TimeoutDelay
+		bestDelay := monitoring.TimeoutDelay
 		for _, candidate := range available {
 			delay := getTagDelay(candidate.Tag(), history)
 			if delay < bestDelay {
@@ -58,7 +64,10 @@ func (s *LowestDelay) UpdateOutboundsInfo(history map[string]*adapter.URLTestHis
 			}
 		}
 		if selected == nil {
-			if best != nil { s.selectedOutbound[network] = best; changed = true }
+			if best != nil {
+				s.selectedOutbound[network] = best
+				changed = true
+			}
 			continue
 		}
 		if best == nil || best.Tag() == selected.Tag() || bestDelay >= monitoring.TimeoutDelay {
@@ -77,6 +86,8 @@ func (s *LowestDelay) UpdateOutboundsInfo(history map[string]*adapter.URLTestHis
 func (s *LowestDelay) Select(metadata adapter.InboundContext, network string, touch bool) adapter.Outbound {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if network != N.NetworkTCP && network != N.NetworkUDP { network = N.NetworkTCP }
+	if network != N.NetworkTCP && network != N.NetworkUDP {
+		network = N.NetworkTCP
+	}
 	return s.selectedOutbound[network]
 }

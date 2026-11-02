@@ -84,10 +84,11 @@ func (m *ReferenceManager) Name() string {
 	return "reference manager"
 }
 
-func (m *ReferenceManager) Start(stage adapter.StartStage) error {
+func (m *ReferenceManager) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage != adapter.StartStateStarted {
 		return nil
 	}
+	scope.Add(m.Close)
 	m.subscriber = observable.NewSubscriber[struct{}](1)
 	history := service.PtrFromContext[urltest.HistoryStorage](m.ctx)
 	if history != nil {
@@ -100,8 +101,12 @@ func (m *ReferenceManager) Start(stage adapter.StartStage) error {
 	if m.pauseManager != nil {
 		m.devicePaused.Store(m.pauseManager.IsDevicePaused())
 	}
-	m.update()
-	go m.loop()
+	// Reference updates may close idle multiplex sessions. A concurrent dial
+	// can hold the mux lock for its entire handshake, so never block Box.Start.
+	go func() {
+		m.update()
+		m.loop()
+	}()
 	if m.pauseManager != nil {
 		m.pauseCallback = m.pauseManager.RegisterCallback(func(event int) {
 			switch event {

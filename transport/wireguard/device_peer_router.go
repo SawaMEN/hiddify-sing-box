@@ -4,7 +4,7 @@ import (
 	"net/netip"
 	"sync/atomic"
 
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing-tun/gtcpip/header"
 	"github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/wireguard-go/device"
@@ -26,7 +26,7 @@ type peerQueue struct {
 	peer    *device.Peer
 	queue   *tun.OutboundQueue
 	packets [][]byte
-	router  *peerRouter //H
+	router  *peerRouter // H
 }
 
 func newPeerRouter(options DeviceOptions) *peerRouter {
@@ -46,7 +46,7 @@ func (r *peerRouter) setPeers(allowedIPs *device.AllowedIPs, peers []*device.Pee
 		queues:     make(map[*device.Peer]*peerQueue, len(peers)),
 	}
 	for _, peer := range peers {
-		current := &peerQueue{peer: peer, router: r} //H
+		current := &peerQueue{peer: peer, router: r} // H
 		current.queue = r.memoryTun.NewOutboundQueue(current.write)
 		routes.queues[peer] = current
 	}
@@ -114,9 +114,9 @@ func (r *peerRoutes) close() {
 
 func (q *peerQueue) write(packetBuffers []*buf.Buffer) {
 	for _, packetBuffer := range packetBuffers {
-		if q.router.answerTooBig(packetBuffer.Bytes()) { //H: path MTU discovery
-			continue //H
-		} //H
+		if q.router.answerTooBig(packetBuffer.Bytes()) { // H: path MTU discovery
+			continue // H
+		} // H
 		q.packets = append(q.packets, packetBuffer.Bytes())
 	}
 	q.peer.WritePackets(q.packets)

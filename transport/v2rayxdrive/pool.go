@@ -3,13 +3,15 @@ package xdrive
 
 import (
 	"context"
-	"github.com/sagernet/sing-box/option"
-	splithttp "github.com/sagernet/sing-box/transport/v2rayxhttp"
-	"github.com/xtls/xray-core/common/errors"
 	"io"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/sagernet/sing-box/option"
+	splithttp "github.com/sagernet/sing-box/transport/v2rayxhttp"
+
+	"github.com/xtls/xray-core/common/errors"
 )
 
 var errSessionClosed = errors.New("the session is closed")

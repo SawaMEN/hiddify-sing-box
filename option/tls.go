@@ -107,7 +107,7 @@ func (o *InboundTLSOptionsContainer) ReplaceInboundTLSOptions(options *InboundTL
 
 type OutboundTLSOptions struct {
 	// Deprecated: legacy nested fragmentation options are migrated to the dialer.
-	TLSFragment *TLSFragmentOptions `json:"tls_fragment,omitempty" schema:"omit"`
+	TLSFragment                *TLSFragmentOptions                 `json:"tls_fragment,omitempty" schema:"omit"`
 	Enabled                    bool                                `json:"enabled,omitempty"`
 	Engine                     string                              `json:"engine,omitempty" enum:"go,apple,windows"`
 	DisableSNI                 bool                                `json:"disable_sni,omitempty"`
@@ -138,7 +138,7 @@ type OutboundTLSOptions struct {
 	UTLS                       *OutboundUTLSOptions                `json:"utls,omitempty"`
 	Reality                    *OutboundRealityOptions             `json:"reality,omitempty"`
 
-	TLSTricks *TLSTricksOptions `json:"tls_tricks,omitempty"` //H
+	TLSTricks *TLSTricksOptions `json:"tls_tricks,omitempty"` // H
 }
 
 type OutboundTLSOptionsContainer struct {
@@ -273,5 +273,5 @@ type OutboundRealityOptions struct {
 	Enabled   bool   `json:"enabled,omitempty"`
 	PublicKey string `json:"public_key,omitempty"`
 	ShortID   string `json:"short_id,omitempty"`
-	KeyShare  string `json:"key_share,omitempty"` //H: "", "hybrid" or "classical"
+	KeyShare  string `json:"key_share,omitempty"` // H: "", "hybrid" or "classical"
 }

@@ -6,10 +6,8 @@ import (
 	"net"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
 	"github.com/sagernet/sing-box/common/dialer"
@@ -22,6 +20,8 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/service"
+
+	"github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon"
 )
 
 const (
@@ -40,8 +40,10 @@ func RegisterOutbound(registry *outbound.Registry) {
 	outbound.Register[option.PsiphonOutboundOptions](registry, C.TypePsiphon, NewOutbound)
 }
 
-var _ adapter.Outbound = (*Outbound)(nil)
-var _ adapter.InterfaceUpdateListener = (*Outbound)(nil)
+var (
+	_ adapter.Outbound                = (*Outbound)(nil)
+	_ adapter.InterfaceUpdateListener = (*Outbound)(nil)
+)
 
 type Outbound struct {
 	outbound.Adapter
@@ -52,19 +54,9 @@ type Outbound struct {
 	ctx               context.Context
 	useUpstreamBridge bool
 
-	mu          sync.RWMutex
 	reconnectCh chan struct{}
 	psiphon     *Psiphon
 	bridge      *upstreamBridge
-}
-
-type tunnelOwner struct{ notify func() }
-
-func (tunnelOwner) SignalSeededNewSLOK() {}
-func (o tunnelOwner) SignalTunnelFailure(*psiphon.Tunnel) {
-	if o.notify != nil {
-		o.notify()
-	}
 }
 
 func NewOutbound(ctx context.Context, _ adapter.Router, logger log.ContextLogger, tag string, options option.PsiphonOutboundOptions) (adapter.Outbound, error) {
@@ -84,6 +76,20 @@ func NewOutbound(ctx context.Context, _ adapter.Router, logger log.ContextLogger
 	if err != nil {
 		return nil, err
 	}
+	// Psiphon stores databases and downloaded server lists on disk. Keep
+	// concurrent outbounds independent instead of sharing the same datastore.
+	dataTag := tag
+	if dataTag == "" {
+		dataTag = "default"
+	}
+	if !filepath.IsLocal(dataTag) || filepath.Base(dataTag) != dataTag {
+		return nil, E.New("invalid Psiphon outbound tag for data directory: ", tag)
+	}
+	dataDir := filepath.Join(config.DataRootDirectory, dataTag)
+	config.DataRootDirectory = dataDir
+	config.MigrateDataStoreDirectory = dataDir
+	config.MigrateObfuscatedServerListDownloadDirectory = dataDir
+	config.MigrateRemoteServerListDownloadFilename = filepath.Join(dataDir, "server_list_compressed")
 	if options.Detour != "" && options.UpstreamProxyURL != "" {
 		return nil, E.New("Psiphon detour conflicts with upstream_proxy_url")
 	}
@@ -100,7 +106,6 @@ func NewOutbound(ctx context.Context, _ adapter.Router, logger log.ContextLogger
 	}
 	psiphon, err := NewPsiphon(ctx, logger, config, tag)
 	if err != nil {
-
 		return nil, err
 	}
 	outbound := &Outbound{
@@ -115,42 +120,42 @@ func NewOutbound(ctx context.Context, _ adapter.Router, logger log.ContextLogger
 	}
 
 	return outbound, nil
-
 }
-func (h *Outbound) PreStart() error {
+
+func (receiver *Outbound) PreStart() error {
 	// Direct Android sockets are already protected by DeviceBinder. An upstream
 	// HTTP proxy disables Psiphon QUIC/inproxy transports and filters server entries.
 	// Retain the bridge for explicit detours and platforms requiring the core dialer.
-	if h.useUpstreamBridge && h.psiphon.config.UpstreamProxyURL == "" && h.psiphon.config.InproxyClientPersonalCompartmentID == "" {
-		bridge, err := newUpstreamBridge(h.ctx, func(ctx context.Context, network, address string) (net.Conn, error) {
-			return h.dialer.DialContext(ctx, network, M.ParseSocksaddr(address))
+	if receiver.useUpstreamBridge && receiver.psiphon.config.UpstreamProxyURL == "" && receiver.psiphon.config.InproxyClientPersonalCompartmentID == "" {
+		bridge, err := newUpstreamBridge(receiver.ctx, func(ctx context.Context, network, address string) (net.Conn, error) {
+			return receiver.dialer.DialContext(ctx, network, M.ParseSocksaddr(address))
 		})
 		if err != nil {
 			return err
 		}
-		h.bridge = bridge
-		h.psiphon.config.UpstreamProxyURL = bridge.url
+		receiver.bridge = bridge
+		receiver.psiphon.config.UpstreamProxyURL = bridge.url
 	}
-	return h.psiphon.PreStart()
+	return receiver.psiphon.PreStart()
 }
-func (h *Outbound) Start() error {
 
-	go h.run()
+func (receiver *Outbound) Start() error {
+	go receiver.run()
 	return nil
 }
 
 //	func (h *Outbound) NewConnectionEx(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 //		// return h.psiphon.Dial(dst, innerConn)
 //	}
-func (h *Outbound) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
+func (receiver *Outbound) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
 	// h.logger.Debug("diallign outboud ", h.Tag(), " to ", destination)
 	ctx, metadata := adapter.ExtendContext(ctx)
-	metadata.Outbound = h.Tag()
+	metadata.Outbound = receiver.Tag()
 	metadata.Destination = destination
 
 	switch N.NetworkName(network) {
 	case N.NetworkTCP:
-		h.logger.InfoContext(ctx, "outbound connection to ", destination)
+		receiver.logger.InfoContext(ctx, "outbound connection to ", destination)
 		// h.mu.RLock()
 		// current := h.tunnel
 		// h.mu.RUnlock()
@@ -163,7 +168,7 @@ func (h *Outbound) DialContext(ctx context.Context, network string, destination 
 		return nil, E.Extend(N.ErrUnknownNetwork, network)
 	}
 	dst := destination.String()
-	// if destination.IsFqdn() {
+	// if destination.IsDomain() {
 	// 	destinationAddresses, err := h.dnsRouter.Lookup(ctx, destination.Fqdn, adapter.DNSQueryOptions{})
 	// 	if err != nil || len(destinationAddresses) == 0 {
 	// 		return nil, err
@@ -171,18 +176,18 @@ func (h *Outbound) DialContext(ctx context.Context, network string, destination 
 	// 	dst = fmt.Sprintf("%s:%d", destinationAddresses[0].String(), destination.Port)
 	// 	// return N.DialSerial(ctx, h.client, network, destination, destinationAddresses)
 	// }
-	h.logger.Debug("dialed destination ", destination, "(", dst, ") through outbound ", h.Tag(), ", now dialing through psiphon tunnel")
+	receiver.logger.Debug("dialed destination ", destination, "(", dst, ") through outbound ", receiver.Tag(), ", now dialing through psiphon tunnel")
 
 	// innerConn, err := h.dialer.DialContext(ctx, "tcp", destination)
 	// if err != nil {
 	// 	return nil, E.New(err, "failed to dial destination ", destination, " through outbound ", h.Tag())
 	// }
-	return h.psiphon.Dial(dst, nil)
+	return receiver.psiphon.Dial(dst, nil)
 
 	// dialConf := psiphon.DialConfig{
 	// 	// CustomDialer: *h.dialer,
 	// 	ResolveIP: func(context.Context, string) ([]net.IP, error) {
-	// 		if !destination.IsFqdn() {
+	// 		if !destination.IsDomain() {
 	// 			return []net.IP{netipAddrToIP(destination.Addr)}, nil
 	// 		}
 	// 		res, err := h.dnsRouter.Lookup(ctx, destination.Fqdn, adapter.DNSQueryOptions{})
@@ -203,17 +208,16 @@ func (h *Outbound) DialContext(ctx context.Context, network string, destination 
 	// 	},
 	// }
 	// return psiphon.DialTCP(ctx, destination.String(), &dialConf)
-
 }
-func (h *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
+
+func (receiver *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
 	return nil, E.New("UDP is not supported by psiphon outbound")
 }
 
-func (h *Outbound) Close() error {
-
-	h.psiphon.Close()
-	if h.bridge != nil {
-		return h.bridge.Close()
+func (receiver *Outbound) Close() error {
+	receiver.psiphon.Close()
+	if receiver.bridge != nil {
+		return receiver.bridge.Close()
 	}
 
 	return nil
@@ -239,7 +243,6 @@ func resolveConfig(value string) ([]byte, error) {
 		return plaintext, nil
 	}
 	return decodeBase64Config(value) // not encrypted with this build's key
-
 }
 
 // buildConfig starts from options.Config (see resolveConfig), then
@@ -310,17 +313,14 @@ func decodeBase64Config(encoded string) ([]byte, error) {
 }
 
 func durationToSecondsPtr(duration time.Duration) *int {
-	seconds := int(duration / time.Second)
-	if seconds < 1 {
-		seconds = 1
-	}
+	seconds := max(int(duration/time.Second), 1)
 	return &seconds
 }
 
-func (h *Outbound) run() {
-	if err := h.connectOnce(); err != nil {
-		h.logger.Warn("Psiphon startup failed: ", err)
-		_ = h.Close()
+func (receiver *Outbound) run() {
+	if err := receiver.connectOnce(); err != nil {
+		receiver.logger.Warn("Psiphon startup failed: ", err)
+		_ = receiver.Close()
 	}
 	// defer h.closeDataStore()
 	// for {
@@ -350,16 +350,16 @@ func (h *Outbound) run() {
 	// }
 }
 
-func (p *Outbound) DisplayType() string {
+func (receiver *Outbound) DisplayType() string {
 	str := "⚠️ Connecting..."
-	if p.psiphon.IsConnected() {
+	if receiver.psiphon.IsConnected() {
 		str = "✔️ Connected"
 	}
-	return C.ProxyDisplayName(p.Type()) + " " + str
+	return C.ProxyDisplayName(receiver.Type()) + " " + str
 }
 
-func (h *Outbound) connectOnce() error {
-	return h.psiphon.Start()
+func (receiver *Outbound) connectOnce() error {
+	return receiver.psiphon.Start()
 }
 
 // func (h *Outbound) connectOnce() error {
@@ -381,19 +381,20 @@ func (h *Outbound) connectOnce() error {
 // 	return nil
 // }
 
-func (h *Outbound) requestReconnect() {
+func (receiver *Outbound) requestReconnect() {
 	select {
-	case h.reconnectCh <- struct{}{}:
+	case receiver.reconnectCh <- struct{}{}:
 	default:
 	}
 }
-func (h *Outbound) IsReady() bool {
-	return h.psiphon.IsConnected()
+
+func (receiver *Outbound) IsReady() bool {
+	return receiver.psiphon.IsConnected()
 }
 
-func (h *Outbound) InterfaceUpdated(ctx context.Context) {
-	h.logger.Info("Network Changed... Restarting Psiphon Tunnel")
-	h.psiphon.NetworkChanged()
+func (receiver *Outbound) InterfaceUpdated(ctx context.Context) {
+	receiver.logger.Info("Network Changed... Restarting Psiphon Tunnel")
+	receiver.psiphon.NetworkChanged()
 }
 
 type psiphonDeviceBinder struct{ platform adapter.PlatformInterface }

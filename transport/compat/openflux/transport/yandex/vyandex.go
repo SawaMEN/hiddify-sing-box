@@ -19,11 +19,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gorilla/websocket"
-
 	"github.com/sagernet/sing-box/transport/compat/openflux/netbind"
 	"github.com/sagernet/sing-box/transport/compat/openflux/transport"
 	"github.com/sagernet/sing-box/transport/compat/openflux/utils"
+
+	"github.com/gorilla/websocket"
 )
 
 type VolgaConfig struct {
@@ -115,18 +115,19 @@ var (
 	b64BufPool = sync.Pool{
 		// base64Encode grows a buffer for a bigger batch; a 16 MiB default
 		// kept that much per pooled buffer alive for every small packet.
-		New: func() interface{} { return make([]byte, 0, 256*1024) },
+		New: func() any { return new(make([]byte, 0, 256*1024)) },
 	}
 	jsonBufPool = sync.Pool{
-		New: func() interface{} { return bytes.NewBuffer(make([]byte, 0, 128*1024)) },
+		New: func() any { return bytes.NewBuffer(make([]byte, 0, 128*1024)) },
 	}
 	blobBufPool = sync.Pool{
-		New: func() interface{} { return bytes.NewBuffer(make([]byte, 0, 64*1024)) },
+		New: func() any { return bytes.NewBuffer(make([]byte, 0, 64*1024)) },
 	}
 )
 
 func base64Encode(data []byte) string {
-	buf := b64BufPool.Get().([]byte)
+	pooled := b64BufPool.Get().(*[]byte)
+	buf := *pooled
 	need := base64.StdEncoding.EncodedLen(len(data))
 	if cap(buf) < need {
 		buf = make([]byte, need)
@@ -135,7 +136,8 @@ func base64Encode(data []byte) string {
 	}
 	base64.StdEncoding.Encode(buf, data)
 	out := string(buf)
-	b64BufPool.Put(buf[:0])
+	*pooled = buf[:0]
+	b64BufPool.Put(pooled)
 	return out
 }
 
@@ -203,7 +205,7 @@ func authorizeWithJar(docURL string, jar http.CookieJar, dialFns ...netbind.Dial
 	var finalURL string
 	currentURL := docURL
 
-	for i := 0; i < 15; i++ {
+	for i := range 15 {
 		req, _ := http.NewRequest("GET", currentURL, nil)
 		req.Header.Set("User-Agent", volgaUserAgent)
 		req.Header.Set("Accept-Language", "ru-RU,ru;q=0.9")
@@ -280,7 +282,7 @@ func authorizeWithJar(docURL string, jar http.CookieJar, dialFns ...netbind.Dial
 		return nil, fmt.Errorf("client-config not found in %s", finalURL)
 	}
 
-	var cfg map[string]interface{}
+	var cfg map[string]any
 	dec := json.NewDecoder(bytes.NewReader(m[1]))
 	dec.UseNumber()
 	if err := dec.Decode(&cfg); err != nil {
@@ -289,8 +291,8 @@ func authorizeWithJar(docURL string, jar http.CookieJar, dialFns ...netbind.Dial
 
 	utils.Debugf("[VOLGA] client-config keys: %v", mapKeys(cfg))
 
-	office, _ := cfg["officeActionData"].(map[string]interface{})
-	editor, _ := cfg["editorParams"].(map[string]interface{})
+	office, _ := cfg["officeActionData"].(map[string]any)
+	editor, _ := cfg["editorParams"].(map[string]any)
 
 	if office == nil {
 		return nil, fmt.Errorf("officeActionData missing (keys: %v)", mapKeys(cfg))
@@ -381,7 +383,7 @@ func authorizeWithJar(docURL string, jar http.CookieJar, dialFns ...netbind.Dial
 			a.Token != "", a.RequestPath != "")
 	}
 
-	var jsonData map[string]interface{}
+	var jsonData map[string]any
 	dec2 := json.NewDecoder(strings.NewReader(jsonStr))
 	dec2.UseNumber()
 	if err := dec2.Decode(&jsonData); err != nil {
@@ -391,7 +393,7 @@ func authorizeWithJar(docURL string, jar http.CookieJar, dialFns ...netbind.Dial
 	a.SessionID = getStr(jsonData, "sessionId")
 	a.UserID = int(getFloat(jsonData, "userId"))
 
-	if xiva, ok := jsonData["xiva"].(map[string]interface{}); ok {
+	if xiva, ok := jsonData["xiva"].(map[string]any); ok {
 		a.Sign = getStr(xiva, "sign")
 		a.TS = getStr(xiva, "ts")
 		a.UserIDStr = getStr(xiva, "user")
@@ -442,11 +444,7 @@ func CheckVolgaDocument(docURL string, jar http.CookieJar) (VolgaDocument, error
 	return VolgaDocument{DocID: a.DocID, Editable: a.Action == "" || a.Action == "edit"}, nil
 }
 
-func authorize(docURL string) (*volgaAuth, error) {
-	return authorizeWithJar(docURL, nil)
-}
-
-func getStr(m map[string]interface{}, key string) string {
+func getStr(m map[string]any, key string) string {
 	if m == nil {
 		return ""
 	}
@@ -465,7 +463,7 @@ func getStr(m map[string]interface{}, key string) string {
 	return ""
 }
 
-func getFloat(m map[string]interface{}, key string) float64 {
+func getFloat(m map[string]any, key string) float64 {
 	if m == nil {
 		return 0
 	}
@@ -486,7 +484,7 @@ func getFloat(m map[string]interface{}, key string) float64 {
 	return 0
 }
 
-func formatTTL(v interface{}) string {
+func formatTTL(v any) string {
 	switch x := v.(type) {
 	case json.Number:
 		return x.String()
@@ -505,7 +503,7 @@ func formatTTL(v interface{}) string {
 	}
 }
 
-func mapKeys(m map[string]interface{}) []string {
+func mapKeys(m map[string]any) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
@@ -707,26 +705,26 @@ func (r *relayClient) sendBatch(batch [][]byte) error {
 	opID := fmt.Sprintf("1-%d.%d", auth.UserID, r.seq.Add(1))
 	relayOpID := fmt.Sprintf("1-%d.%d", auth.UserID, r.seq.Add(1))
 
-	bundle := []interface{}{
-		map[string]interface{}{
+	bundle := []any{
+		map[string]any{
 			"id":         opID,
 			"frontier":   frontier,
 			"undoable":   true,
 			"actionName": "textInsert",
-			"ops":        []interface{}{[]interface{}{"it", "vyd:t/00000000000008", 0, "A"}},
+			"ops":        []any{[]any{"it", "vyd:t/00000000000008", 0, "A"}},
 			"sideEffect": false,
 			"localId":    r.localID.Add(1),
 		},
-		map[string]interface{}{
+		map[string]any{
 			"id":         relayOpID,
-			"frontier":   []interface{}{opID},
+			"frontier":   []any{opID},
 			"undoable":   false,
 			"actionName": "setCaret",
-			"ops": []interface{}{
-				[]interface{}{"us", auth.UserID, []interface{}{
-					[]interface{}{
-						[]interface{}{"vyd:t/00000000000008", 0, -1},
-						[]interface{}{"vyd:t/00000000000008", 0, -1},
+			"ops": []any{
+				[]any{"us", auth.UserID, []any{
+					[]any{
+						[]any{"vyd:t/00000000000008", 0, -1},
+						[]any{"vyd:t/00000000000008", 0, -1},
 					},
 				}},
 			},
@@ -736,8 +734,8 @@ func (r *relayClient) sendBatch(batch [][]byte) error {
 		encoded,
 	}
 
-	payload := map[string]interface{}{
-		"message": map[string]interface{}{
+	payload := map[string]any{
+		"message": map[string]any{
 			"bundleId": r.bundleID.Add(1),
 			"bundle":   bundle,
 		},
@@ -809,13 +807,13 @@ func (r *relayClient) SetFrontier(opID string) {
 	r.mu.Unlock()
 }
 
-func (r *relayClient) getFrontier() []interface{} {
+func (r *relayClient) getFrontier() []any {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.frontier == "" {
-		return []interface{}{}
+		return []any{}
 	}
-	return []interface{}{r.frontier}
+	return []any{r.frontier}
 }
 
 type wsListener struct {
@@ -836,8 +834,8 @@ type wsListener struct {
 }
 
 func newWSListener(auth *atomic.Pointer[volgaAuth], authorizeFn func() (*volgaAuth, error),
-	cfg VolgaConfig, stats *VolgaStats, relay *relayClient, onData func([]byte)) *wsListener {
-
+	cfg VolgaConfig, stats *VolgaStats, relay *relayClient, onData func([]byte),
+) *wsListener {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &wsListener{
 		auth:        auth,
@@ -932,10 +930,7 @@ func (w *wsListener) run() {
 			return
 		}
 
-		delay = time.Duration(float64(delay) * w.config.ReconnectMultiplier)
-		if delay > w.config.ReconnectMaxDelay {
-			delay = w.config.ReconnectMaxDelay
-		}
+		delay = min(time.Duration(float64(delay)*w.config.ReconnectMultiplier), w.config.ReconnectMaxDelay)
 	}
 }
 

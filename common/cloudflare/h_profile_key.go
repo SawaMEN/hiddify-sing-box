@@ -4,6 +4,7 @@ import (
 	"context"
 
 	E "github.com/sagernet/sing/common/exceptions"
+
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 

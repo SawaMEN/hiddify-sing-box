@@ -9,7 +9,7 @@ func TestTransportConfigRoundTrip(t *testing.T) {
 		Name: "yandex-1",
 		Type: "yandex",
 		URL:  "https://disk.yandex.ru/i/XXX",
-		Params: map[string]interface{}{
+		Params: map[string]any{
 			"priority": float64(100),
 			"region":   "ru",
 		},

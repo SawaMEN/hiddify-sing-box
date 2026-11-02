@@ -13,28 +13,27 @@ import (
 	"sync"
 	"time"
 
-	dnstt "github.com/net2share/vaydns/client"
 	"github.com/sagernet/sing-box/adapter"
-
 	"github.com/sagernet/sing-box/dns/transport"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/batch"
 
 	"github.com/miekg/dns"
+	dnstt "github.com/net2share/vaydns/client"
 )
 
 type History struct {
 	ResolverRate map[string]int `json:"resolver_rate"`
 }
 
-func (h *Outbound) loadHistory() *History {
+func (receiver *Outbound) loadHistory() *History {
 	history := &History{ResolverRate: make(map[string]int)}
 
-	if h.cache == nil {
+	if receiver.cache == nil {
 		return history
 	}
 
-	savedBinary := h.cache.LoadBinary("dnstt_resolvers" + h.options.RecordType)
+	savedBinary := receiver.cache.LoadBinary("dnstt_resolvers" + receiver.options.RecordType)
 	if savedBinary == nil {
 		return history
 	}
@@ -45,29 +44,29 @@ func (h *Outbound) loadHistory() *History {
 	return history
 }
 
-func (h *Outbound) saveHistory(his *History) {
-	if h.cache == nil {
+func (receiver *Outbound) saveHistory(his *History) {
+	if receiver.cache == nil {
 		return
 	}
 
 	content, err := json.Marshal(his)
 	if err != nil {
-		h.logger.Error("failed to marshal outbound monitoring history: ", err)
+		receiver.logger.Error("failed to marshal outbound monitoring history: ", err)
 		return
 	}
-	h.cache.SaveBinary("dnstt_resolvers"+h.options.RecordType, &adapter.SavedBinary{
+	receiver.cache.SaveBinary("dnstt_resolvers"+receiver.options.RecordType, &adapter.SavedBinary{
 		LastUpdated: time.Now(),
 		Content:     content,
 	})
 }
 
-func (h *Outbound) startTestResolver() error {
-	history := h.loadHistory()
-	defer h.saveHistory(history)
+func (receiver *Outbound) startTestResolver() error {
+	history := receiver.loadHistory()
+	defer receiver.saveHistory(history)
 
-	b, _ := batch.New(h.ctx, batch.WithConcurrencyNum[any](100))
+	b, _ := batch.New(receiver.ctx, batch.WithConcurrencyNum[any](100))
 
-	candidates := h.candidateResolvers
+	candidates := receiver.candidateResolvers
 	rand.Shuffle(len(candidates), func(i, j int) {
 		candidates[i], candidates[j] = candidates[j], candidates[i]
 	})
@@ -93,34 +92,34 @@ func (h *Outbound) startTestResolver() error {
 		resolver := r.Resolver
 
 		select {
-		case <-h.ctx.Done():
-			return h.ctx.Err()
+		case <-receiver.ctx.Done():
+			return receiver.ctx.Err()
 		default:
 		}
 
 		b.Go(resolver.ResolverAddr, func() (any, error) {
-			h.mu.Lock()
-			resCount := len(h.resolvers)
-			h.mu.Unlock()
+			receiver.mu.Lock()
+			resCount := len(receiver.resolvers)
+			receiver.mu.Unlock()
 			if resCount > 10 {
 				return nil, nil
 			}
 
 			// stop if context cancelled
 			select {
-			case <-h.ctx.Done():
-				return nil, h.ctx.Err()
+			case <-receiver.ctx.Done():
+				return nil, receiver.ctx.Err()
 			default:
 			}
 
-			rate, err := h.testTunnelResolver(resolver)
+			rate, err := receiver.testTunnelResolver(resolver)
 
 			// update history safely
 			historyMutex.Lock()
 			defer historyMutex.Unlock()
 
 			if err == nil {
-				h.logger.InfoContext(h.ctx, "resolver ", resolver.ResolverAddr, " is working and added to the pool")
+				receiver.logger.InfoContext(receiver.ctx, "resolver ", resolver.ResolverAddr, " is working and added to the pool")
 
 				if history.ResolverRate[resolver.ResolverAddr] < 0 {
 					history.ResolverRate[resolver.ResolverAddr] = 0
@@ -130,13 +129,13 @@ func (h *Outbound) startTestResolver() error {
 					history.ResolverRate[resolver.ResolverAddr] = 10
 				}
 
-				h.addResolver(resolver)
-				if h.IsReady() {
-					h.saveHistory(history)
+				receiver.addResolver(resolver)
+				if receiver.IsReady() {
+					receiver.saveHistory(history)
 				}
 
 			} else {
-				h.logger.WarnContext(h.ctx, "resolver ", resolver.ResolverAddr, " failed: ", err)
+				receiver.logger.WarnContext(receiver.ctx, "resolver ", resolver.ResolverAddr, " failed: ", err)
 
 				history.ResolverRate[resolver.ResolverAddr] += rate
 				if history.ResolverRate[resolver.ResolverAddr] < -10 {
@@ -150,6 +149,7 @@ func (h *Outbound) startTestResolver() error {
 
 	return b.Wait()
 }
+
 func getDnsRecordType(record string) uint16 {
 	switch record {
 	case "a":
@@ -175,12 +175,12 @@ func getDnsRecordType(record string) uint16 {
 	}
 }
 
-func (h *Outbound) testTunnelResolver(resolver dnstt.Resolver) (rate int, err error) {
-	domain := h.options.PreTestDomain
-	record := h.options.PreTestRecordType
-	h.logger.DebugContext(h.ctx, "testing resolver ", resolver.ResolverAddr, " with domain ", domain, " and record type ", record)
-	resp, err := h.Resolve(resolver, domain, getDnsRecordType(record))
-	h.logger.DebugContext(h.ctx, "resolver ", resolver.ResolverAddr, " response ", fmt.Sprint(resp), " error ", err)
+func (receiver *Outbound) testTunnelResolver(resolver dnstt.Resolver) (rate int, err error) {
+	domain := receiver.options.PreTestDomain
+	record := receiver.options.PreTestRecordType
+	receiver.logger.DebugContext(receiver.ctx, "testing resolver ", resolver.ResolverAddr, " with domain ", domain, " and record type ", record)
+	resp, err := receiver.Resolve(resolver, domain, getDnsRecordType(record))
+	receiver.logger.DebugContext(receiver.ctx, "resolver ", resolver.ResolverAddr, " response ", fmt.Sprint(resp), " error ", err)
 	if err != nil {
 		return -4, err
 	}
@@ -201,25 +201,24 @@ func (h *Outbound) testTunnelResolver(resolver dnstt.Resolver) (rate int, err er
 	// 	return fmt.Errorf("no A record found in response from resolver %s", resolver.ResolverAddr)
 	// }
 
-	ctx, cancel := context.WithTimeout(h.ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(receiver.ctx, 5*time.Second)
 	defer cancel()
-	tunnel, err := h.createDnsttTunnel(ctx, []dnstt.Resolver{resolver})
+	tunnel, err := receiver.createDnsttTunnel(ctx, []dnstt.Resolver{resolver})
 	if err != nil {
-		h.logger.WarnContext(h.ctx, "failed to establish tunnel to resolver ", resolver.ResolverAddr, ": ", err)
+		receiver.logger.WarnContext(receiver.ctx, "failed to establish tunnel to resolver ", resolver.ResolverAddr, ": ", err)
 		return -2, err
 	}
 	defer tunnel.Close()
-	h.logger.InfoContext(h.ctx, "successfully established tunnel to resolver ", resolver.ResolverAddr)
+	receiver.logger.InfoContext(receiver.ctx, "successfully established tunnel to resolver ", resolver.ResolverAddr)
 	conn, err := tunnel.OpenStream()
 	if err != nil {
-		h.logger.WarnContext(h.ctx, "failed to open stream to resolver ", resolver.ResolverAddr, ": ", err)
+		receiver.logger.WarnContext(receiver.ctx, "failed to open stream to resolver ", resolver.ResolverAddr, ": ", err)
 		return -1, err
 
 	}
-	h.logger.InfoContext(h.ctx, "successfully opened stream to resolver ", resolver.ResolverAddr)
+	receiver.logger.InfoContext(receiver.ctx, "successfully opened stream to resolver ", resolver.ResolverAddr)
 	conn.Close()
 	return 1, nil
-
 }
 
 func buildDNSQuery(name string, qtype uint16) *dns.Msg {
@@ -230,7 +229,7 @@ func buildDNSQuery(name string, qtype uint16) *dns.Msg {
 	return m
 }
 
-func (h *Outbound) ResolveUDP(resolver dnstt.Resolver, name string, qtype uint16) (*dns.Msg, error) {
+func (receiver *Outbound) ResolveUDP(resolver dnstt.Resolver, name string, qtype uint16) (*dns.Msg, error) {
 	host, portStr, err := net.SplitHostPort(resolver.ResolverAddr)
 	if err != nil {
 		return nil, err
@@ -241,8 +240,8 @@ func (h *Outbound) ResolveUDP(resolver dnstt.Resolver, name string, qtype uint16
 		return nil, err
 	}
 	trans, err := transport.NewUDP(
-		h.ctx,
-		h.logger,
+		receiver.ctx,
+		receiver.logger,
 		"resolver"+resolver.ResolverAddr,
 		option.RemoteDNSServerOptions{
 			DNSServerAddressOptions: option.DNSServerAddressOptions{
@@ -257,8 +256,8 @@ func (h *Outbound) ResolveUDP(resolver dnstt.Resolver, name string, qtype uint16
 	// h.logger.InfoContext(h.ctx, "resolving name ", name, " of type ", qtype, " using resolver ", resolver.ResolverAddr)
 
 	msg := buildDNSQuery(name, qtype)
-	trans.Start(adapter.StartStateStart)
-	ctx, cancel := context.WithTimeout(h.ctx, 5*time.Second)
+	trans.Start(adapter.StartStateStart, adapter.NewScope(receiver.ctx, receiver.logger))
+	ctx, cancel := context.WithTimeout(receiver.ctx, 5*time.Second)
 	defer cancel()
 	resp, err := trans.Exchange(ctx, msg)
 	if err != nil {
@@ -267,11 +266,15 @@ func (h *Outbound) ResolveUDP(resolver dnstt.Resolver, name string, qtype uint16
 	return resp, nil
 }
 
-func (h *Outbound) Resolve(resolver dnstt.Resolver, name string, qtype uint16) (*dns.Msg, error) {
+func (receiver *Outbound) Resolve(resolver dnstt.Resolver, name string, qtype uint16) (*dns.Msg, error) {
 	if resolver.ResolverType == dnstt.ResolverTypeUDP {
-		return h.ResolveUDP(resolver, name, qtype)
+		return receiver.ResolveUDP(resolver, name, qtype)
 	}
-	conn, r, err := h.getTCPBasedResolverConnection(resolver, 5*time.Second)
+	conn, r, err := receiver.getTCPBasedResolverConnection(resolver, 5*time.Second)
+	if err != nil {
+		return nil, err
+	} // H
+	defer conn.Close() // H
 	msg := buildDNSQuery(name, qtype)
 
 	data, err := msg.Pack()
@@ -298,9 +301,8 @@ func (h *Outbound) Resolve(resolver dnstt.Resolver, name string, qtype uint16) (
 	return resp, nil
 }
 
-func (h *Outbound) getTCPBasedResolverConnection(r dnstt.Resolver, timeout time.Duration) (net.PacketConn, *net.UDPAddr, error) {
-
-	h.logger.InfoContext(h.ctx, "getting resolver connection ", r.ResolverAddr)
+func (receiver *Outbound) getTCPBasedResolverConnection(r dnstt.Resolver, timeout time.Duration) (net.PacketConn, *net.UDPAddr, error) {
+	receiver.logger.InfoContext(receiver.ctx, "getting resolver connection ", r.ResolverAddr)
 	switch r.ResolverType {
 	case dnstt.ResolverTypeUDP:
 		addr, err := net.ResolveUDPAddr("udp", r.ResolverAddr)
@@ -314,7 +316,7 @@ func (h *Outbound) getTCPBasedResolverConnection(r dnstt.Resolver, timeout time.
 			if err != nil {
 				return nil, nil, err
 			}
-			h.logger.InfoContext(h.ctx, "resolver connection established ", r.ResolverAddr)
+			receiver.logger.InfoContext(receiver.ctx, "resolver connection established ", r.ResolverAddr)
 			return conn, addr, nil
 		} else {
 			workers := r.UDPWorkers
@@ -329,7 +331,7 @@ func (h *Outbound) getTCPBasedResolverConnection(r dnstt.Resolver, timeout time.
 			if err != nil {
 				return nil, nil, err
 			}
-			h.logger.InfoContext(h.ctx, "resolver connection established ", r.ResolverAddr)
+			receiver.logger.InfoContext(receiver.ctx, "resolver connection established ", r.ResolverAddr)
 			// t.forgedStats = forgedStats
 			return conn, addr, nil
 		}

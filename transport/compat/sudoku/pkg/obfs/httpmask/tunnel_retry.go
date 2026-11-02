@@ -66,12 +66,10 @@ func closeIdleConnections(client *http.Client) {
 }
 
 func isDialError(err error) bool {
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) {
+	if urlErr, ok := errors.AsType[*url.Error](err); ok {
 		return isDialError(urlErr.Err)
 	}
-	var opErr *net.OpError
-	if errors.As(err, &opErr) {
+	if opErr, ok := errors.AsType[*net.OpError](err); ok {
 		if opErr.Op == "dial" || opErr.Op == "connect" {
 			return true
 		}
@@ -83,12 +81,10 @@ func isRetryableHTTPTransportError(err error) bool {
 	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
-	var statusErr *httpStatusError
-	if errors.As(err, &statusErr) {
+	if statusErr, ok := errors.AsType[*httpStatusError](err); ok {
 		return isRetryableStatusCode(statusErr.code)
 	}
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) {
+	if urlErr, ok := errors.AsType[*url.Error](err); ok {
 		return isRetryableHTTPTransportError(urlErr.Err)
 	}
 	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||

@@ -163,14 +163,6 @@ func (t *ManagedTransport) Reset() {
 	t.retireEpoch(oldEpoch)
 }
 
-func (t *ManagedTransport) close() error {
-	epoch := t.epoch.Swap(nil)
-	if epoch != nil {
-		return epoch.transport.Close()
-	}
-	return nil
-}
-
 var _ adapter.HTTPTransport = (*sharedRef)(nil)
 
 type sharedRef struct {

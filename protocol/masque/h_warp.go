@@ -10,6 +10,7 @@ import (
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/cloudflare"
 	"github.com/sagernet/sing-box/common/dialer"
+	"github.com/sagernet/sing-box/common/tls"
 	"github.com/sagernet/sing-box/hiddify/warpscan"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
@@ -18,6 +19,7 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/service"
+
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
@@ -153,4 +155,27 @@ func ProbeWARP(ctx context.Context, logger log.ContextLogger, options option.MAS
 	}
 	addrPort, _ := addrPortOf(endpoint)
 	return warpscan.MASQUEProbe(probeDialer, tlsConfig, http2)(ctx, addrPort)
+}
+
+// hasPeer checks whether a peer was explicitly configured.
+func hasPeer(peer M.Socksaddr) bool {
+	return peer.Addr.IsValid() || peer.Fqdn != ""
+}
+
+// warpTLS builds the same authenticated client configuration as the MASQUE
+// tunnel, so connectivity probes verify the actual peer certificate.
+func warpTLS(ctx context.Context, logger log.ContextLogger, options option.MASQUEOutboundOptions, config *Config) (tls.Config, error) {
+	privateKey, err := config.GetEcPrivateKey()
+	if err != nil {
+		return nil, err
+	}
+	peerKey, err := config.GetEcEndpointPublicKey()
+	if err != nil {
+		return nil, err
+	}
+	certificate, err := masque.GenerateCert(privateKey, &privateKey.PublicKey)
+	if err != nil {
+		return nil, err
+	}
+	return tls.NewMASQUEClient(ctx, logger, "consumer-masque.cloudflareclient.com", certificate, privateKey, peerKey, options.MASQUEOutboundTLSOptions)
 }

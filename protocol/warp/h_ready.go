@@ -3,27 +3,12 @@ package warp
 import (
 	"time"
 
-	"github.com/sagernet/sing-box/adapter"
 	C "github.com/sagernet/sing-box/constant"
 )
-
-// warpKeepalive is the keepalive of the WARP peer, in seconds, as the WARP clients use: it
-// keeps the handshake fresh while the path works, and the first handshake starts at once.
-const warpKeepalive = 25
 
 // firstHandshakeWait is how long a new endpoint has to complete its first handshake before
 // the next port is tried.
 var firstHandshakeWait = 10 * time.Second
-
-// handshakeFresh reports whether the peer answered within staleHandshake: WireGuard renews the
-// handshake every two minutes while packets flow, and the keepalive keeps them flowing.
-func handshakeFresh(inner adapter.Endpoint) bool {
-	if _, isGetter := inner.(interface{ IpcGet() (string, error) }); !isGetter {
-		return adapter.IsReady(inner)
-	}
-	lastHandshake, _ := peerStatus(inner)
-	return !lastHandshake.IsZero() && time.Since(lastHandshake) < staleHandshake
-}
 
 // rotatePorts runs when the scanner is off and no server_port is set: when an endpoint does
 // not complete a handshake, the next of the profile's ports is tried. A port that does not

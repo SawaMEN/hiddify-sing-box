@@ -27,8 +27,9 @@ var _ adapter.OutboundWithMultiplex = (*Outbound)(nil)
 
 type Outbound struct {
 	outbound.Adapter
-	logger logger.ContextLogger
-	client *http.Client
+	logger           logger.ContextLogger
+	client           *http.Client
+	multiplexEnabled bool // H
 }
 
 func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.HTTPOutboundOptions) (adapter.Outbound, error) {
@@ -51,9 +52,10 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 		return nil, err
 	}
 	return &Outbound{
-		Adapter: outbound.NewAdapterWithDialerOptions(C.TypeHTTP, tag, []string{N.NetworkTCP, N.NetworkUDP}, options.DialerOptions),
-		logger:  logger,
-		client:  client,
+		Adapter:          outbound.NewAdapterWithDialerOptions(C.TypeHTTP, tag, []string{N.NetworkTCP, N.NetworkUDP}, options.DialerOptions),
+		logger:           logger,
+		client:           client,
+		multiplexEnabled: options.Version == 2 || options.Version == 3,
 	}, nil
 }
 
@@ -92,3 +94,6 @@ func (h *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (n
 	h.logger.InfoContext(ctx, "outbound packet connection to ", destination)
 	return h.client.ListenPacket(ctx, destination)
 }
+
+// MultiplexEnabled reports an explicitly selected HTTP multiplex transport. //H
+func (h *Outbound) MultiplexEnabled() bool { return h.multiplexEnabled }

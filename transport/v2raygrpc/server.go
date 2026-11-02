@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/grpcname" //H
+	"github.com/sagernet/sing-box/common/grpcname" // H
 	"github.com/sagernet/sing-box/common/tls"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
@@ -48,8 +48,8 @@ func NewServer(ctx context.Context, logger logger.ContextLogger, options option.
 		}))
 	}
 	server := &Server{ctx, logger, handler, grpc.NewServer(serverOptions...)}
-	serviceName, streamName := grpcname.Names(options.ServiceName)                     //H: Xray's custom paths
-	RegisterGunServiceCustomNameServer(server.server, server, serviceName, streamName) //H
+	serviceName, streamName := grpcname.Names(options.ServiceName)                     // H: Xray's custom paths
+	RegisterGunServiceCustomNameServer(server.server, server, serviceName, streamName) // H
 	return server, nil
 }
 

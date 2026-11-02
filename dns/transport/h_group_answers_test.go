@@ -72,7 +72,7 @@ func TestH_GroupStableSticksAndFailsOver(t *testing.T) {
 	var aDown atomic.Bool
 	a := hMember("a", func(ctx context.Context, message *mDNS.Msg) (*mDNS.Msg, error) {
 		if aDown.Load() {
-			return nil, hErrMember
+			return nil, errHMember
 		}
 		return hReply("1.1.1.1")(ctx, message)
 	})
@@ -151,7 +151,7 @@ func TestH_GroupModesIgnoredAnswerIsFailure(t *testing.T) {
 }
 
 func TestH_GroupModesAllFailed(t *testing.T) {
-	a := hMember("a", hFail(hErrMember))
+	a := hMember("a", hFail(errHMember))
 	b := hMember("b", hRcode(mDNS.RcodeRefused))
 	for _, mode := range []string{C.DNSGroupModeStable, C.DNSGroupModeFastest} {
 		group := hModeGroup(t, mode, a, b)

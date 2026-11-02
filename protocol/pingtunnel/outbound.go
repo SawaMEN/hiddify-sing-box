@@ -3,6 +3,13 @@ package pingtunnel
 import (
 	"context"
 	"fmt"
+	"io"
+	"net"
+	"net/netip"
+	"strings"
+	"sync"
+	"syscall"
+
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
 	"github.com/sagernet/sing-box/log"
@@ -13,12 +20,6 @@ import (
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/protocol/socks"
 	"github.com/sagernet/sing/service"
-	"io"
-	"net"
-	"net/netip"
-	"strings"
-	"sync"
-	"syscall"
 )
 
 func RegisterOutbound(r *outbound.Registry) { outbound.Register(r, "pingtunnel", NewOutbound) }
@@ -151,9 +152,11 @@ type loopbackDialer struct{}
 func (loopbackDialer) DialContext(ctx context.Context, n string, d M.Socksaddr) (net.Conn, error) {
 	return (&net.Dialer{}).DialContext(ctx, n, d.String())
 }
+
 func (loopbackDialer) ListenPacket(ctx context.Context, d M.Socksaddr) (net.PacketConn, error) {
 	return (&net.ListenConfig{}).ListenPacket(ctx, "udp", "127.0.0.1:0")
 }
+
 func (h *Outbound) DialContext(ctx context.Context, n string, d M.Socksaddr) (net.Conn, error) {
 	if e := h.ensure(ctx); e != nil {
 		return nil, e
@@ -167,6 +170,7 @@ func (h *Outbound) DialContext(ctx context.Context, n string, d M.Socksaddr) (ne
 	}
 	return h.socks.DialContext(ctx, n, d)
 }
+
 func (h *Outbound) ListenPacket(ctx context.Context, d M.Socksaddr) (net.PacketConn, error) {
 	if e := h.ensure(ctx); e != nil {
 		return nil, e
@@ -177,6 +181,7 @@ func (h *Outbound) ListenPacket(ctx context.Context, d M.Socksaddr) (net.PacketC
 	}
 	return &socksPackets{p}, nil
 }
+
 func (h *Outbound) Close() error {
 	h.cancel()
 	h.mu.Lock()
@@ -212,6 +217,7 @@ func (p *socksPackets) ReadFrom(b []byte) (int, net.Addr, error) {
 	}
 	return copy(b, raw[:n]), a, nil
 }
+
 func (p *socksPackets) WriteTo(b []byte, a net.Addr) (int, error) {
 	_, e := p.PacketConn.WriteTo(b, a)
 	if e != nil {

@@ -12,7 +12,7 @@ import (
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common/byteformats"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/memory"
@@ -159,15 +159,6 @@ func (t *adaptiveTimer) start(carriedState *timerState) {
 		return
 	}
 	t.startLocked()
-}
-
-func (t *adaptiveTimer) notifyPressure() {
-	t.access.Lock()
-	t.startLocked()
-	t.forceMinInterval = true
-	t.pendingPressureBaseline = true
-	t.access.Unlock()
-	t.poll()
 }
 
 func (t *adaptiveTimer) startLocked() {

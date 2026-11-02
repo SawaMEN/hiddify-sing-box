@@ -24,9 +24,9 @@ type _V2RayTransportOptions struct {
 	KCPOptions         V2RayKCPOptions         `json:"-"`
 	GRPCOptions        V2RayGRPCOptions        `json:"-"`
 	HTTPUpgradeOptions V2RayHTTPUpgradeOptions `json:"-"`
-	XHTTPOptions       V2RayXHTTPOptions       `json:"-"` //H
-	DNSTTOptions       DnsttOptions            `json:"-"` //H
-	RawOptions         V2RayRawOptions         `json:"-"` //H
+	XHTTPOptions       V2RayXHTTPOptions       `json:"-"` // H
+	DNSTTOptions       DnsttOptions            `json:"-"` // H
+	RawOptions         V2RayRawOptions         `json:"-"` // H
 }
 
 type V2RayTransportOptions _V2RayTransportOptions
@@ -50,8 +50,8 @@ func (o V2RayTransportOptions) MarshalJSON() ([]byte, error) {
 		v = o.HTTPUpgradeOptions
 	case C.V2RayTransportTypeXHTTP:
 		v = o.XHTTPOptions
-	case C.V2RayTransportTypeRaw: //H
-		v = o.RawOptions //H
+	case C.V2RayTransportTypeRaw: // H
+		v = o.RawOptions // H
 
 	case "":
 		return nil, E.New("missing transport type")
@@ -106,9 +106,9 @@ func (o V2RayTransportOptions) DescribeSchema(builder schema.Builder) (*schema.N
 			{Value: C.V2RayTransportTypeQUIC, StructType: reflect.TypeFor[V2RayQUICOptions]()},
 			{Value: C.V2RayTransportTypeGRPC, StructType: reflect.TypeFor[V2RayGRPCOptions]()},
 			{Value: C.V2RayTransportTypeHTTPUpgrade, StructType: reflect.TypeFor[V2RayHTTPUpgradeOptions]()},
-			{Value: C.V2RayTransportTypeXHTTP, StructType: reflect.TypeFor[V2RayXHTTPOptions]()}, //H
-			{Value: C.V2RayTransportTypeRaw, StructType: reflect.TypeFor[V2RayRawOptions]()},     //H
-			{Value: C.V2RayTransportTypeKCP, StructType: reflect.TypeFor[V2RayKCPOptions]()},     //H
+			{Value: C.V2RayTransportTypeXHTTP, StructType: reflect.TypeFor[V2RayXHTTPOptions]()}, // H
+			{Value: C.V2RayTransportTypeRaw, StructType: reflect.TypeFor[V2RayRawOptions]()},     // H
+			{Value: C.V2RayTransportTypeKCP, StructType: reflect.TypeFor[V2RayKCPOptions]()},     // H
 		}, nil)
 	})
 }
@@ -120,13 +120,13 @@ type V2RayHTTPOptions struct {
 	Headers     badoption.HTTPHeader       `json:"headers,omitempty"`
 	IdleTimeout badoption.Duration         `json:"idle_timeout,omitempty"`
 	PingTimeout badoption.Duration         `json:"ping_timeout,omitempty"`
-	Version     int                        `json:"version,omitempty" enum:"1,2"` //H version of HTTP protocol to use; when TLS is enabled, defaults to 2 (h2), set to 1 to force HTTP/1.1
+	Version     int                        `json:"version,omitempty" enum:"1,2"` // H version of HTTP protocol to use; when TLS is enabled, defaults to 2 (h2), set to 1 to force HTTP/1.1
 }
 
 // V2RayRawOptions configures the "raw" V2Ray transport: it passes the
 // underlying (optionally TLS-wrapped) connection through unmodified, with no
 // additional framing or headers, similar to Xray's "raw" stream setting. //H
-type V2RayRawOptions struct{} //H
+type V2RayRawOptions struct{} // H
 
 type V2RayWebsocketOptions struct {
 	Path                string               `json:"path,omitempty"`
@@ -151,8 +151,7 @@ type V2RayHTTPUpgradeOptions struct {
 	Headers badoption.HTTPHeader `json:"headers,omitempty"`
 }
 
-//H — XHTTP transport (https://github.com/XTLS/Xray-core XHTTP protocol) option types below
-
+// H — XHTTP transport (https://github.com/XTLS/Xray-core XHTTP protocol) option types below
 type V2RayXHTTPBaseOptions struct {
 	Host                 string                 `json:"host,omitempty"`
 	Path                 string                 `json:"path,omitempty"`

@@ -102,7 +102,7 @@ func (s *httpsNameServer) LookupIP(ctx context.Context, network, host string) ([
 	if isLikelyLocalHostname(host) {
 		return s.fallback(ctx, network, host)
 	}
-	qtype := dnsmessage.TypeA
+	var qtype dnsmessage.Type
 	switch network {
 	case "ip4":
 		qtype = dnsmessage.TypeA

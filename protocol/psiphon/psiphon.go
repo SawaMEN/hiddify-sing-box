@@ -2,16 +2,17 @@ package psiphon
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"os"
 	"sync"
+	"sync/atomic"
 
-	"github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon"
 	"github.com/sagernet/sing-box/common/monitoring"
 	"github.com/sagernet/sing/common/logger"
+
+	"github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon"
 )
 
 var Countries = []string{
@@ -52,9 +53,9 @@ var Countries = []string{
 // noticeReceiver, if supplied.
 // NOTE: Ordinary users of this library should never need this.
 type NoticeEvent struct {
-	Data      map[string]interface{} `json:"data"`
-	Type      string                 `json:"noticeType"`
-	Timestamp string                 `json:"timestamp"`
+	Data      map[string]any `json:"data"`
+	Type      string         `json:"noticeType"`
+	Timestamp string         `json:"timestamp"`
 }
 
 type Psiphon struct {
@@ -66,7 +67,7 @@ type Psiphon struct {
 	ctx             context.Context
 	cancel          context.CancelFunc
 	dataStoreOpened bool
-	connected       bool
+	connected       atomic.Bool
 	closed          bool
 	startDone       chan struct{}
 	runDone         chan struct{}
@@ -123,7 +124,7 @@ func (p *Psiphon) State() string {
 func (p *Psiphon) IsConnected() bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	return !p.closed && p.controller != nil && p.connected
+	return !p.closed && p.controller != nil && p.connected.Load()
 }
 
 func (p *Psiphon) NetworkChanged() {
@@ -139,10 +140,14 @@ func (p *Psiphon) Close() error {
 	p.closeMu.Lock()
 	defer p.closeMu.Unlock()
 	p.mu.Lock()
-	p.closed, p.connected = true, false
-	p.cancel()
+	p.closed = true
+	p.connected.Store(false)
+	if p.cancel != nil {
+		p.cancel()
+	}
 	startDone := p.startDone
 	p.mu.Unlock()
+	stopListeningNotices(p)
 	// Cancellation releases Start's wait before data-store shutdown. It also
 	// prevents a controller being published after Close has already returned.
 	if startDone != nil {
@@ -156,7 +161,6 @@ func (p *Psiphon) Close() error {
 	}
 	p.mu.Lock()
 	if p.dataStoreOpened {
-		psiphon.ResetNoticeWriter()
 		psiphon.CloseDataStore()
 		p.dataStoreOpened = false
 	}
@@ -191,11 +195,7 @@ func (p *Psiphon) Start() error {
 
 	connected := make(chan struct{}, 1)
 	errored := make(chan error, 1)
-	psiphon.SetNoticeWriter(psiphon.NewNoticeReceiver(func(notice []byte) {
-		var event NoticeEvent
-		if json.Unmarshal(notice, &event) != nil {
-			return
-		}
+	if err := listenNotices(p, func(event NoticeEvent) {
 		switch event.Type {
 		case "EstablishTunnelTimeout":
 			select {
@@ -203,25 +203,16 @@ func (p *Psiphon) Start() error {
 			default:
 			}
 		case "Tunnels":
-			count, ok := event.Data["count"].(float64)
-			if !ok {
-				return
-			}
-			p.mu.Lock()
-			p.connected = count > 0 && !p.closed
-			ready := p.connected
-			p.mu.Unlock()
-			if ready {
+			p.onNotice(event, func() {
 				select {
 				case connected <- struct{}{}:
 				default:
 				}
-				if monitor := monitoring.Get(p.ctx); monitor != nil {
-					monitor.TestNow(p.tag)
-				}
-			}
+			})
 		}
-	}))
+	}); err != nil {
+		return err
+	}
 	controller, err := psiphon.NewController(p.config)
 	if err != nil {
 		return fmt.Errorf("Psiphon controller: %w", err)
@@ -234,7 +225,7 @@ func (p *Psiphon) Start() error {
 		defer close(runDone)
 		controller.Run(p.ctx)
 		p.mu.Lock()
-		p.connected = false
+		p.connected.Store(false)
 		p.mu.Unlock()
 		select {
 		case errored <- errors.New("Psiphon controller stopped"):
@@ -289,3 +280,47 @@ func (p *Psiphon) Start() error {
 // 	l.Info("psiphon started successfully")
 // 	return nil
 // }
+
+// setConnected updates the current connection state independently of the notice dispatcher.
+func (p *Psiphon) setConnected(connected bool) {
+	p.mu.RLock()
+	closed := p.closed
+	p.mu.RUnlock()
+	if !closed {
+		p.connected.Store(connected)
+	}
+}
+
+// onNotice receives events via the process-wide writer. A notice does not
+// identify its controller, so unstarted instances only claim a notice while
+// they are the sole listener.
+func (p *Psiphon) onNotice(event NoticeEvent, notify func()) {
+	if event.Type != "Tunnels" {
+		return
+	}
+	count, ok := noticeCount(event.Data)
+	if !ok {
+		return
+	}
+	p.mu.RLock()
+	closed, controller := p.closed, p.controller
+	p.mu.RUnlock()
+	if closed {
+		return
+	}
+	noticeHub.access.Lock()
+	soleListener := len(noticeHub.listeners) <= 1
+	noticeHub.access.Unlock()
+	if controller == nil && !soleListener {
+		return
+	}
+	p.setConnected(count > 0)
+	if count > 0 {
+		if notify != nil {
+			notify()
+		}
+		if monitor := monitoring.Get(p.ctx); monitor != nil {
+			_ = monitor.TestNow(p.tag)
+		}
+	}
+}

@@ -28,6 +28,8 @@ type platformDefaultInterfaceMonitor struct {
 	myInterfaces                []string
 	defaultInterfaceInitialized bool
 	lastNetworkPath             string
+	dnsWatcher                  *dnsinfo.Watcher // H
+	defaultDNSServers           []string         // H
 }
 
 func (m *platformDefaultInterfaceMonitor) Start() error {

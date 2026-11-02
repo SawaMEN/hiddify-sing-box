@@ -4,12 +4,12 @@ import (
 	"context"
 	"net"
 	"net/netip"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/adapter/htest"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/experimental/deprecated"
 	"github.com/sagernet/sing-box/log"
@@ -31,15 +31,17 @@ type routerTestFakeDNSTransport struct {
 	transportType string
 }
 
-func (t *routerTestFakeDNSTransport) Start(adapter.StartStage) error { return nil }
-func (t *routerTestFakeDNSTransport) Close() error                   { return nil }
-func (t *routerTestFakeDNSTransport) Type() string                   { return t.transportType }
-func (t *routerTestFakeDNSTransport) Tag() string                    { return t.tag }
-func (t *routerTestFakeDNSTransport) Dependencies() []string         { return nil }
-func (t *routerTestFakeDNSTransport) Reset()                         {}
+func (t *routerTestFakeDNSTransport) Start(adapter.StartStage, *adapter.Scope) error { return nil }
+func (t *routerTestFakeDNSTransport) Close() error                                   { return nil }
+func (t *routerTestFakeDNSTransport) Type() string                                   { return t.transportType }
+
+func (t *routerTestFakeDNSTransport) Tag() string            { return t.tag }
+func (t *routerTestFakeDNSTransport) Dependencies() []string { return nil }
+func (t *routerTestFakeDNSTransport) Reset()                 {}
 func (t *routerTestFakeDNSTransport) Exchange(context.Context, *mDNS.Msg) (*mDNS.Msg, error) {
 	return nil, E.New("unused transport exchange")
 }
+
 func (t *routerTestFakeDNSTransport) ExchangeAsync(ctx context.Context, message *mDNS.Msg, callback func(response *mDNS.Msg, err error)) {
 	response, err := t.Exchange(ctx, message)
 	callback(response, err)
@@ -50,8 +52,10 @@ type routerTestFakeDNSTransportManager struct {
 	transports       map[string]adapter.DNSTransport
 }
 
-func (m *routerTestFakeDNSTransportManager) Start(adapter.StartStage) error { return nil }
-func (m *routerTestFakeDNSTransportManager) Close() error                   { return nil }
+func (m *routerTestFakeDNSTransportManager) Start(adapter.StartStage, *adapter.Scope) error {
+	return nil
+}
+func (m *routerTestFakeDNSTransportManager) Close() error { return nil }
 func (m *routerTestFakeDNSTransportManager) Transports() []adapter.DNSTransport {
 	transports := make([]adapter.DNSTransport, 0, len(m.transports))
 	for _, transport := range m.transports {
@@ -64,7 +68,9 @@ func (m *routerTestFakeDNSTransportManager) Transport(tag string) (adapter.DNSTr
 	transport, loaded := m.transports[tag]
 	return transport, loaded
 }
+
 func (m *routerTestFakeDNSTransportManager) Default() adapter.DNSTransport { return m.defaultTransport }
+
 func (m *routerTestFakeDNSTransportManager) FakeIP() adapter.FakeIPTransport {
 	return nil
 }
@@ -89,8 +95,8 @@ type fakeRouter struct {
 	ruleSets map[string]adapter.RuleSet
 }
 
-func (r *fakeRouter) Start(adapter.StartStage) error { return nil }
-func (r *fakeRouter) Close() error                   { return nil }
+func (r *fakeRouter) Start(adapter.StartStage, *adapter.Scope) error { return nil }
+func (r *fakeRouter) Close() error                                   { return nil }
 func (r *fakeRouter) PreMatch(adapter.InboundContext, []byte) adapter.PreMatchResult {
 	return adapter.PreMatchResult{}
 }
@@ -119,14 +125,6 @@ func (r *fakeRouter) RuleSet(tag string) (adapter.RuleSet, bool) {
 	return ruleSet, loaded
 }
 
-func (r *fakeRouter) setRuleSet(tag string, ruleSet adapter.RuleSet) {
-	r.access.Lock()
-	defer r.access.Unlock()
-	if r.ruleSets == nil {
-		r.ruleSets = make(map[string]adapter.RuleSet)
-	}
-	r.ruleSets[tag] = ruleSet
-}
 func (r *fakeRouter) Rules() []adapter.Rule                      { return nil }
 func (r *fakeRouter) NeedFindProcess() bool                      { return false }
 func (r *fakeRouter) NeedFindNeighbor() bool                     { return false }
@@ -214,12 +212,6 @@ func (s *fakeRuleSet) updateMetadata(metadata adapter.RuleSetMetadata) {
 	for _, callback := range callbacks {
 		callback(s)
 	}
-}
-
-func (s *fakeRuleSet) snapshotCallbacks() []adapter.RuleSetUpdateCallback {
-	s.access.Lock()
-	defer s.access.Unlock()
-	return s.callbacks.Array()
 }
 
 func (s *fakeRuleSet) refCount() int {
@@ -327,30 +319,10 @@ func newTestRouterWithContextAndLogger(t *testing.T, ctx context.Context, rules 
 	if rules != nil {
 		err := router.Initialize(rules)
 		require.NoError(t, err)
-		err = router.Start(adapter.StartStateStart)
+		err = htest.Start(router, adapter.StartStateStart)
 		require.NoError(t, err)
 	}
 	return router
-}
-
-func waitForLogMessageContaining(t *testing.T, entries <-chan log.Entry, done <-chan struct{}, substring string) log.Entry {
-	t.Helper()
-	timeout := time.After(time.Second)
-	for {
-		select {
-		case entry, ok := <-entries:
-			if !ok {
-				t.Fatal("log subscription closed")
-			}
-			if strings.Contains(entry.Message, substring) {
-				return entry
-			}
-		case <-done:
-			t.Fatal("log subscription closed")
-		case <-timeout:
-			t.Fatalf("timed out waiting for log message containing %q", substring)
-		}
-	}
 }
 
 func fixedQuestion(name string, qType uint16) mDNS.Question {
@@ -2517,7 +2489,7 @@ func TestLegacyDNSModeReportsLegacyAddressFilterDeprecation(t *testing.T) {
 	}})
 	require.NoError(t, err)
 
-	err = router.Start(adapter.StartStateStart)
+	err = htest.Start(router, adapter.StartStateStart)
 	require.NoError(t, err)
 	require.Len(t, manager.features, 1)
 	require.Equal(t, deprecated.OptionLegacyDNSAddressFilter.Name, manager.features[0].Name)
@@ -2553,7 +2525,7 @@ func TestLegacyDNSModeReportsDNSRuleStrategyDeprecation(t *testing.T) {
 	}})
 	require.NoError(t, err)
 
-	err = router.Start(adapter.StartStateStart)
+	err = htest.Start(router, adapter.StartStateStart)
 	require.NoError(t, err)
 	require.Len(t, manager.features, 1)
 	require.Equal(t, deprecated.OptionLegacyDNSRuleStrategy.Name, manager.features[0].Name)

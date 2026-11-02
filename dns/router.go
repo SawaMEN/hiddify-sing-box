@@ -132,15 +132,7 @@ func (r *Router) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	monitor := taskmonitor.New(r.logger, C.StartTimeout)
 	switch stage {
 	case adapter.StartStateStart:
-		scope.Add(func() error {
-			r.rulesAccess.Lock()
-			r.closing = true
-			runtimeRules := r.rules
-			r.rules = nil
-			r.rulesAccess.Unlock()
-			closeRules(runtimeRules)
-			return nil
-		})
+		scope.Add(r.Close)
 		monitor.Start("initialize DNS client")
 		r.client.Start()
 		monitor.Finish()
@@ -1178,13 +1170,13 @@ func (r *Router) exchangeLegacy(ctx context.Context, exchangeCtx *dnsExchangeCon
 				}
 			}
 		}
-		if err == nil && rule != nil && rule.BypassIfFailed() && ruleIndex != -1 && isAddressQuery(message) && len(MessageToAddresses(response)) == 0 { //H: as in Lookup, no address is a failure
-			select { //H
-			case <-ctx.Done(): //H
-			default: //H
-				bypass = true //H
-			} //H
-		} //H
+		if err == nil && rule != nil && rule.BypassIfFailed() && ruleIndex != -1 && isAddressQuery(message) && len(MessageToAddresses(response)) == 0 { // H: as in Lookup, no address is a failure
+			select { // H
+			case <-ctx.Done(): // H
+			default: // H
+				bypass = true // H
+			} // H
+		} // H
 		if responseCheck != nil && rejected {
 			continue
 		}
@@ -1779,4 +1771,16 @@ func dnsRuleRace(rule option.DNSRule) bool {
 	default:
 		return false
 	}
+}
+
+// Close releases DNS rules for directly constructed routers as well as
+// lifecycle-managed instances. Repeated closes are safe.
+func (r *Router) Close() error {
+	r.rulesAccess.Lock()
+	r.closing = true
+	runtimeRules := r.rules
+	r.rules = nil
+	r.rulesAccess.Unlock()
+	closeRules(runtimeRules)
+	return nil
 }

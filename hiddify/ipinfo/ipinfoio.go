@@ -54,8 +54,8 @@ func (p *IpInfoIoProvider) GetIPInfo(ctx context.Context, dialer N.Dialer) (*IpI
 		// Split the org string to extract ASN and Organization
 		orgParts := strings.SplitN(org, " ", 2) // Split into 2 parts
 		if len(orgParts) > 0 {
-			if strings.HasPrefix(orgParts[0], "AS") {
-				if asn, ok := strconv.ParseInt(strings.TrimPrefix(orgParts[0], "AS"), 10, 64); ok == nil {
+			if after, ok0 := strings.CutPrefix(orgParts[0], "AS"); ok0 {
+				if asn, ok := strconv.ParseInt(after, 10, 64); ok == nil {
 					info.ASN = int(asn)
 				}
 			}

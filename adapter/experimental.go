@@ -18,17 +18,17 @@ type ClashServer interface {
 	ConnectionTracker
 	Mode() string
 	ModeList() []string
-	SetMode(mode string) //H
+	SetMode(mode string) // H
 	SetModeUpdateHook(hook *observable.Subscriber[struct{}])
 	HistoryStorage() URLTestHistoryStorage
 }
 
 type URLTestHistory struct {
-	Time        time.Time      `json:"time"`
-	Delay       uint16         `json:"delay"`
-	IpInfo      *ipinfo.IpInfo `json:"ipinfo"`
-	IsFromCache bool           `json:"from_cache"`
-	IpInfoFromCache bool      `json:"ipinfo_from_cache,omitempty"` //H
+	Time            time.Time      `json:"time"`
+	Delay           uint16         `json:"delay"`
+	IpInfo          *ipinfo.IpInfo `json:"ipinfo"`
+	IsFromCache     bool           `json:"from_cache"`
+	IpInfoFromCache bool           `json:"ipinfo_from_cache,omitempty"` // H
 }
 
 type URLTestHistoryStorage interface {

@@ -92,7 +92,7 @@ func (r *NetworkManager) updateNetworkEnvironment() {
 	if len(options) > 0 {
 		r.logger.Info("updated network environment: ", strings.Join(options, ", "))
 	}
-	r.FlushSystemDNSCache()
+	r.networkChanged() // H: invalidate monitoring results for the changed network
 }
 
 func formatEnvironmentValues(values []string) string {

@@ -17,7 +17,7 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 
-	"github.com/xchacha20-poly1305/sing-trusttunnel"
+	trusttunnel "github.com/xchacha20-poly1305/sing-trusttunnel"
 )
 
 func RegistryInbound(registry *inbound.Registry) {
@@ -80,7 +80,7 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 	return inbound, nil
 }
 
-func (h *Inbound) Start(stage adapter.StartStage) (err error) {
+func (h *Inbound) Start(stage adapter.StartStage, scope *adapter.Scope) (err error) {
 	if stage != adapter.StartStateStart {
 		return
 	}
@@ -113,6 +113,9 @@ func (h *Inbound) Start(stage adapter.StartStage) (err error) {
 	if err != nil {
 		_ = common.Close(h.tlsConfig, tcpListener, udpConn)
 		return
+	}
+	if err == nil {
+		scope.Add(h.Close)
 	}
 	return
 }

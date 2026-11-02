@@ -7,19 +7,19 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
-	M "github.com/sagernet/sing/common/metadata"
 	"net"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/tlsfragment"
+	tf "github.com/sagernet/sing-box/common/tlsfragment"
 	"github.com/sagernet/sing-box/common/tlsspoof"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/logger"
+	M "github.com/sagernet/sing/common/metadata"
 	"github.com/sagernet/sing/common/ntp"
 	"github.com/sagernet/sing/service/filemanager"
 )
@@ -36,7 +36,7 @@ type STDClientConfig struct {
 	recordFragment        bool
 	spoof                 string
 	spoofMethod           tlsspoof.Method
-	tricks                *tlsTricks //H: tls_tricks (mixed-case SNI)
+	tricks                *tlsTricks // H: tls_tricks (mixed-case SNI)
 }
 
 func (c *STDClientConfig) ServerName() string {
@@ -85,11 +85,11 @@ func (c *STDClientConfig) Client(conn net.Conn) (Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	if c.tricks != nil && c.config.ServerName != "" { //H: a new case for each connection
-		config := c.config.Clone()                                 //H
-		config.ServerName = c.tricks.serverName(config.ServerName) //H
-		return tls.Client(conn, config), nil                       //H
-	} //H
+	if c.tricks != nil && c.config.ServerName != "" { // H: a new case for each connection
+		config := c.config.Clone()                                 // H
+		config.ServerName = c.tricks.serverName(config.ServerName) // H
+		return tls.Client(conn, config), nil                       // H
+	} // H
 	return tls.Client(conn, c.config), nil
 }
 
@@ -106,7 +106,7 @@ func (c *STDClientConfig) Clone() Config {
 		recordFragment:        c.recordFragment,
 		spoof:                 c.spoof,
 		spoofMethod:           c.spoofMethod,
-		tricks:                c.tricks, //H
+		tricks:                c.tricks, // H
 	}
 	cloned.SetServerName(cloned.serverName)
 	return cloned
@@ -244,10 +244,10 @@ func newSTDClient(ctx context.Context, logger logger.ContextLogger, serverAddres
 	if err != nil {
 		return nil, err
 	}
-	tricks, err := parseTLSTricks(logger, options.TLSTricks, false) //H
-	if err != nil {                                                 //H
-		return nil, err //H
-	} //H
+	tricks, err := parseTLSTricks(logger, options.TLSTricks, false) // H
+	if err != nil {                                                 // H
+		return nil, err // H
+	} // H
 	var config Config = &STDClientConfig{
 		ctx:                   ctx,
 		config:                &tlsConfig,
@@ -260,7 +260,7 @@ func newSTDClient(ctx context.Context, logger logger.ContextLogger, serverAddres
 		recordFragment:        options.RecordFragment,
 		spoof:                 spoof,
 		spoofMethod:           spoofMethod,
-		tricks:                tricks, //H
+		tricks:                tricks, // H
 	}
 	config.SetServerName(serverName)
 	if options.ECH != nil && options.ECH.Enabled {

@@ -50,8 +50,10 @@ var hWARPVariants = []hWARPVariant{
 // on dead.
 var hWARPDetours = []string{"socks", "shadowsocks", "vless", "trojan", "http"}
 
-const hWARPLivePassword = "warp-live-password"
-const hWARPLiveUUID = "b831381d-6324-4d53-ad4f-8cda48b30811"
+const (
+	hWARPLivePassword = "warp-live-password"
+	hWARPLiveUUID     = "b831381d-6324-4d53-ad4f-8cda48b30811"
+)
 
 type hWARPBox struct {
 	instance  *box.Box
@@ -254,7 +256,9 @@ func TestH_WARPLiveDetour(t *testing.T) {
 				selector, _ := instance.instance.Outbound().Outbound(instance.groupTag)
 				require.True(t, selector.(*group.Selector).SelectOutbound("d-tcp"))
 				// SOCKS4 has no UDP at all
-				ok := assert.Eventually(t, func() bool { return instance.ready() && instance.displayType() == "WARP · MASQUE" && instance.traceOK() },
+				ok := assert.Eventually(t, func() bool {
+					return instance.ready() && instance.displayType() == "WARP · MASQUE" && instance.traceOK()
+				},
 					90*time.Second, 2*time.Second)
 				require.True(t, ok, "auto mode did not move to MASQUE behind a TCP-only proxy: %q", instance.displayType())
 			})

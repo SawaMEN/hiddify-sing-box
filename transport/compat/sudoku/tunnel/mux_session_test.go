@@ -40,6 +40,9 @@ func TestMuxSession_KeepaliveUsesPingAndAcceptsPong(t *testing.T) {
 		_ = peerConn.Close()
 	})
 
+	// Stale creation-time liveness must not close the session before
+	// the first PING has even been sent.
+	session.lastPong.Store(time.Now().Add(-time.Second).UnixNano())
 	session.startPingKeepalive(10 * time.Millisecond)
 	_ = peerConn.SetReadDeadline(time.Now().Add(time.Second))
 
@@ -343,11 +346,8 @@ func TestMuxSession_ConcurrentStreamsRemainOrdered(t *testing.T) {
 	const streamCount = 32
 	var wg sync.WaitGroup
 	errCh := make(chan error, streamCount)
-	for i := 0; i < streamCount; i++ {
-		i := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for i := range streamCount {
+		wg.Go(func() {
 			st, err := openMuxStream(clientSession, []byte(fmt.Sprintf("target-%d", i)))
 			if err != nil {
 				errCh <- err
@@ -376,7 +376,7 @@ func TestMuxSession_ConcurrentStreamsRemainOrdered(t *testing.T) {
 			if !bytes.Equal(got, payload) {
 				errCh <- fmt.Errorf("stream %d payload mismatch: got %d bytes, want %d", i, len(got), len(payload))
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errCh)

@@ -32,6 +32,7 @@ func (d *testDialer) DialContext(ctx context.Context, network string, dest M.Soc
 	}
 	return (&net.Dialer{}).DialContext(ctx, network, dest.String())
 }
+
 func (d *testDialer) ListenPacket(context.Context, M.Socksaddr) (net.PacketConn, error) {
 	return nil, errors.New("unused")
 }
@@ -158,8 +159,7 @@ func TestNativeXDriveJSONCodec(t *testing.T) {
 }
 
 func TestDialContextCancellationKeepsEstablishedStream(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	config := option.V2RayXDriveOptions{Service: "local", RemoteFolder: t.TempDir(), FlushIntervalMs: 1, PollIntervalMs: 2, MaxPollIntervalMs: 5}
 	server, err := NewServer(ctx, nil, config, nil, echoHandler{})
 	if err != nil {

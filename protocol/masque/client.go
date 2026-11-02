@@ -148,7 +148,7 @@ func NewClientEndpoint(ctx context.Context, router adapter.Router, logger log.Co
 	return clientEndpoint, nil
 }
 
-func (c *ClientEndpoint) Start(stage adapter.StartStage) error {
+func (c *ClientEndpoint) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	switch stage {
 	case adapter.StartStateInitialize:
 		c.deviceOptions.MemoryPressure = oomkiller.MemoryPressure(c.ctx)
@@ -158,6 +158,7 @@ func (c *ClientEndpoint) Start(stage adapter.StartStage) error {
 		}
 		tunnelDevice.SetPacketWriter(c.writePacketBuffers)
 		c.device = tunnelDevice
+		scope.Add(c.Close)
 		c.deviceOptions = nil
 	case adapter.StartStatePostStart:
 		c.client.Start()

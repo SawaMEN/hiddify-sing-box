@@ -31,6 +31,7 @@ func (f *fakeTransport) Send(data []byte) error {
 	}
 	return nil
 }
+
 func (f *fakeTransport) Receive(cb func([]byte)) {
 	f.mu.Lock()
 	f.cb = cb
@@ -104,7 +105,7 @@ func TestBatchedTransportCoalescesBurstIntoOneMessage(t *testing.T) {
 	defer bt.Stop()
 
 	const n = 5
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if err := bt.Send([]byte{byte(i), 0xAA, 0xBB}); err != nil {
 			t.Fatalf("send: %v", err)
 		}

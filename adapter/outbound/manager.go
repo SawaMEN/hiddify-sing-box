@@ -189,7 +189,10 @@ func (m *Manager) RemoveForReload(tag string) error {
 func (m *Manager) remove(tag string, ignoreDependents bool) error {
 	m.access.Lock()
 	outbound, found := m.outboundByTag[tag]
-	if !found { m.access.Unlock(); return os.ErrInvalid }
+	if !found {
+		m.access.Unlock()
+		return os.ErrInvalid
+	}
 	if !ignoreDependents {
 		var dependBy []string
 		for _, candidate := range m.outbounds {
@@ -203,35 +206,51 @@ func (m *Manager) remove(tag string, ignoreDependents bool) error {
 		}
 	}
 	index := slices.Index(m.outbounds, outbound)
-	if index < 0 { m.access.Unlock(); return E.New("invalid outbound index: ", tag) }
+	if index < 0 {
+		m.access.Unlock()
+		return E.New("invalid outbound index: ", tag)
+	}
 	m.outbounds = slices.Delete(slices.Clone(m.outbounds), index, index+1)
 	delete(m.outboundByTag, tag)
 	if m.defaultOutbound == outbound {
 		m.defaultOutbound = nil
-		if len(m.outbounds) > 0 { m.defaultOutbound = m.outbounds[0] }
+		if len(m.outbounds) > 0 {
+			m.defaultOutbound = m.outbounds[0]
+		}
 	}
 	started, scope := m.started, m.scope
 	m.access.Unlock()
-	if started { return adapter.CloseLate(scope, outbound) }
+	if started {
+		return adapter.CloseLate(scope, outbound)
+	}
 	return nil
 }
 
 func (m *Manager) Create(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, inboundType string, options any) error {
-	if tag == "" { return os.ErrInvalid }
-	option.MigrateTLSFragment(options) //H
+	if tag == "" {
+		return os.ErrInvalid
+	}
+	option.MigrateTLSFragment(options) // H
 	outbound, err := m.registry.CreateOutbound(ctx, router, logger, tag, inboundType, options)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	m.access.RLock()
 	started, scope := m.started, m.scope
 	m.access.RUnlock()
 	if started {
-		if err = adapter.StartLate(scope, "outbound/"+outbound.Type()+"["+outbound.Tag()+"]", outbound); err != nil { return err }
+		if err = adapter.StartLate(scope, "outbound/"+outbound.Type()+"["+outbound.Tag()+"]", outbound); err != nil {
+			return err
+		}
 	}
 	m.access.Lock()
 	old, replaced := m.outboundByTag[tag]
 	if replaced {
 		index := slices.Index(m.outbounds, old)
-		if index < 0 { m.access.Unlock(); return E.New("invalid outbound index: ", tag) }
+		if index < 0 {
+			m.access.Unlock()
+			return E.New("invalid outbound index: ", tag)
+		}
 		m.outbounds = slices.Clone(m.outbounds)
 		m.outbounds[index] = outbound
 	} else {
@@ -243,7 +262,9 @@ func (m *Manager) Create(ctx context.Context, router adapter.Router, logger log.
 	}
 	m.access.Unlock()
 	if replaced {
-		if err = adapter.CloseLate(scope, old); err != nil { return E.Cause(err, "close outbound/", old.Type(), "[", old.Tag(), "]") }
+		if err = adapter.CloseLate(scope, old); err != nil {
+			return E.Cause(err, "close outbound/", old.Type(), "[", old.Tag(), "]")
+		}
 	}
 	return nil
 }

@@ -4,9 +4,9 @@ import (
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/option" //H
 	"github.com/sagernet/sing-box/common/interrupt"
 	"github.com/sagernet/sing-box/common/monitoring"
+	"github.com/sagernet/sing-box/option" // H
 	N "github.com/sagernet/sing/common/network"
 )
 
@@ -71,7 +71,7 @@ func (s *Balancer) update(history map[string]*adapter.URLTestHistory) {
 		s.dead[tag] = dead
 	}
 	if changed && s.monitor != nil {
-		s.monitor.SignalChange(s.Tag()) //H: what follows the group learns the new member at once
+		s.monitor.SignalChange(s.Tag()) // H: what follows the group learns the new member at once
 	}
 }
 
@@ -126,9 +126,11 @@ func (s *Balancer) usedMembers(history map[string]*adapter.URLTestHistory) map[s
 	return used
 }
 
- // hAcceptableRatio returns the configured acceptable latency multiplier.
- // With an unset value, use the balancing default so settling preserves viable members. //H
- func hAcceptableRatio(opts option.BalancerOutboundOptions) float64 {
- 	if opts.DelayAcceptableRatio > 0 { return opts.DelayAcceptableRatio }
- 	return 2
- }
+// hAcceptableRatio returns the configured acceptable latency multiplier.
+// With an unset value, use the balancing default so settling preserves viable members. //H
+func hAcceptableRatio(opts option.BalancerOutboundOptions) float64 {
+	if opts.DelayAcceptableRatio > 0 {
+		return opts.DelayAcceptableRatio
+	}
+	return 2
+}

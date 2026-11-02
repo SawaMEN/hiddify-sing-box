@@ -23,7 +23,7 @@ func RegisterGroup(registry *dns.TransportRegistry) {
 }
 
 // RegisterMulti keeps the deprecated "multi" type working on top of the group transport.
-func RegisterMulti(registry *dns.TransportRegistry) { //H
+func RegisterMulti(registry *dns.TransportRegistry) { // H
 	dns.RegisterTransport[option.MultiDNSServerOptions](registry, C.DNSTypeMulti, NewMulti)
 }
 
@@ -33,15 +33,16 @@ type GroupTransport struct {
 	ctx          context.Context
 	logger       log.ContextLogger
 	serverTags   []string
-	sequential   bool           //H
-	ignoreRanges []netip.Prefix //H
+	sequential   bool           // H
+	modes        *groupModes    // H
+	ignoreRanges []netip.Prefix // H
 }
 
 func NewGroup(ctx context.Context, logger log.ContextLogger, tag string, options option.GroupDNSServerOptions) (adapter.DNSTransport, error) {
 	return newGroup(ctx, logger, C.DNSTypeGroup, tag, options)
 }
 
-func NewMulti(ctx context.Context, logger log.ContextLogger, tag string, options option.MultiDNSServerOptions) (adapter.DNSTransport, error) { //H
+func NewMulti(ctx context.Context, logger log.ContextLogger, tag string, options option.MultiDNSServerOptions) (adapter.DNSTransport, error) { // H
 	logger.Warn("DNS server type `multi` is deprecated, use `group` with `mode` instead")
 	mode := C.DNSGroupModeSequential
 	if options.Parallel {
@@ -63,6 +64,7 @@ func newGroup(ctx context.Context, logger log.ContextLogger, transportType strin
 	case "", C.DNSGroupModeParallel:
 	case C.DNSGroupModeSequential:
 		sequential = true
+	case C.DNSGroupModeStable, C.DNSGroupModeFastest:
 	default:
 		return nil, E.New("unknown group mode: ", options.Mode)
 	}
@@ -70,17 +72,22 @@ func newGroup(ctx context.Context, logger log.ContextLogger, transportType strin
 	for _, prefix := range options.IgnoreRanges {
 		ignoreRanges = append(ignoreRanges, netip.Prefix(prefix))
 	}
+	var modes *groupModes
+	if options.Mode == C.DNSGroupModeStable || options.Mode == C.DNSGroupModeFastest {
+		modes = newGroupModes(options)
+	}
 	return &GroupTransport{
 		TransportAdapter: dns.NewTransportAdapter(transportType, tag, options.Servers),
 		ctx:              ctx,
 		logger:           logger,
 		serverTags:       options.Servers,
 		sequential:       sequential,
+		modes:            modes,
 		ignoreRanges:     ignoreRanges,
 	}, nil
 }
 
-func (t *GroupTransport) Start(stage adapter.StartStage) error {
+func (t *GroupTransport) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage != adapter.StartStateStart {
 		return nil
 	}
@@ -108,6 +115,9 @@ func (t *GroupTransport) Close() error {
 }
 
 func (t *GroupTransport) Reset() {
+	if t.modes != nil {
+		t.modes.reset()
+	}
 }
 
 func (t *GroupTransport) Exchange(ctx context.Context, message *mDNS.Msg) (*mDNS.Msg, error) {
@@ -144,6 +154,9 @@ func (c *groupCollector) add(ctx context.Context, r groupResult, keepFirstErr bo
 	if r.err == nil && r.response == nil {
 		r.err = E.New("empty response from ", r.tag)
 	}
+	if r.err == nil && r.response != nil && (r.response.Rcode == mDNS.RcodeServerFailure || r.response.Rcode == mDNS.RcodeRefused) {
+		r.err = E.New("DNS server ", r.tag, " returned ", mDNS.RcodeToString[r.response.Rcode])
+	}
 	if r.err != nil {
 		if c.err == nil || !keepFirstErr {
 			c.err = r.err
@@ -151,7 +164,28 @@ func (c *groupCollector) add(ctx context.Context, r groupResult, keepFirstErr bo
 		return nil, false
 	}
 	response, filtered := c.transport.filterIgnored(r.response)
-	if len(response.Answer) > 0 {
+	acceptedAnswer := false
+	for _, record := range response.Answer {
+		if len(response.Question) == 0 {
+			acceptedAnswer = true
+			break
+		}
+		switch response.Question[0].Qtype {
+		case mDNS.TypeA:
+			_, acceptedAnswer = record.(*mDNS.A)
+		case mDNS.TypeAAAA:
+			_, acceptedAnswer = record.(*mDNS.AAAA)
+		default:
+			acceptedAnswer = true
+		}
+		if acceptedAnswer {
+			break
+		}
+	}
+	if len(response.Question) == 0 && len(response.Answer) > 0 {
+		acceptedAnswer = true
+	}
+	if acceptedAnswer {
 		c.transport.logger.DebugContext(ctx, "response from ", r.tag)
 		return response, true
 	}
@@ -179,6 +213,10 @@ func (t *GroupTransport) ExchangeAsync(ctx context.Context, message *mDNS.Msg, c
 		callback(nil, E.New("missing DNS transport manager"))
 		return
 	}
+	if t.modes != nil {
+		go t.exchangeModes(ctx, transportManager, message, callback)
+		return
+	}
 	if t.sequential {
 		go t.exchangeSequential(ctx, transportManager, message, callback)
 		return
@@ -186,7 +224,7 @@ func (t *GroupTransport) ExchangeAsync(ctx context.Context, message *mDNS.Msg, c
 	t.exchangeParallel(ctx, transportManager, message, callback)
 }
 
-func (t *GroupTransport) exchangeSequential(ctx context.Context, transportManager adapter.DNSTransportManager, message *mDNS.Msg, callback func(response *mDNS.Msg, err error)) { //H
+func (t *GroupTransport) exchangeSequential(ctx context.Context, transportManager adapter.DNSTransportManager, message *mDNS.Msg, callback func(response *mDNS.Msg, err error)) { // H
 	collector := groupCollector{transport: t}
 	for _, tag := range t.serverTags {
 		transport, loaded := transportManager.Transport(tag)
@@ -264,7 +302,7 @@ func (t *GroupTransport) exchangeParallel(ctx context.Context, transportManager 
 
 // filterIgnored drops A/AAAA records inside ignore_ranges. The input message
 // is never modified.
-func (t *GroupTransport) filterIgnored(message *mDNS.Msg) (*mDNS.Msg, bool) { //H
+func (t *GroupTransport) filterIgnored(message *mDNS.Msg) (*mDNS.Msg, bool) { // H
 	if len(t.ignoreRanges) == 0 || len(message.Answer) == 0 {
 		return message, false
 	}
@@ -290,7 +328,7 @@ func (t *GroupTransport) filterIgnored(message *mDNS.Msg) (*mDNS.Msg, bool) { //
 	return filtered, true
 }
 
-func (t *GroupTransport) isIgnored(ip net.IP) bool { //H
+func (t *GroupTransport) isIgnored(ip net.IP) bool { // H
 	address, ok := netip.AddrFromSlice(ip)
 	if !ok {
 		return true
@@ -302,4 +340,28 @@ func (t *GroupTransport) isIgnored(ip net.IP) bool { //H
 		}
 	}
 	return false
+}
+
+// groupOutcome classifies whether a group response was usable or just a fallback. //H
+type groupOutcome uint8
+
+const (
+	groupFailed groupOutcome = iota
+	groupFallback
+	groupAccepted
+)
+
+func (c *groupCollector) classify(ctx context.Context, r groupResult, firstError bool) (*mDNS.Msg, groupOutcome) {
+	response, accepted := c.add(ctx, r, firstError)
+	if accepted {
+		return response, groupAccepted
+	}
+	if r.err != nil || r.response == nil || r.response.Rcode == mDNS.RcodeServerFailure || r.response.Rcode == mDNS.RcodeRefused {
+		return nil, groupFailed
+	}
+	filtered, dropped := c.transport.filterIgnored(r.response)
+	if dropped && len(filtered.Answer) == 0 {
+		return nil, groupFailed
+	}
+	return nil, groupFallback
 }

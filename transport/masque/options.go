@@ -17,6 +17,11 @@ type TunnelOptions struct {
 	Endpoint             net.Addr
 	TLSConfig            tls.Config
 	UseHTTP2             bool
+	Mode                 string                                                     // H
+	H2Endpoint           net.Addr                                                   // H
+	ConnectURI           string                                                     // H
+	OnConnected          func(endpoint net.Addr, http2 bool, elapsed time.Duration) // H
+	NextEndpoint         func(failed net.Addr, http2 bool) net.Addr                 // H
 	UDPTimeout           time.Duration
 	UDPKeepalivePeriod   time.Duration
 	UDPInitialPacketSize uint16

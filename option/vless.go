@@ -3,7 +3,7 @@ package option
 type VLESSInboundOptions struct {
 	ListenOptions
 	Users      []VLESSUser `json:"users,omitempty"`
-	Decryption string      `json:"decryption,omitempty"` //H
+	Decryption string      `json:"decryption,omitempty"` // H
 	InboundTLSOptionsContainer
 	Multiplex *InboundMultiplexOptions `json:"multiplex,omitempty"`
 	Transport *V2RayTransportOptions   `json:"transport,omitempty"`
@@ -20,7 +20,7 @@ type VLESSOutboundOptions struct {
 	ServerOptions
 	UUID       string      `json:"uuid"`
 	Flow       string      `json:"flow,omitempty"`
-	Encryption string      `json:"encryption,omitempty"` //H
+	Encryption string      `json:"encryption,omitempty"` // H
 	Network    NetworkList `json:"network,omitempty"`
 	OutboundTLSOptionsContainer
 	Multiplex      *OutboundMultiplexOptions `json:"multiplex,omitempty"`

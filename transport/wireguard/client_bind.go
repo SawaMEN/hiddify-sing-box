@@ -5,10 +5,10 @@ import (
 	"net"
 	"net/netip"
 	"sync"
-	"sync/atomic" //H
+	"sync/atomic" // H
 	"time"
 
-	C "github.com/sagernet/sing-box/constant" //H
+	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/bufio"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -37,13 +37,12 @@ type ClientBind struct {
 	reservedAccess      sync.RWMutex
 	reservedForEndpoint map[netip.AddrPort][3]uint8
 	connAccess          sync.Mutex
-	conn                atomic.Pointer[wireConn] //H: read without the lock on the fast path
+	conn                atomic.Pointer[wireConn] // H: read without the lock on the fast path
 	done                chan struct{}
 	isConnect           bool
 	connectAddr         netip.AddrPort
 	reserved            [3]uint8
-	connected           bool   //H
-	onReconnect         func() //H: the connection through the dialer was made again
+	onReconnect         func() // H: the connection through the dialer was made again
 }
 
 func NewClientBind(ctx context.Context, logger logger.Logger, dialer N.Dialer, isConnect bool, connectAddr netip.AddrPort, reserved [3]uint8) *ClientBind {
@@ -68,32 +67,42 @@ func (c *ClientBind) connect() (*wireConn, error) {
 		c.connAccess.Unlock()
 		return nil, net.ErrClosed
 	}
-	serverConn := c.conn
+	serverConn := c.conn.Load()
 	if serverConn != nil && !isDone(serverConn.done) {
 		c.connAccess.Unlock()
 		return serverConn, nil
 	}
 	c.connAccess.Unlock()
 
+	// A detour may never complete its dial. Bound that phase without attaching a
+	// permanent timeout to a connection that was successfully established.
+	if bindCtx == nil {
+		bindCtx = c.ctx
+	}
+	dialCtx, cancelDial := context.WithCancel(bindCtx)
+	timeout := time.AfterFunc(C.TCPTimeout, cancelDial)
+	defer timeout.Stop()
 	var (
 		udpConn net.PacketConn
 		err     error
 	)
 	if c.isConnect {
 		var conn net.Conn
-		conn, err = c.dialer.DialContext(bindCtx, N.NetworkUDP, M.SocksaddrFromNetIP(c.connectAddr))
+		conn, err = c.dialer.DialContext(dialCtx, N.NetworkUDP, M.SocksaddrFromNetIP(c.connectAddr))
 		if err == nil {
 			udpConn = bufio.NewUnbindPacketConn(conn)
 		}
 	} else {
-		udpConn, err = c.dialer.ListenPacket(bindCtx, M.Socksaddr{Addr: netip.IPv4Unspecified()})
+		udpConn, err = c.dialer.ListenPacket(dialCtx, M.Socksaddr{Addr: netip.IPv4Unspecified()})
 	}
 	if err != nil {
+		cancelDial()
 		return nil, err
 	}
 	serverConn = &wireConn{
 		PacketConn: udpConn,
 		done:       make(chan struct{}),
+		cancel:     cancelDial,
 	}
 
 	c.connAccess.Lock()
@@ -102,13 +111,13 @@ func (c *ClientBind) connect() (*wireConn, error) {
 		_ = serverConn.Close()
 		return nil, net.ErrClosed
 	}
-	if c.conn != nil && !isDone(c.conn.done) {
-		currentConn := c.conn
+	if current := c.conn.Load(); current != nil && !isDone(current.done) {
+		currentConn := c.conn.Load()
 		c.connAccess.Unlock()
 		_ = serverConn.Close()
 		return currentConn, nil
 	}
-	c.conn = serverConn
+	c.conn.Store(serverConn)
 	c.connAccess.Unlock()
 	return serverConn, nil
 }
@@ -168,8 +177,8 @@ func (c *ClientBind) Close() error {
 	}
 	bindDone := c.bindDone
 	c.bindDone = nil
-	serverConn := c.conn
-	c.conn = nil
+	serverConn := c.conn.Load()
+	c.conn.Store(nil)
 	c.connAccess.Unlock()
 	if bindDone != nil {
 		bindDone()
@@ -193,7 +202,7 @@ func (c *ClientBind) SendWithoutModify(bufs [][]byte, ep conn.Endpoint, offset i
 		if offset > 0 {
 			buf = buf[offset:]
 		}
-		if false && len(buf) > 3 { //do not modify to reserved
+		if false && len(buf) > 3 { // do not modify to reserved
 			reserved, loaded := c.reservedForEndpoint[destination]
 			if !loaded {
 				reserved = c.reserved
@@ -208,6 +217,7 @@ func (c *ClientBind) SendWithoutModify(bufs [][]byte, ep conn.Endpoint, offset i
 	}
 	return nil
 }
+
 func (c *ClientBind) Send(bufs [][]byte, ep conn.Endpoint, offset int) error {
 	udpConn, err := c.connect()
 	if err != nil {
@@ -241,26 +251,6 @@ func (c *ClientBind) Send(bufs [][]byte, ep conn.Endpoint, offset int) error {
 
 // SendWithoutModify sends packets as they are, without writing the reserved bytes; the
 // hiddify wireguard-go fork uses it for Noise fake packets. //H
-func (c *ClientBind) SendWithoutModify(bufs [][]byte, ep conn.Endpoint, offset int) error {
-	udpConn, err := c.connect()
-	if err != nil {
-		time.Sleep(time.Second)
-		return err
-	}
-	destination := netip.AddrPort(ep.(remoteEndpoint))
-	for _, buf := range bufs {
-		if offset > 0 {
-			buf = buf[offset:]
-		}
-		_, err = udpConn.WriteToUDPAddrPort(buf, destination)
-		if err != nil {
-			udpConn.Close()
-			return err
-		}
-	}
-	return nil
-}
-
 func (c *ClientBind) ParseEndpoint(s string) (conn.Endpoint, error) {
 	ap, err := netip.ParseAddrPort(s)
 	if err != nil {
@@ -322,7 +312,7 @@ type wireConn struct {
 	conn   net.Conn
 	access sync.Mutex
 	done   chan struct{}
-	cancel context.CancelFunc //H: ends the context it was dialed with
+	cancel context.CancelFunc // H: ends the context it was dialed with
 }
 
 func (w *wireConn) WriteToUDPAddrPort(b []byte, addr netip.AddrPort) (int, error) {
@@ -342,9 +332,9 @@ func (w *wireConn) Close() error {
 	}
 	w.PacketConn.Close()
 	close(w.done)
-	if w.cancel != nil { //H
-		w.cancel() //H
-	} //H
+	if w.cancel != nil { // H
+		w.cancel() // H
+	} // H
 	return nil
 }
 

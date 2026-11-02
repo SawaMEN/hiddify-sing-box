@@ -15,9 +15,10 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/dialer"
-	"github.com/sagernet/sing-box/common/tlsfragment"
+	tf "github.com/sagernet/sing-box/common/tlsfragment"
+	"github.com/sagernet/sing-box/common/urltest"
 	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
@@ -246,18 +247,6 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 		remotePacketConn.Close()
 		N.CloseOnHandshakeFailure(conn, onClose, err)
 		m.logger.ErrorContext(ctx, err)
-		return
-	}
-	udpTimeout := packetTimeout(&metadata)
-	var (
-		spliceRemote any = remotePacketConn
-		spliced      bool
-	)
-	if remoteConn != nil {
-		spliceRemote = remoteConn
-	}
-	conn, spliced = m.splicePacketConnection(ctx, conn, spliceRemote, &metadata, destinationAddress, udpTimeout, onClose)
-	if spliced {
 		return
 	}
 	udpTimeout := packetTimeout(&metadata)

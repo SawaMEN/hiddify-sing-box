@@ -5,22 +5,21 @@ import (
 	"fmt"
 	"net"
 	"sync"
-	"time"
 
-	multidns "github.com/hiddify/hmrd_multi_resolver_dns"
-	dnstt "github.com/net2share/vaydns/client"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
-	"github.com/sagernet/sing/common/json/badoption"
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/common/uot"
 	"github.com/sagernet/sing/service"
+
+	multidns "github.com/hiddify/hmrd_multi_resolver_dns"
+	dnstt "github.com/net2share/vaydns/client"
 )
 
 func RegisterOutbound(registry *outbound.Registry) {
@@ -32,9 +31,8 @@ var _ adapter.Outbound = (*Outbound)(nil)
 
 type Outbound struct {
 	outbound.Adapter
-	dnsRouter adapter.DNSRouter
-	logger    logger.ContextLogger
-	ctx       context.Context
+	logger logger.ContextLogger
+	ctx    context.Context
 
 	candidateResolvers []ResolverS
 	resolvers          []dnstt.Resolver
@@ -44,34 +42,23 @@ type Outbound struct {
 	cache              adapter.CacheFile
 	uotClient          *uot.Client
 	started            int
-	resolve            bool
-	tunnel_index       int
 
 	mdMgr *multidns.Manager // smart pool, set when options.SmartPool
 
 	options option.DnsttOptions
 }
 
-func (c *Outbound) PreStart() error {
-	c.cache = service.FromContext[adapter.CacheFile](c.ctx)
+func (receiver *Outbound) PreStart() error {
+	receiver.cache = service.FromContext[adapter.CacheFile](receiver.ctx)
 	return nil
 }
 
-func (h *Outbound) PostStart() error {
-	go h.startTestResolver()
+func (receiver *Outbound) PostStart() error {
+	go receiver.startTestResolver()
 	return nil
-}
-
-func initDuration(d *badoption.Duration, defultDuration time.Duration) time.Duration {
-	b := d.Build()
-	if b <= 0 {
-		return defultDuration
-	}
-	return b
 }
 
 func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.DnsttOptions) (adapter.Outbound, error) {
-
 	// if options.TunnelPerResolver <= 0 {
 	// 	options.TunnelPerResolver = 4
 	// }
@@ -125,55 +112,56 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 	}
 
 	return out, nil
-
 }
 
-func (h *Outbound) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-	if !h.IsReady() {
+func (receiver *Outbound) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
+	if !receiver.IsReady() {
 		return nil, E.New("outbound is not started")
 	}
-	if h.options.SingleResolver {
-		return h.OpenStreamSingleResolver(ctx)
+	if receiver.options.SingleResolver {
+		return receiver.OpenStreamSingleResolver(ctx)
 	}
-	return h.OpenStream(ctx)
+	return receiver.OpenStream(ctx)
 }
-func (h *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
-	if !h.IsReady() {
+
+func (receiver *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
+	if !receiver.IsReady() {
 		return nil, E.New("outbound is not started")
 	}
 	ctx, metadata := adapter.ExtendContext(ctx)
-	metadata.Outbound = h.Tag()
+	metadata.Outbound = receiver.Tag()
 	metadata.Destination = destination
-	if h.uotClient != nil {
-		h.logger.InfoContext(ctx, "outbound UoT packet connection to ", destination)
-		return h.uotClient.ListenPacket(ctx, destination)
+	if receiver.uotClient != nil {
+		receiver.logger.InfoContext(ctx, "outbound UoT packet connection to ", destination)
+		return receiver.uotClient.ListenPacket(ctx, destination)
 	}
 	return nil, E.New("UoT is not enabled for this outbound")
 }
 
-func (c *Outbound) IsReady() bool {
-	return c.started > 0
+func (receiver *Outbound) IsReady() bool {
+	return receiver.started > 0
 }
-func (w *Outbound) DisplayType() string {
-	str := C.ProxyDisplayName(w.Type())
-	if w.started == 0 {
+
+func (receiver *Outbound) DisplayType() string {
+	str := C.ProxyDisplayName(receiver.Type())
+	if receiver.started == 0 {
 		str += " ⚠️ Connecting..."
-	} else if w.started < 0 {
+	} else if receiver.started < 0 {
 		str += " ❌ Failed!"
 	} else {
-		str += fmt.Sprint(" ✔️ ", len(w.resolvers), " resolvers")
+		str += fmt.Sprint(" ✔️ ", len(receiver.resolvers), " resolvers")
 	}
 	return str
 }
 
-func (c *Outbound) Close() error {
-	for _, t := range c.tunnels {
+func (receiver *Outbound) Close() error {
+	for _, t := range receiver.tunnels {
 		if t != nil {
 			t.Close()
 		}
 	}
-	if c.mdMgr != nil {
-		_ = c.mdMgr.Close()
+	if receiver.mdMgr != nil {
+		_ = receiver.mdMgr.Close()
 	}
 	return nil
 }

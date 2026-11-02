@@ -23,6 +23,7 @@ func newObfuscatedConn(c net.Conn) *obfuscatedConn {
 	r.enabled.Store(true)
 	return r
 }
+
 func (c *obfuscatedConn) Write(p []byte) (int, error) {
 	if !c.enabled.Load() {
 		return c.Conn.Write(p)
@@ -58,6 +59,7 @@ func (c *obfuscatedConn) Write(p []byte) (int, error) {
 	}
 	return total, nil
 }
+
 func (c *obfuscatedConn) Read(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
@@ -97,6 +99,7 @@ func (c *obfuscatedConn) Read(p []byte) (int, error) {
 	c.pending = b[17 : 17+n]
 	return c.Read(p)
 }
+
 func writeFull(w io.Writer, p []byte) error {
 	for len(p) > 0 {
 		n, e := w.Write(p)

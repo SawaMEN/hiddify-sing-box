@@ -144,7 +144,7 @@ func (s *ServerEndpoint) resolve(ctx context.Context, domain string) ([]netip.Ad
 	return s.dnsRouter.Lookup(ctx, domain, adapter.DNSQueryOptions{})
 }
 
-func (s *ServerEndpoint) Start(stage adapter.StartStage) error {
+func (s *ServerEndpoint) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	switch stage {
 	case adapter.StartStateInitialize:
 		s.deviceOptions.MemoryPressure = oomkiller.MemoryPressure(s.ctx)
@@ -154,6 +154,7 @@ func (s *ServerEndpoint) Start(stage adapter.StartStage) error {
 		}
 		tunnelDevice.SetPacketWriter(s.writePacketBuffers)
 		s.device = tunnelDevice
+		scope.Add(s.Close)
 		s.deviceOptions = nil
 	case adapter.StartStateStart:
 		if s.tlsConfig != nil {

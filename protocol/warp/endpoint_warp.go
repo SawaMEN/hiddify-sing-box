@@ -8,12 +8,14 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/endpoint"
 	"github.com/sagernet/sing-box/common/cloudflare"
 	C "github.com/sagernet/sing-box/constant"
+	"github.com/sagernet/sing-box/hiddify/warpscan"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common"
@@ -37,6 +39,34 @@ type WARPEndpoint struct {
 	cancel    context.CancelFunc
 	closed    bool
 	startDone chan struct{}
+
+	ctx           context.Context
+	router        adapter.Router
+	logger        log.ContextLogger
+	tag           string
+	uniqueID      string
+	options       option.WARPEndpointOptions
+	scope         *adapter.Scope
+	mode          string
+	active        atomic.Value
+	failover      *warpFailover
+	profiles      *warpProfiles
+	profile       *warpProfile
+	peerAddr      string
+	peerPort      uint16
+	scanStatus    *warpscan.Status
+	scanStatusOf  func() *warpscan.Status
+	replaceAccess sync.Mutex
+	sessionAccess sync.Mutex
+	current       *warpSession
+	done          chan struct{}
+	doneOnce      sync.Once
+	candidate     bool
+	discarded     atomic.Bool
+	registering   atomic.Bool
+	selecting     atomic.Bool
+	failedModes   sync.Map
+	recreated     sync.Map
 }
 
 func NewWARPEndpoint(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.WARPEndpointOptions) (adapter.Endpoint, error) {
@@ -47,15 +77,29 @@ func NewWARPEndpoint(ctx context.Context, router adapter.Router, logger log.Cont
 	if options.Profile.Detour != "" {
 		dependencies = append(dependencies, options.Profile.Detour)
 	}
+	mode, err := warpMode(&options)
+	if err != nil {
+		return nil, err
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	warpEndpoint := &WARPEndpoint{
-		cancel:  cancel,
-		Adapter: endpoint.NewAdapter(C.TypeWARP, tag, []string{N.NetworkTCP, N.NetworkUDP}, dependencies),
+		cancel:     cancel,
+		ctx:        ctx,
+		router:     router,
+		logger:     logger,
+		tag:        tag,
+		options:    options,
+		mode:       mode,
+		done:       make(chan struct{}),
+		scanStatus: &warpscan.Status{},
+		Adapter:    endpoint.NewAdapter(C.TypeWARP, tag, []string{N.NetworkTCP, N.NetworkUDP}, dependencies),
 	}
 	uniqueId := options.UniqueIdentifier
 	if uniqueId == "" {
 		uniqueId = tag
 	}
+	warpEndpoint.uniqueID = uniqueId
+	warpEndpoint.profiles = newWARPProfiles(ctx, logger, uniqueId)
 	warpEndpoint.startHandler = func() {
 		warpEndpoint.startOnce.Do(func() {
 			warpEndpoint.mtx.Lock()
@@ -136,9 +180,9 @@ func NewWARPEndpoint(ctx context.Context, router adapter.Router, logger log.Cont
 			// run every start stage: the WireGuard device is only created in StartStateInitialize,
 			// so skipping it panics in Start (nil tun device)
 			for _, stage := range []adapter.StartStage{adapter.StartStateInitialize, adapter.StartStateStart, adapter.StartStatePostStart} {
-				if err = innerEndpoint.Start(stage); err != nil {
+				if err = wStartInner(warpEndpoint.scope, innerEndpoint, stage); err != nil {
 					logger.ErrorContext(ctx, E.Cause(err, "start WARP endpoint (", stage, ")"))
-					innerEndpoint.Close()
+					_ = adapter.CloseLate(warpEndpoint.scope, innerEndpoint)
 					return
 				}
 			}
@@ -146,7 +190,7 @@ func NewWARPEndpoint(ctx context.Context, router adapter.Router, logger log.Cont
 			warpEndpoint.mtx.Lock()
 			if warpEndpoint.closed || ctx.Err() != nil {
 				warpEndpoint.mtx.Unlock()
-				_ = innerEndpoint.Close()
+				_ = adapter.CloseLate(warpEndpoint.scope, innerEndpoint)
 				return
 			}
 			warpEndpoint.endpoint = innerEndpoint
@@ -155,6 +199,7 @@ func NewWARPEndpoint(ctx context.Context, router adapter.Router, logger log.Cont
 	}
 	return warpEndpoint, nil
 }
+
 func GetWarpProfile(ctx context.Context, profile *option.WARPProfile) (*cloudflare.CloudflareProfile, error) {
 	var dialer N.Dialer
 	outmanager := service.FromContext[adapter.OutboundManager](ctx)
@@ -182,13 +227,12 @@ func GetWarpProfile(ctx context.Context, profile *option.WARPProfile) (*cloudfla
 		}
 	}
 	return nil, fmt.Errorf("WARP profile registration failed: %w", err)
-
 }
+
 func GetWarpProfileDialer(ctx context.Context, dialer N.Dialer, profile *option.WARPProfile) (*cloudflare.CloudflareProfile, error) {
 	api := cloudflare.NewCloudflareApiDetour(dialer)
 	if profile.AuthToken != "" && profile.ID != "" {
 		return api.GetProfile(ctx, profile.AuthToken, profile.ID)
-
 	} else {
 		return api.CreateProfileLicense(ctx, profile.PrivateKey, profile.License)
 	}
@@ -203,11 +247,17 @@ func (w *WARPEndpoint) currentEndpoint() adapter.Endpoint {
 	}
 	return w.endpoint
 }
+
 func (w *WARPEndpoint) IsReady() bool {
 	ep := w.currentEndpoint()
 	return ep != nil && ep.IsReady()
 }
-func (w *WARPEndpoint) Start(stage adapter.StartStage) error {
+
+func (w *WARPEndpoint) Start(stage adapter.StartStage, scope *adapter.Scope) error {
+	if w.scope == nil {
+		w.scope = scope
+		scope.Add(w.Close)
+	}
 	if stage != adapter.StartStatePostStart {
 		return nil
 	}
@@ -217,13 +267,20 @@ func (w *WARPEndpoint) Start(stage adapter.StartStage) error {
 	if closed {
 		return net.ErrClosed
 	}
-	go w.startHandler()
+	if w.options.Mode != "" || w.options.Scanner != nil || w.options.MASQUE != nil {
+		go w.start()
+	} else {
+		go w.startHandler()
+	}
 	return nil
 }
+
 func (w *WARPEndpoint) Close() error {
 	w.mtx.Lock()
 	w.closed = true
 	w.cancel()
+	w.doneOnce.Do(func() { close(w.done) })
+	w.endSession()
 	done := w.startDone
 	ep := w.endpoint
 	w.endpoint = nil
@@ -231,8 +288,15 @@ func (w *WARPEndpoint) Close() error {
 	if done != nil {
 		<-done
 	}
+	if w.profiles != nil {
+		w.profiles.release()
+	}
+	if w.scope != nil && ep != nil {
+		return adapter.CloseLate(w.scope, ep)
+	}
 	return common.Close(ep)
 }
+
 func (w *WARPEndpoint) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
 	ep := w.currentEndpoint()
 	if ep == nil {
@@ -240,6 +304,7 @@ func (w *WARPEndpoint) DialContext(ctx context.Context, network string, destinat
 	}
 	return ep.DialContext(ctx, network, destination)
 }
+
 func (w *WARPEndpoint) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
 	ep := w.currentEndpoint()
 	if ep == nil {
@@ -247,10 +312,19 @@ func (w *WARPEndpoint) ListenPacket(ctx context.Context, destination M.Socksaddr
 	}
 	return ep.ListenPacket(ctx, destination)
 }
+
 func (w *WARPEndpoint) DisplayType() string {
 	str := C.ProxyDisplayName(w.Type())
 	if !w.IsReady() {
 		str += " ⚠️ Connecting..."
 	}
 	return str
+}
+
+// wStartInner starts a dynamically created WARP endpoint with the provided scope.
+func wStartInner(scope *adapter.Scope, inner adapter.Endpoint, stage adapter.StartStage) error {
+	if scope == nil {
+		return E.New("WARP lifecycle scope missing")
+	}
+	return scope.Start("endpoint/warp/"+inner.Type(), inner, stage)
 }

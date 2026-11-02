@@ -134,10 +134,7 @@ func (w *walWriter) flushLocked() error {
 		return w.err
 	}
 
-	n := len(w.buf)
-	if n > w.segmentBytes {
-		n = w.segmentBytes
-	}
+	n := min(len(w.buf), w.segmentBytes)
 
 	chunk := make([]byte, n)
 	copy(chunk, w.buf[:n])

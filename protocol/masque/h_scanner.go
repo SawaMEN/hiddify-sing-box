@@ -4,23 +4,13 @@ import (
 	"context"
 	"net"
 	"net/netip"
-	"sync"
-	"time"
 
-	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/dialer"
-	"github.com/sagernet/sing-box/common/tls"
-	"github.com/sagernet/sing-box/hiddify/warpscan"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/transport/masque"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
-	N "github.com/sagernet/sing/common/network"
-	"github.com/sagernet/sing/service"
 )
-
-const defaultServerName = "consumer-masque.cloudflareclient.com"
 
 // tunnelMode returns the HTTP version from vhttp, and use_http2 when vhttp is empty.
 func tunnelMode(options option.MASQUEOutboundOptions) (string, error) {
@@ -34,132 +24,6 @@ func tunnelMode(options option.MASQUEOutboundOptions) (string, error) {
 		return options.VHTTP, nil
 	}
 	return "", E.New("unknown vhttp: ", options.VHTTP, ` (expected "h3", "h2" or "auto")`)
-}
-
-// masqueScanner keeps the endpoint scores of a masque outbound (see warpscan.Book) and finds
-// endpoints that answer, per HTTP version.
-type masqueScanner struct {
-	ctx         context.Context
-	logger      log.ContextLogger
-	options     option.MASQUEOutboundOptions
-	key         string
-	traceDialer N.Dialer
-	probes      map[bool]warpscan.Probe // per HTTP/2
-
-	status *warpscan.Status
-
-	access  sync.Mutex
-	book    *warpscan.Book
-	network warpscan.NetworkInfo
-}
-
-func newMASQUEScanner(ctx context.Context, logger log.ContextLogger, key string, options option.MASQUEOutboundOptions, probeDialer N.Dialer, tlsConfig tls.Config, status *warpscan.Status) (*masqueScanner, error) {
-	traceDialer, err := dialer.NewWithOptions(dialer.Options{ // the trace URLs are named by domain
-		Context:          ctx,
-		Options:          options.DialerOptions,
-		RemoteIsDomain:   true,
-		ResolverOnDetour: true,
-	})
-	if err != nil {
-		return nil, err
-	}
-	scanner := &masqueScanner{
-		ctx:         ctx,
-		logger:      logger,
-		options:     options,
-		key:         key,
-		traceDialer: traceDialer,
-		status:      status,
-		probes: map[bool]warpscan.Probe{
-			false: warpscan.MASQUEProbe(probeDialer, tlsConfig, false),
-			true:  warpscan.MASQUEProbe(probeDialer, tlsConfig, true),
-		},
-		book: warpscan.Load(service.FromContext[adapter.CacheFile](ctx), key),
-	}
-	scanner.DetectNetwork()
-	return scanner, nil
-}
-
-func (s *masqueScanner) DetectNetwork() {
-	network := warpscan.DetectNetwork(s.ctx, s.logger, s.traceDialer)
-	s.access.Lock()
-	s.network = network
-	s.access.Unlock()
-}
-
-func (s *masqueScanner) currentNetwork() warpscan.NetworkInfo {
-	s.access.Lock()
-	defer s.access.Unlock()
-	return s.network
-}
-
-func (s *masqueScanner) save() {
-	if err := warpscan.Save(service.FromContext[adapter.CacheFile](s.ctx), s.key, s.book); err != nil {
-		s.logger.WarnContext(s.ctx, "WARP scanner: save scores: ", err)
-	}
-}
-
-// Scan finds the best answering endpoint of the HTTP version, without exclude.
-func (s *masqueScanner) Scan(http2 bool, exclude []netip.AddrPort) (net.Addr, error) {
-	network := s.currentNetwork()
-	ipv4, ipv6 := network.IPv4, network.IPv6
-	if s.options.UseIPv6 {
-		ipv4, ipv6 = false, true
-	}
-	defaults := warpscan.Defaults{CIDRs: warpscan.MASQUEQUICCIDRs, Ports: warpscan.MASQUEPorts}
-	if http2 {
-		defaults.CIDRs = warpscan.MASQUEHTTP2CIDRs
-	}
-	s.status.Begin()
-	results, err := warpscan.Scan(s.ctx, s.logger, warpscan.Request{
-		Options:  s.options.Scanner,
-		Defaults: defaults,
-		IPv4:     ipv4,
-		IPv6:     ipv6,
-		Book:     s.book,
-		Network:  network.Name + versionSuffix(http2),
-		Exclude:  exclude,
-		Probe:    s.probes[http2],
-	})
-	s.save()
-	if err != nil {
-		s.status.NotFound()
-		return nil, err
-	}
-	best := results[0]
-	s.status.Found(best.AddrPort)
-	s.logger.InfoContext(s.ctx, "WARP scanner: using ", best.AddrPort, versionSuffix(http2), " (score ", best.Score, ", ", best.RTT, ")")
-	return endpointAddr(best.AddrPort, http2), nil
-}
-
-// OnConnected counts a connect of the tunnel as an answer of its endpoint.
-func (s *masqueScanner) OnConnected(endpoint net.Addr, http2 bool, elapsed time.Duration) {
-	if addrPort, ok := addrPortOf(endpoint); ok {
-		s.book.Success(s.currentNetwork().Name+versionSuffix(http2), addrPort, elapsed, time.Now())
-		s.save()
-	}
-}
-
-// NextEndpoint counts the failure of endpoint and looks for another one.
-func (s *masqueScanner) NextEndpoint(failed net.Addr, http2 bool) net.Addr {
-	addrPort, ok := addrPortOf(failed)
-	if ok {
-		s.book.Failure(s.currentNetwork().Name+versionSuffix(http2), addrPort, time.Now())
-	}
-	next, err := s.Scan(http2, []netip.AddrPort{addrPort})
-	if err != nil {
-		s.logger.WarnContext(s.ctx, err, ", keeping ", failed)
-		return nil
-	}
-	return next
-}
-
-// HTTP/3 and HTTP/2 endpoints are scored apart: they are different servers.
-func versionSuffix(http2 bool) string {
-	if http2 {
-		return "/h2"
-	}
-	return "/h3"
 }
 
 func endpointAddr(addrPort netip.AddrPort, http2 bool) net.Addr {

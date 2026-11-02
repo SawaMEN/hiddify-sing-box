@@ -28,16 +28,16 @@ func newSystemStackDevice(options DeviceOptions) (*systemStackDevice, error) {
 		return nil, err
 	}
 	stackDevice := &systemStackDevice{systemDevice: system}
-	stackDevice.memoryTun = tun.NewMemoryTun(tun.MemoryTunOptions{MTU: int(options.MTU), Outbound: stackDevice.inputPackets})
+	stackDevice.memoryTun = tun.NewMemoryTun(tun.MemoryTunOptions{MTU: int(options.MTU), Outbound: func(packets []*buf.Buffer) { _ = stackDevice.inputPackets(packets) }})
 	stackDevice.stack, err = newStack(options, stackDevice.memoryTun)
 	if err != nil {
-		router.close()
+		system.Close()
 		return nil, err
 	}
 	return stackDevice, nil
 }
 
-func (w *systemStackDevice) SetDevice(device *device.Device) {
+func (w *systemStackDevice) SetDevice(device *device.Device, peers []*device.Peer) {
 	w.device.Store(device)
 }
 

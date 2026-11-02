@@ -52,7 +52,7 @@ func archiveCrashReport(path string, crashReportsDir string) {
 	}
 	writeReportMetadata(destPath, metadata)
 	os.Remove(path)
-	pruneReports(crashReportsDir) //H
+	pruneReports(crashReportsDir) // H
 }
 
 func configSnapshotPath() string {
@@ -62,11 +62,7 @@ func configSnapshotPath() string {
 // H: the configuration holds the servers' addresses, keys and passwords, and reports are made to
 // be shared, so it is neither kept for them nor copied into them; an old copy is removed
 func saveConfigSnapshot(configContent string) {
-	os.Remove(configSnapshotPath()) //H
-}
-
-func RedirectStderr(path string) error {
-	return redirectStderr(path)
+	os.Remove(configSnapshotPath()) // H
 }
 
 func RedirectStderr(path string) error {
@@ -74,10 +70,10 @@ func RedirectStderr(path string) error {
 }
 
 func redirectStderr(path string) error {
-	crashReportsDir := filepath.Join(sWorkingPath, crashReportsDirectoryName) //H
+	crashReportsDir := filepath.Join(sWorkingPath, crashReportsDirectoryName) // H
 	archiveCrashReport(path, crashReportsDir)
 	archiveCrashReport(path+".old", crashReportsDir)
-	pruneAllReports() //H
+	pruneAllReports() // H
 
 	outputFile, err := os.Create(path)
 	if err != nil {
@@ -148,9 +144,9 @@ func CreateZipArchive(sourcePath string, destinationPath string, encrypt bool) e
 			return err
 		}
 
-		if sensitiveReportFile(d.Name()) { //H
-			return nil //H
-		} //H
+		if sensitiveReportFile(d.Name()) { // H
+			return nil // H
+		} // H
 		fileInfo, err := d.Info()
 		if err != nil {
 			return err
@@ -167,14 +163,14 @@ func CreateZipArchive(sourcePath string, destinationPath string, encrypt bool) e
 			return err
 		}
 
-		if textReportFile(d.Name()) { //H
-			content, err := os.ReadFile(path) //H
-			if err != nil {                   //H
-				return err //H
-			} //H
-			_, err = writer.Write(sanitizeReportText(content)) //H
-			return err                                         //H
-		} //H
+		if textReportFile(d.Name()) { // H
+			content, err := os.ReadFile(path) // H
+			if err != nil {                   // H
+				return err // H
+			} // H
+			_, err = writer.Write(sanitizeReportText(content)) // H
+			return err                                         // H
+		} // H
 		sourceFile, err := os.Open(path)
 		if err != nil {
 			return err

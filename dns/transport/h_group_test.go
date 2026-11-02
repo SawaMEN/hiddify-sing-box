@@ -139,7 +139,7 @@ func hAnswerIPs(response *mDNS.Msg) []string {
 	return result
 }
 
-var hErrMember = errors.New("member failed")
+var errHMember = errors.New("member failed")
 
 func TestH_GroupModeParsing(t *testing.T) {
 	member := hMember("a", hReply("1.1.1.1"))
@@ -190,12 +190,12 @@ func TestH_GroupStartValidation(t *testing.T) {
 	fakeIP := &hGroupMember{tag: "fake", typ: C.DNSTypeFakeIP}
 	members := []*hGroupMember{plain, nestedGroup, nestedMulti, fakeIP}
 
-	require.NoError(t, hNewGroup(t, option.GroupDNSServerOptions{Servers: []string{"plain"}}, members...).Start(adapter.StartStateStart))
-	require.NoError(t, hNewGroup(t, option.GroupDNSServerOptions{Servers: []string{"missing"}}, members...).Start(adapter.StartStateInitialize))
-	require.ErrorContains(t, hNewGroup(t, option.GroupDNSServerOptions{Servers: []string{"missing"}}, members...).Start(adapter.StartStateStart), "DNS server not found: missing")
-	require.ErrorContains(t, hNewGroup(t, option.GroupDNSServerOptions{Servers: []string{"nested-group"}}, members...).Start(adapter.StartStateStart), "cannot contain another group")
-	require.ErrorContains(t, hNewGroup(t, option.GroupDNSServerOptions{Servers: []string{"nested-multi"}}, members...).Start(adapter.StartStateStart), "cannot contain another group")
-	require.ErrorContains(t, hNewGroup(t, option.GroupDNSServerOptions{Servers: []string{"fake"}}, members...).Start(adapter.StartStateStart), "cannot contain fakeip")
+	require.NoError(t, hNewGroup(t, option.GroupDNSServerOptions{Servers: []string{"plain"}}, members...).Start(adapter.StartStateStart, nil))
+	require.NoError(t, hNewGroup(t, option.GroupDNSServerOptions{Servers: []string{"missing"}}, members...).Start(adapter.StartStateInitialize, nil))
+	require.ErrorContains(t, hNewGroup(t, option.GroupDNSServerOptions{Servers: []string{"missing"}}, members...).Start(adapter.StartStateStart, nil), "DNS server not found: missing")
+	require.ErrorContains(t, hNewGroup(t, option.GroupDNSServerOptions{Servers: []string{"nested-group"}}, members...).Start(adapter.StartStateStart, nil), "cannot contain another group")
+	require.ErrorContains(t, hNewGroup(t, option.GroupDNSServerOptions{Servers: []string{"nested-multi"}}, members...).Start(adapter.StartStateStart, nil), "cannot contain another group")
+	require.ErrorContains(t, hNewGroup(t, option.GroupDNSServerOptions{Servers: []string{"fake"}}, members...).Start(adapter.StartStateStart, nil), "cannot contain fakeip")
 }
 
 func TestH_GroupSequentialStopsAtFirstAnswer(t *testing.T) {
@@ -210,7 +210,7 @@ func TestH_GroupSequentialStopsAtFirstAnswer(t *testing.T) {
 }
 
 func TestH_GroupSequentialFallsThroughErrors(t *testing.T) {
-	first := hMember("first", hFail(hErrMember))
+	first := hMember("first", hFail(errHMember))
 	second := hMember("second", hReply("2.2.2.2"))
 	group := hNewGroup(t, option.GroupDNSServerOptions{Mode: C.DNSGroupModeSequential}, first, second)
 	response, err := hExchange(t, group)
@@ -221,7 +221,7 @@ func TestH_GroupSequentialFallsThroughErrors(t *testing.T) {
 func TestH_GroupSequentialReturnsLastError(t *testing.T) {
 	lastErr := errors.New("last failed")
 	group := hNewGroup(t, option.GroupDNSServerOptions{Mode: C.DNSGroupModeSequential},
-		hMember("first", hFail(hErrMember)), hMember("second", hFail(lastErr)))
+		hMember("first", hFail(errHMember)), hMember("second", hFail(lastErr)))
 	_, err := hExchange(t, group)
 	require.ErrorIs(t, err, lastErr)
 }
@@ -238,7 +238,7 @@ func TestH_GroupSequentialSkipsIgnoredRanges(t *testing.T) {
 
 func TestH_GroupSequentialEmptyResponseIsFallback(t *testing.T) {
 	empty := hMember("empty", hReply())
-	failed := hMember("failed", hFail(hErrMember))
+	failed := hMember("failed", hFail(errHMember))
 	group := hNewGroup(t, option.GroupDNSServerOptions{Mode: C.DNSGroupModeSequential}, empty, failed)
 	response, err := hExchange(t, group)
 	require.NoError(t, err)
@@ -324,7 +324,7 @@ func TestH_GroupParallelEmptyResponseLosesToAnswer(t *testing.T) {
 }
 
 func TestH_GroupParallelAllEmptyReturnsFallback(t *testing.T) {
-	group := hNewGroup(t, option.GroupDNSServerOptions{}, hMember("a", hReply()), hMember("b", hFail(hErrMember)))
+	group := hNewGroup(t, option.GroupDNSServerOptions{}, hMember("a", hReply()), hMember("b", hFail(errHMember)))
 	response, err := hExchange(t, group)
 	require.NoError(t, err)
 	require.NotNil(t, response)
@@ -343,9 +343,9 @@ func TestH_GroupParallelFallbackOnDeadline(t *testing.T) {
 func TestH_GroupParallelAllErrorsReturnsFirst(t *testing.T) {
 	lateErr := errors.New("late failure")
 	group := hNewGroup(t, option.GroupDNSServerOptions{},
-		hMember("early", hFail(hErrMember)), hMember("late", hDelayed(50*time.Millisecond, hFail(lateErr))))
+		hMember("early", hFail(errHMember)), hMember("late", hDelayed(50*time.Millisecond, hFail(lateErr))))
 	_, err := hExchange(t, group)
-	require.ErrorIs(t, err, hErrMember)
+	require.ErrorIs(t, err, errHMember)
 }
 
 func TestH_GroupParallelAllIgnored(t *testing.T) {

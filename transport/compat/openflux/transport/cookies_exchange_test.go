@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"maps"
 	"sync"
 	"testing"
 	"time"
@@ -17,9 +18,7 @@ func (r *recordingExchanger) FetchCookies() (map[string]string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	out := make(map[string]string, len(r.jar))
-	for k, v := range r.jar {
-		out[k] = v
-	}
+	maps.Copy(out, r.jar)
 	return out, nil
 }
 
@@ -27,9 +26,7 @@ func (r *recordingExchanger) ApplyCookies(jar map[string]string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.jar = make(map[string]string, len(jar))
-	for k, v := range jar {
-		r.jar[k] = v
-	}
+	maps.Copy(r.jar, jar)
 	return nil
 }
 
@@ -37,9 +34,7 @@ func (r *recordingExchanger) snapshot() map[string]string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	out := make(map[string]string, len(r.jar))
-	for k, v := range r.jar {
-		out[k] = v
-	}
+	maps.Copy(out, r.jar)
 	return out
 }
 
@@ -77,7 +72,7 @@ func TestCookieExchangeEndToEnd(t *testing.T) {
 	errs := make(chan error, 2)
 	go func() { errs <- ca.Start() }()
 	go func() { errs <- cb.Start() }()
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if err := <-errs; err != nil {
 			t.Fatal(err)
 		}

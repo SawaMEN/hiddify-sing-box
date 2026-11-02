@@ -82,7 +82,7 @@ func TestWireEfficiencyBulkDownload(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	var trace [][]byte
 	var seq uint32 = 1000
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		payload := make([]byte, 1460) // encrypted app data => incompressible
 		rng.Read(payload)
 		trace = append(trace, mkPkt(seq, 5000, payload))
@@ -100,7 +100,7 @@ func TestWireEfficiencyBulkDownload(t *testing.T) {
 func TestWireEfficiencyAckHeavy(t *testing.T) {
 	var trace [][]byte
 	var ack uint32 = 1000
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		trace = append(trace, mkPkt(42, ack, nil)) // pure 40-byte ACKs
 		ack += 1460
 	}

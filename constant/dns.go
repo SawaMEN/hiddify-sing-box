@@ -31,13 +31,15 @@ const (
 	DNSTypeOpenConnect = "openconnect"
 	DNSTypeOpenVPN     = "openvpn"
 	DNSTypeGroup       = "group"
-	DNSTypeMulti       = "multi" //H
-	DNSTypeSDNS        = "sdns"  //H
+	DNSTypeMulti       = "multi" // H
+	DNSTypeSDNS        = "sdns"  // H
 )
 
 const (
-	DNSGroupModeParallel   = "parallel"   //H
-	DNSGroupModeSequential = "sequential" //H
+	DNSGroupModeParallel   = "parallel" // H
+	DNSGroupModeSequential = "sequential"
+	DNSGroupModeStable     = "stable"  // H
+	DNSGroupModeFastest    = "fastest" // H //H
 )
 
 const (

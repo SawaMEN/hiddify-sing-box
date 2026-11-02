@@ -11,6 +11,7 @@ import (
 	"net/http/httptrace"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	common "github.com/sagernet/sing-box/common/xray"
 	"github.com/sagernet/sing-box/common/xray/signal/done"
@@ -32,7 +33,7 @@ type DialerClient interface {
 type DefaultDialerClient struct {
 	options     *option.V2RayXHTTPBaseOptions
 	client      *http.Client
-	closed      bool
+	closed      atomic.Bool
 	httpVersion string
 	// pool of net.Conn, created using dialUploadConn
 	uploadRawPool  *sync.Pool
@@ -40,7 +41,7 @@ type DefaultDialerClient struct {
 }
 
 func (c *DefaultDialerClient) IsClosed() bool {
-	return c.closed
+	return c.closed.Load()
 }
 
 func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessionId string, body io.Reader, uploadOnly bool) (wrc io.ReadCloser, remoteAddr, localAddr net.Addr, err error) {
@@ -59,7 +60,10 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 	if body != nil {
 		method = c.options.GetNormalizedUplinkHTTPMethod() // stream-up/one
 	}
-	req, _ := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, body)
+	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, body)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	req.Header = c.options.GetRequestHeader()
 	length := int(c.options.GetNormalizedXPaddingBytes().Rand())
 	config := XPaddingConfig{Length: length}
@@ -85,27 +89,53 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 		req.Header.Set("Content-Type", "application/grpc")
 	}
 	wrc = &WaitReadCloser{ctx: ctx, Wait: make(chan struct{})}
+	resultCh := make(chan error, 1)
 	go func() {
 		resp, err := c.client.Do(req)
 		if err != nil {
 			if !uploadOnly { // stream-down is enough
-				c.closed = true
+				c.closed.Store(true)
 			}
 			gotConn.Close()
 			wrc.Close()
+			resultCh <- err
 			return
 		}
-		if resp.StatusCode != 200 || uploadOnly { // stream-up
+		if resp.StatusCode != http.StatusOK || uploadOnly {
 			io.Copy(io.Discard, resp.Body)
-			resp.Body.Close() // if it is called immediately, the upload will be interrupted also
+			resp.Body.Close()
 			wrc.Close()
+			if resp.StatusCode != http.StatusOK {
+				resultCh <- fmt.Errorf("xhttp stream rejected: HTTP %d", resp.StatusCode)
+			} else {
+				resultCh <- nil
+			}
 			return
 		}
 		wrc.(*WaitReadCloser).Set(resp.Body)
+		resultCh <- nil
 	}()
-	select {
-	case <-gotConn.Wait():
-	case <-ctx.Done():
+	if body == nil && !uploadOnly {
+		// A stream-down connection must have a valid HTTP response before
+		// returning: GotConn alone does not mean the stream was accepted.
+		select {
+		case err = <-resultCh:
+			if err != nil {
+				return nil, remoteAddr, localAddr, err
+			}
+		case <-ctx.Done():
+			return nil, remoteAddr, localAddr, ctx.Err()
+		}
+	} else {
+		select {
+		case err = <-resultCh:
+			if err != nil {
+				return nil, remoteAddr, localAddr, err
+			}
+		case <-gotConn.Wait():
+		case <-ctx.Done():
+			return nil, remoteAddr, localAddr, ctx.Err()
+		}
 	}
 	return
 }
@@ -135,10 +165,7 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 		switch dataPlacement {
 		case option.PlacementHeader:
 			for i := 0; i < len(encodedData); i += chunkSize {
-				end := i + chunkSize
-				if end > len(encodedData) {
-					end = len(encodedData)
-				}
+				end := min(i+chunkSize, len(encodedData))
 				chunk := encodedData[i:end]
 				headerKey := fmt.Sprintf("%s-%d", key, i/chunkSize)
 				req.Header.Set(headerKey, chunk)
@@ -148,10 +175,7 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 			req.Header.Set(key+"-Upstream", "1")
 		case option.PlacementCookie:
 			for i := 0; i < len(encodedData); i += chunkSize {
-				end := i + chunkSize
-				if end > len(encodedData) {
-					end = len(encodedData)
-				}
+				end := min(i+chunkSize, len(encodedData))
 				chunk := encodedData[i:end]
 				cookieName := fmt.Sprintf("%s_%d", key, i/chunkSize)
 				req.AddCookie(&http.Cookie{Name: cookieName, Value: chunk})
@@ -183,11 +207,14 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 	if c.httpVersion != "1.1" {
 		resp, err := c.client.Do(req)
 		if err != nil {
-			c.closed = true
+			c.closed.Store(true)
 			return err
 		}
 		io.Copy(io.Discard, resp.Body)
 		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("xhttp packet rejected: HTTP %d", resp.StatusCode)
+		}
 	} else {
 		// stringify the entire HTTP/1.1 request so it can be
 		// safely retried. if instead req.Write is called multiple
@@ -215,7 +242,7 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 				if h1UploadConn.UnreadedResponsesCount > 0 {
 					resp, err := http.ReadResponse(h1UploadConn.RespBufReader, req)
 					if err != nil {
-						c.closed = true
+						c.closed.Store(true)
 						return fmt.Errorf("error while reading response: %s", err.Error())
 					}
 					io.Copy(io.Discard, resp.Body)

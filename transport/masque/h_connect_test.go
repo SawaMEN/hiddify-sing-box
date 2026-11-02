@@ -9,13 +9,13 @@ import (
 	"testing"
 	"time"
 
-	connectip "github.com/Diniboy1123/connect-ip-go"
 	"github.com/sagernet/quic-go"
 	"github.com/sagernet/quic-go/http3"
 	"github.com/sagernet/sing-box/log"
 	N "github.com/sagernet/sing/common/network"
 	aTLS "github.com/sagernet/sing/common/tls"
 
+	connectip "github.com/Diniboy1123/connect-ip-go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -116,7 +116,7 @@ func TestH_AutoMemory(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []bool{false, true}, legs.reset())
 	require.Equal(t, 2, tunnel.http2Step)
-	require.Greater(t, tunnel.http2Until.Sub(time.Now()), firstUntil.Sub(time.Now()))
+	require.Greater(t, time.Until(tunnel.http2Until), time.Until(firstUntil))
 
 	// HTTP/3 works again after the window: memory cleared
 	tunnel.http2Until = time.Now().Add(-time.Second)

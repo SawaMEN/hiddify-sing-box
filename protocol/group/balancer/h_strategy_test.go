@@ -89,7 +89,7 @@ func TestH_BalancerGetKey(t *testing.T) {
 }
 
 func TestH_BalancerJumpHash(t *testing.T) {
-	for key := uint64(0); key < 1000; key++ {
+	for key := range uint64(1000) {
 		require.Equal(t, int32(0), jumpHash(key, 1))
 		v := jumpHash(key, 7)
 		require.GreaterOrEqual(t, v, int32(0))
@@ -97,7 +97,7 @@ func TestH_BalancerJumpHash(t *testing.T) {
 		require.Equal(t, v, jumpHash(key, 7))
 	}
 	seen := map[int32]bool{}
-	for key := uint64(0); key < 1000; key++ {
+	for key := range uint64(1000) {
 		seen[jumpHash(key*0x9E3779B97F4A7C15, 4)] = true
 	}
 	require.Len(t, seen, 4)
@@ -182,7 +182,7 @@ func TestH_BalancerLowestDelay(t *testing.T) {
 func TestH_BalancerRoundRobin(t *testing.T) {
 	a, b, c := newFake("a"), newFake("b"), newFake("c")
 	s := NewRoundRobin(outs(a, b, c), option.BalancerOutboundOptions{DelayAcceptableRatio: 2})
-	require.Equal(t, "", s.Now())
+	require.Equal(t, "b", s.Now())
 
 	var got []string
 	for range 6 {
@@ -204,7 +204,6 @@ func TestH_BalancerRoundRobin(t *testing.T) {
 }
 
 func TestH_BalancerRoundRobinCachedDelayOverflow(t *testing.T) {
-	t.Skip("BUG: getAcceptableIndex/consistent-hashing/sticky compute uint16(float) of max acceptable delay, which overflows when delay*ratio > 65535")
 	a, b := newFake("a"), newFake("b")
 	s := NewRoundRobin(outs(a, b), option.BalancerOutboundOptions{DelayAcceptableRatio: 3})
 	// both cached: effective delays 25000 / 26000, acceptable = 75000

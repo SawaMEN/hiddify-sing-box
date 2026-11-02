@@ -53,6 +53,7 @@ func newRelayInbound(ctx context.Context, router adapter.Router, logger log.Cont
 		destinations: options.Destinations,
 		obfsMode:     options.ObfsMode,
 	}
+	var err error // H
 	inbound.router, err = mux.NewRouterWithOptions(inbound.router, logger, common.PtrValueOrDefault(options.Multiplex))
 	if err != nil {
 		return nil, err

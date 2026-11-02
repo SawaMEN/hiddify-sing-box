@@ -22,8 +22,8 @@ import (
 	"github.com/sagernet/sing-box/service/oomkiller"
 	"github.com/sagernet/sing-box/transport/device"
 	openconnecttransport "github.com/sagernet/sing-box/transport/openconnect"
-	"github.com/sagernet/sing-openconnect"
-	"github.com/sagernet/sing-tun"
+	openconnect "github.com/sagernet/sing-openconnect"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
@@ -418,7 +418,7 @@ func (e *Endpoint) updateState(update func(state *clientState)) {
 	e.state.Store(&newState)
 }
 
-func (e *Endpoint) Start(stage adapter.StartStage) error {
+func (e *Endpoint) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage == adapter.StartStateInitialize {
 		e.deviceOptions.MemoryPressure = oomkiller.MemoryPressure(e.loopContext)
 		tunnelDevice, err := device.New(*e.deviceOptions)
@@ -427,6 +427,7 @@ func (e *Endpoint) Start(stage adapter.StartStage) error {
 		}
 		tunnelDevice.SetPacketWriter(e.writePacketBuffers)
 		e.device = tunnelDevice
+		scope.Add(e.Close) // H
 		e.deviceOptions = nil
 		return nil
 	}
@@ -434,28 +435,6 @@ func (e *Endpoint) Start(stage adapter.StartStage) error {
 		return nil
 	}
 	return nil
-}
-
-func (e *Endpoint) readLoop(ctx context.Context) {
-	for {
-		packetBuffers, err := e.client.ReadDataPackets(ctx)
-		if err != nil {
-			if E.IsClosedOrCanceled(err) || ctx.Err() != nil {
-				return
-			}
-			e.logger.Error(E.Cause(err, "client terminated"))
-			e.setTerminalError(err)
-			return
-		}
-		err = e.device.WriteInboundBuffers(packetBuffers)
-		buf.ReleaseMulti(packetBuffers)
-		if err != nil {
-			err = E.Cause(err, "write packet to device")
-			e.logger.Error(err)
-			e.setTerminalError(err)
-			return
-		}
-	}
 }
 
 func (e *Endpoint) Close() error {

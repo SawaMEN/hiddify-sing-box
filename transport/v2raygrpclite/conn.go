@@ -73,11 +73,11 @@ func (c *GunConn) read(b []byte) (n int, err error) {
 	}
 
 	if c.readRemaining > 0 {
-		if uint64(len(b)) > c.readRemaining {
+		if len(b) > c.readRemaining {
 			b = b[:c.readRemaining]
 		}
 		n, err = c.reader.Read(b)
-		c.readRemaining -= uint64(n)
+		c.readRemaining -= n
 		return
 	}
 
@@ -91,13 +91,13 @@ func (c *GunConn) read(b []byte) (n int, err error) {
 		return
 	}
 
-	c.readRemaining = dataLen
-	if uint64(len(b)) > dataLen {
-		b = b[:dataLen]
+	c.readRemaining = int(dataLen)
+	if len(b) > c.readRemaining {
+		b = b[:c.readRemaining]
 	}
 
 	n, err = c.reader.Read(b)
-	c.readRemaining -= uint64(n)
+	c.readRemaining -= n
 	return
 }
 

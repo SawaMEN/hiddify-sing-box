@@ -9,9 +9,10 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	utls "github.com/metacubex/utls"
 	"net"
 	"time"
+
+	utls "github.com/metacubex/utls"
 )
 
 func sessionID(offset int) ([]byte, error) {
@@ -25,6 +26,7 @@ func sessionID(offset int) ([]byte, error) {
 	copy(b[offset:offset+4], sum[:4])
 	return b, nil
 }
+
 func setSession(c *utls.UConn, offset int) error {
 	if e := c.BuildHandshakeState(); e != nil {
 		return e
@@ -90,6 +92,7 @@ func decoyHandshake(ctx context.Context, raw net.Conn, sni string) error {
 	}
 	return transitionPause(ctx)
 }
+
 func DialTLS(ctx context.Context, raw net.Conn, sni, fingerprint, bypass string) (net.Conn, error) {
 	stop := context.AfterFunc(ctx, func() { raw.Close() })
 	defer stop()

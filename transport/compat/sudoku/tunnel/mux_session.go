@@ -214,16 +214,29 @@ func (s *muxSession) startKeepaliveMode(interval time.Duration, ping bool) {
 		go func() {
 			ticker := time.NewTicker(interval)
 			defer ticker.Stop()
+			var firstPingAt time.Time
 			for {
 				select {
 				case <-ticker.C:
 					if ping {
-						if time.Since(time.Unix(0, s.lastPong.Load())) > 3*interval {
-							s.closeWithError(errors.New("mux keepalive timeout"))
-							return
+						// A session can sit idle before keepalive starts. Never
+						// time it out before sending its first PING and giving
+						// the remote side time to respond.
+						if !firstPingAt.IsZero() {
+							lastReply := time.Unix(0, s.lastPong.Load())
+							if lastReply.Before(firstPingAt) {
+								lastReply = firstPingAt
+							}
+							if time.Since(lastReply) > 3*interval {
+								s.closeWithError(errors.New("mux keepalive timeout"))
+								return
+							}
 						}
 						if err := s.sendFrame(muxFramePing, 0, nil); err != nil {
 							return
+						}
+						if firstPingAt.IsZero() {
+							firstPingAt = time.Now()
 						}
 						continue
 					}

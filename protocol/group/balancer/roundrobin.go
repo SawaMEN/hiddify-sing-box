@@ -39,10 +39,17 @@ func NewRoundRobin(outbounds []adapter.Outbound, options option.BalancerOutbound
 	}
 }
 
+// Now reports the outbound selected for the next TCP connection without
+// advancing round-robin state.
 func (s *RoundRobin) Now() string {
-	// s.idxMutex.Lock()
-	// defer s.idxMutex.Unlock()
-	return ""
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	network := N.NetworkTCP
+	length := s.maxAcceptableIndex[network] + 1
+	if length <= 0 || len(s.sortedOutbounds[network]) < length {
+		return ""
+	}
+	return s.sortedOutbounds[network][(s.idx[network]+1)%length].Tag()
 }
 
 func (s *RoundRobin) UpdateOutboundsInfo(history map[string]*adapter.URLTestHistory) bool {
@@ -78,5 +85,4 @@ func (s *RoundRobin) Select(metadata adapter.InboundContext, net string, touch b
 		s.idx[net] = id
 	}
 	return proxy
-
 }

@@ -121,10 +121,10 @@ func parseAuthorizeResponse(body []byte) (*authorizeResponse, error) {
 }
 
 func findAuthorizeField(body []byte, prefix string) string {
-	for _, line := range strings.Split(strings.TrimSpace(string(body)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(body)), "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, prefix) {
-			return strings.TrimSpace(strings.TrimPrefix(line, prefix))
+		if after, ok := strings.CutPrefix(line, prefix); ok {
+			return strings.TrimSpace(after)
 		}
 	}
 	return ""
@@ -442,7 +442,7 @@ func sendSessionControl(client *http.Client, controlURL, headerHost string, mode
 		lastErr error
 		backoff = 50 * time.Millisecond
 	)
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for attempt := range maxAttempts {
 		req, err := http.NewRequestWithContext(closeCtx, http.MethodPost, controlURL, nil)
 		if err != nil {
 			return err

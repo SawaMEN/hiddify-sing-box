@@ -2,37 +2,37 @@ package dnstt
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"net"
 
-	"fmt"
+	"github.com/sagernet/sing-box/common/monitoring"
 
 	dnstt "github.com/net2share/vaydns/client"
-	"github.com/sagernet/sing-box/common/monitoring"
 )
 
-func (c *Outbound) addResolver(resolver dnstt.Resolver) {
-	c.mu.Lock()
-	if c.mdMgr != nil {
+func (receiver *Outbound) addResolver(resolver dnstt.Resolver) {
+	receiver.mu.Lock()
+	if receiver.mdMgr != nil {
 		// Smart pool mode: register the resolver as a multidns upstream.
 		// c.resolvers stays at the single virtual resolver set up in
 		// NewOutbound, so the existing tunnel keeps running — the pool
 		// rotates upstreams behind it. No need to invalidate
 		// c.mutlitunnel here (unlike the legacy path, which has to
 		// rebuild the tunnel when its resolver list changes).
-		_, _ = c.mdMgr.AddResolverURL(resolverURL(resolver))
+		_, _ = receiver.mdMgr.AddResolverURL(resolverURL(resolver))
 	} else {
 		// for i := 0; i < c.options.TunnelPerResolver; i++ {
-		c.resolvers = append(c.resolvers, resolver)
-		c.tunnels = append(c.tunnels, nil)
+		receiver.resolvers = append(receiver.resolvers, resolver)
+		receiver.tunnels = append(receiver.tunnels, nil)
 		// }
-		c.mutlitunnel = nil
+		receiver.mutlitunnel = nil
 	}
-	c.mu.Unlock()
-	if !c.IsReady() {
-		c.started = 1
-		c.logger.InfoContext(c.ctx, "initial resolver ", resolver.ResolverAddr)
-		monitoring.Get(c.ctx).TestNow(c.Tag())
+	receiver.mu.Unlock()
+	if !receiver.IsReady() {
+		receiver.started = 1
+		receiver.logger.InfoContext(receiver.ctx, "initial resolver ", resolver.ResolverAddr)
+		monitoring.Get(receiver.ctx).TestNow(receiver.Tag())
 	}
 }
 
@@ -48,48 +48,50 @@ func resolverURL(r dnstt.Resolver) string {
 	}
 }
 
-func (c *Outbound) openStreamImp(ctx context.Context) (net.Conn, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if t := c.mutlitunnel; t != nil {
+func (receiver *Outbound) openStreamImp(ctx context.Context) (net.Conn, error) {
+	receiver.mu.Lock()
+	defer receiver.mu.Unlock()
+	if t := receiver.mutlitunnel; t != nil {
 		return t.OpenStream()
 	}
 
-	if newtunnel, err := c.createDnsttTunnel(ctx, c.resolvers); err != nil {
+	if newtunnel, err := receiver.createDnsttTunnel(ctx, receiver.resolvers); err != nil {
 		return nil, err
 	} else {
-		c.mutlitunnel = newtunnel
+		receiver.mutlitunnel = newtunnel
 		return newtunnel.OpenStream()
 	}
 }
-func (c *Outbound) OpenStream(ctx context.Context) (net.Conn, error) {
+
+func (receiver *Outbound) OpenStream(ctx context.Context) (net.Conn, error) {
 	var err error
 	var conn net.Conn
 	for range 3 {
-		conn, err = c.openStreamImp(ctx)
+		conn, err = receiver.openStreamImp(ctx)
 		if err == nil {
 			return conn, nil
 		}
 	}
 	return nil, err
 }
-func (c *Outbound) OpenStreamSingleResolver(ctx context.Context) (net.Conn, error) {
+
+func (receiver *Outbound) OpenStreamSingleResolver(ctx context.Context) (net.Conn, error) {
 	// dnsttConfig := streamSettings.ProtocolSettings.(*Config)
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	receiver.mu.Lock()
+	defer receiver.mu.Unlock()
 	// c.tunnel_index = (c.tunnel_index + 1) % len(c.tunnels)
 	var lasterr error
-	for i := 0; i < max(5, len(c.tunnels)); i++ {
-		tunnel_index := rand.Intn(len(c.resolvers)) // 0 <= x < n
-		tunnel := c.tunnels[tunnel_index]
+	for i := 0; i < max(5, len(receiver.tunnels)); i++ {
+		tunnel_index := rand.Intn(len(receiver.resolvers)) // 0 <= x < n
+		tunnel := receiver.tunnels[tunnel_index]
 		if tunnel == nil {
-			if newtunnel, err := c.createDnsttTunnel(ctx, []dnstt.Resolver{c.resolvers[tunnel_index]}); err != nil {
+			if newtunnel, err := receiver.createDnsttTunnel(ctx, []dnstt.Resolver{receiver.resolvers[tunnel_index]}); err != nil {
 				lasterr = err
-				c.logger.DebugContext(ctx, "tunnel [", tunnel_index, "]  failed resolver ", c.resolvers[tunnel_index].ResolverAddr)
+				receiver.logger.DebugContext(ctx, "tunnel [", tunnel_index, "]  failed resolver ", receiver.resolvers[tunnel_index].ResolverAddr)
 			} else {
-				c.tunnels[tunnel_index] = newtunnel
+				receiver.tunnels[tunnel_index] = newtunnel
 				tunnel = newtunnel
-				c.logger.InfoContext(ctx, "tunnel [", tunnel_index, "] resolver ", c.resolvers[tunnel_index].ResolverAddr)
+				receiver.logger.InfoContext(ctx, "tunnel [", tunnel_index, "] resolver ", receiver.resolvers[tunnel_index].ResolverAddr)
 
 				// return tunnel, nil
 			}
@@ -102,64 +104,65 @@ func (c *Outbound) OpenStreamSingleResolver(ctx context.Context) (net.Conn, erro
 				lasterr = err
 			}
 			tunnel.Close()
-			c.tunnels[tunnel_index] = nil
+			receiver.tunnels[tunnel_index] = nil
 		}
 	}
 	return nil, lasterr
 }
-func (c *Outbound) createDnsttTunnel(ctx context.Context, resolver []dnstt.Resolver) (*dnstt.Tunnel, error) {
-	tServer, err := dnstt.NewTunnelServer(c.options.Domain, c.options.PublicKey)
+
+func (receiver *Outbound) createDnsttTunnel(ctx context.Context, resolver []dnstt.Resolver) (*dnstt.Tunnel, error) {
+	tServer, err := dnstt.NewTunnelServer(receiver.options.Domain, receiver.options.PublicKey)
 	if err != nil {
 		return nil, fmt.Errorf("invalid tunnel server: %w", err)
 	}
 
-	if c.options.MTU != nil {
-		tServer.MTU = *c.options.MTU
+	if receiver.options.MTU != nil {
+		tServer.MTU = *receiver.options.MTU
 	}
 
-	tServer.DnsttCompat = c.options.DnsttCompat
+	tServer.DnsttCompat = receiver.options.DnsttCompat
 
-	if c.options.ClientIDSize != nil {
-		tServer.ClientIDSize = *c.options.ClientIDSize
+	if receiver.options.ClientIDSize != nil {
+		tServer.ClientIDSize = *receiver.options.ClientIDSize
 	}
 
-	if c.options.MaxNumLabels != nil {
-		tServer.MaxNumLabels = *c.options.MaxNumLabels
+	if receiver.options.MaxNumLabels != nil {
+		tServer.MaxNumLabels = *receiver.options.MaxNumLabels
 	}
-	if c.options.RPS != nil {
-		tServer.RPS = *c.options.RPS
+	if receiver.options.RPS != nil {
+		tServer.RPS = *receiver.options.RPS
 	}
-	if c.options.MaxQnameLen != nil {
-		tServer.MaxQnameLen = *c.options.MaxQnameLen
+	if receiver.options.MaxQnameLen != nil {
+		tServer.MaxQnameLen = *receiver.options.MaxQnameLen
 	}
 
 	tunnel, err := dnstt.NewTunnel(resolver, tServer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tunnel: %w", err)
 	}
-	if c.options.OpenStreamTimeout != nil {
-		tunnel.OpenStreamTimeout = c.options.OpenStreamTimeout.Build()
+	if receiver.options.OpenStreamTimeout != nil {
+		tunnel.OpenStreamTimeout = receiver.options.OpenStreamTimeout.Build()
 	}
-	if c.options.MaxStreams != nil {
-		tunnel.MaxStreams = *c.options.MaxStreams
+	if receiver.options.MaxStreams != nil {
+		tunnel.MaxStreams = *receiver.options.MaxStreams
 	}
-	if c.options.ReconnectMinDelay != nil {
-		tunnel.ReconnectMinDelay = c.options.ReconnectMinDelay.Build()
+	if receiver.options.ReconnectMinDelay != nil {
+		tunnel.ReconnectMinDelay = receiver.options.ReconnectMinDelay.Build()
 	}
-	if c.options.ReconnectMaxDelay != nil {
-		tunnel.ReconnectMaxDelay = c.options.ReconnectMaxDelay.Build()
+	if receiver.options.ReconnectMaxDelay != nil {
+		tunnel.ReconnectMaxDelay = receiver.options.ReconnectMaxDelay.Build()
 	}
-	if c.options.SessionCheckInterval != nil {
-		tunnel.SessionCheckInterval = c.options.SessionCheckInterval.Build()
+	if receiver.options.SessionCheckInterval != nil {
+		tunnel.SessionCheckInterval = receiver.options.SessionCheckInterval.Build()
 	}
-	if c.options.IdleTimeout != nil {
-		tunnel.IdleTimeout = c.options.IdleTimeout.Build()
+	if receiver.options.IdleTimeout != nil {
+		tunnel.IdleTimeout = receiver.options.IdleTimeout.Build()
 	}
-	if c.options.KeepAlive != nil {
-		tunnel.KeepAlive = c.options.KeepAlive.Build()
+	if receiver.options.KeepAlive != nil {
+		tunnel.KeepAlive = receiver.options.KeepAlive.Build()
 	}
-	if c.options.HandshakeTimeout != nil {
-		tunnel.HandshakeTimeout = c.options.HandshakeTimeout.Build()
+	if receiver.options.HandshakeTimeout != nil {
+		tunnel.HandshakeTimeout = receiver.options.HandshakeTimeout.Build()
 	}
 
 	if err := tunnel.InitiateResolverConnection(); err != nil {

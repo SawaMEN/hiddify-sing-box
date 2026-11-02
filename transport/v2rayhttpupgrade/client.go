@@ -69,9 +69,9 @@ func NewClient(ctx context.Context, dialer N.Dialer, serverAddr M.Socksaddr, opt
 	for key, value := range options.Headers {
 		headers[key] = value
 	}
-	if headers.Get("User-Agent") == "" { //H
-		headers.Set("User-Agent", C.DefaultBrowserAgent) //H
-	} //H
+	if headers.Get("User-Agent") == "" { // H
+		headers.Set("User-Agent", C.DefaultBrowserAgent) // H
+	} // H
 	return &Client{
 		dialer:     dialer,
 		serverAddr: serverAddr,

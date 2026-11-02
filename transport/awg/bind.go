@@ -8,27 +8,41 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/amnezia-vpn/amneziawg-go/v3/conn"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+
+	"github.com/amnezia-vpn/amneziawg-go/v3/conn"
 )
 
 var _ conn.Bind = (*bind_adapter)(nil)
 
 type bind_adapter struct {
-	conn4  net.PacketConn
-	conn6  net.PacketConn
-	dialer N.Dialer
-	ctx    context.Context
-	mutex  sync.Mutex
+	conn4    net.PacketConn
+	conn6    net.PacketConn
+	dialer   N.Dialer
+	ctx      context.Context
+	mutex    sync.Mutex
+	peer     netip.AddrPort // H
+	later    chan struct{}  // H
+	onReopen func()         // H
+	opens    int            // H
+	reserved *Reserved      // H
 }
 
-func newBind(ctx context.Context, dial N.Dialer) conn.Bind {
-	return &bind_adapter{
-		ctx:    ctx,
-		dialer: dial,
+func newBind(ctx context.Context, dial N.Dialer, peerOptions ...any) conn.Bind {
+	b := &bind_adapter{ctx: ctx, dialer: dial}
+	if len(peerOptions) > 0 {
+		if peer, ok := peerOptions[0].(netip.AddrPort); ok {
+			b.peer = peer
+		}
 	}
+	if len(peerOptions) > 1 {
+		if reserved, ok := peerOptions[1].(*Reserved); ok {
+			b.reserved = reserved
+		}
+	}
+	return b
 }
 
 func (b *bind_adapter) connect(addr netip.Addr, port uint16) (net.PacketConn, error) {
@@ -47,6 +61,7 @@ func (b *bind_adapter) receive(c net.PacketConn) conn.ReceiveFunc {
 			return 0, E.Cause(err, "parse endpoint")
 		}
 
+		b.reserved.clear(packets[0][:n])
 		sizes[0] = n
 		eps[0] = bindEp
 		return 1, nil
@@ -57,10 +72,15 @@ func (b *bind_adapter) Open(port uint16) (fns []conn.ReceiveFunc, actualPort uin
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	if b.conn4 != nil || b.conn6 != nil {
+	if b.conn4 != nil || b.conn6 != nil || b.later != nil {
 		return nil, 0, conn.ErrBindAlreadyOpen
 	}
 
+	if b.peer.IsValid() {
+		b.noteOpen()
+		return b.openLater(port)
+	}
+	b.noteOpen()
 	conn4, err := b.connect(netip.IPv4Unspecified(), port)
 	if err != nil && !errors.Is(err, syscall.EAFNOSUPPORT) {
 		return nil, 0, E.Cause(err, "create ipv4 connection")
@@ -87,6 +107,7 @@ func (b *bind_adapter) Close() error {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
+	b.closeLater()
 	var err4, err6 error
 
 	if b.conn4 != nil {
@@ -107,12 +128,7 @@ func (b *bind_adapter) SetMark(mark uint32) error {
 }
 
 func (b *bind_adapter) Send(bufs [][]byte, ep conn.Endpoint) error {
-	var conn net.PacketConn
-	if ep.DstIP().Is6() {
-		conn = b.conn6
-	} else {
-		conn = b.conn4
-	}
+	conn := b.sendConn(ep) // H: protect against a concurrently established peer connection
 
 	if conn == nil {
 		return errors.ErrUnsupported
@@ -129,6 +145,7 @@ func (b *bind_adapter) Send(bufs [][]byte, ep conn.Endpoint) error {
 	}
 
 	for _, buf := range bufs {
+		b.reserved.write(buf)
 		if _, err := conn.WriteTo(buf, udpAddr); err != nil {
 			return err
 		}

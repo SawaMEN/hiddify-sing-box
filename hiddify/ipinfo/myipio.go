@@ -30,7 +30,7 @@ func (p *MyIPioProvider) GetIPInfo(ctx context.Context, dialer N.Dialer) (*IpInf
 		if ip, ok := data["ip"].(string); ok {
 			info.IP = ip
 		}
-		if country, ok := data["country"].(map[string]interface{}); ok {
+		if country, ok := data["country"].(map[string]any); ok {
 			if code, ok := country["code"].(string); ok {
 				info.CountryCode = code
 			}
@@ -41,7 +41,7 @@ func (p *MyIPioProvider) GetIPInfo(ctx context.Context, dialer N.Dialer) (*IpInf
 		if city, ok := data["city"].(string); ok {
 			info.City = city
 		}
-		if location, ok := data["location"].(map[string]interface{}); ok {
+		if location, ok := data["location"].(map[string]any); ok {
 			if lat, ok := location["lat"].(float64); ok {
 				info.Latitude = lat
 			}
@@ -49,7 +49,7 @@ func (p *MyIPioProvider) GetIPInfo(ctx context.Context, dialer N.Dialer) (*IpInf
 				info.Longitude = lon
 			}
 		}
-		if asn, ok := data["asn"].(map[string]interface{}); ok {
+		if asn, ok := data["asn"].(map[string]any); ok {
 			if asnNumber, ok := asn["number"].(float64); ok {
 				info.ASN = int(asnNumber)
 			}

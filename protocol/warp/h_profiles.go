@@ -180,13 +180,6 @@ func newWARPProfiles(ctx context.Context, logger log.ContextLogger, owner string
 	return &warpProfiles{ctx: ctx, logger: logger, owner: owner}
 }
 
-// loadWARPProfiles returns the endpoint's devices, with the pool read at once.
-func loadWARPProfiles(ctx context.Context, logger log.ContextLogger, owner string) *warpProfiles {
-	profiles := newWARPProfiles(ctx, logger, owner)
-	profiles.ensureLoaded()
-	return profiles
-}
-
 func (s *warpProfiles) ensureLoaded() {
 	s.once.Do(func() {
 		s.pool = poolFor(service.FromContext[adapter.CacheFile](s.ctx))

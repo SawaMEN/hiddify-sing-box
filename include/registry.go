@@ -3,7 +3,7 @@ package include
 import (
 	"context"
 
-	"github.com/sagernet/sing-box"
+	box "github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/certificate"
 	"github.com/sagernet/sing-box/adapter/endpoint"
@@ -51,9 +51,9 @@ import (
 	"github.com/sagernet/sing-box/protocol/trusttunnel"
 	"github.com/sagernet/sing-box/protocol/tun"
 	"github.com/sagernet/sing-box/protocol/tunnel"
+	"github.com/sagernet/sing-box/protocol/vetroff"
 	"github.com/sagernet/sing-box/protocol/vless"
 	"github.com/sagernet/sing-box/protocol/vmess"
-	"github.com/sagernet/sing-box/protocol/vetroff"
 	legacyWireguard "github.com/sagernet/sing-box/protocol/wireguard"
 	"github.com/sagernet/sing-box/service/api"
 	originca "github.com/sagernet/sing-box/service/origin_ca"
@@ -74,9 +74,9 @@ func InboundRegistry() *inbound.Registry {
 	redirect.RegisterRedirect(registry)
 	redirect.RegisterTProxy(registry)
 	direct.RegisterInbound(registry)
-	registerSudokuInbound(registry) //H
-	registerBondInbound(registry)   //H
-	registerCallInbound(registry)   //H
+	registerSudokuInbound(registry) // H
+	registerBondInbound(registry)   // H
+	registerCallInbound(registry)   // H
 
 	socks.RegisterInbound(registry)
 	http.RegisterInbound(registry)
@@ -139,7 +139,7 @@ func OutboundRegistry() *outbound.Registry {
 	gooserelay.RegisterOutbound(registry)
 	balancer.RegisterLoadBalance(registry)
 	registerMASQUEOutbound(registry)
-	legacyWireguard.RegisterOutbound(registry) //H
+	legacyWireguard.RegisterOutbound(registry) // H
 	trusttunnel.RegisterOutbound(registry)
 
 	registerQUICOutbounds(registry)
@@ -180,7 +180,7 @@ func DNSTransportRegistry() *dns.TransportRegistry {
 	fakeip.RegisterTransport(registry)
 	resolved.RegisterTransport(registry)
 	transport.RegisterSDNS(registry)
-	transport.RegisterMulti(registry) //H
+	transport.RegisterMulti(registry) // H
 
 	registerQUICTransports(registry)
 	registerDHCPTransport(registry)
@@ -197,7 +197,7 @@ func ServiceRegistry() *service.Registry {
 	api.RegisterService(registry)
 	resolved.RegisterService(registry)
 	ssmapi.RegisterService(registry)
-	smartdnspool.RegisterService(registry) //H
+	smartdnspool.RegisterService(registry) // H
 
 	registerQUICServices(registry)
 	registerDERPService(registry)

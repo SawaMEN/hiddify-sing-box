@@ -3,14 +3,14 @@ package buf
 import (
 	"io"
 
-	"github.com/sagernet/sing-box/common/xray"
+	common "github.com/sagernet/sing-box/common/xray"
 	"github.com/sagernet/sing-box/common/xray/errors"
 	E "github.com/sagernet/sing/common/exceptions"
 )
 
 func readOneUDP(r io.Reader) (*Buffer, error) {
 	b := New()
-	for i := 0; i < 64; i++ {
+	for range 64 {
 		_, err := b.ReadFrom(r)
 		if !b.IsEmpty() {
 			return b, nil

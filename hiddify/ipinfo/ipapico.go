@@ -39,8 +39,8 @@ func (p *IpApiCoProvider) GetIPInfo(ctx context.Context, dialer N.Dialer) (*IpIn
 		info.City = city
 	}
 	if asnstr, ok := data["asn"].(string); ok {
-		if strings.HasPrefix(asnstr, "AS") {
-			if asn, ok := strconv.ParseInt(strings.TrimPrefix(asnstr, "AS"), 10, 64); ok == nil {
+		if after, ok0 := strings.CutPrefix(asnstr, "AS"); ok0 {
+			if asn, ok := strconv.ParseInt(after, 10, 64); ok == nil {
 				info.ASN = int(asn)
 			}
 		}

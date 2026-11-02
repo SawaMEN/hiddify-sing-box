@@ -14,8 +14,9 @@ import (
 	"time"
 
 	"github.com/sagernet/sing-box/common/dialer"
+	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/service/powerreport"
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 	F "github.com/sagernet/sing/common/format"
@@ -40,8 +41,11 @@ type Endpoint struct {
 	allowedAddress []netip.Prefix
 	tunDevice      Device
 	returnDevice   *returnDeviceWrapper
+	bind           conn.Bind // H
 	device         atomic.Pointer[device.Device]
 	allowedIPs     *device.AllowedIPs
+	mtuProbe       *mtuProber    // H
+	fallback       *peerFallback // H
 	egressPool     *tun.UDPEgressPool
 	pause          pause.Manager
 	pauseCallback  *list.Element[pause.Callback]
@@ -208,9 +212,9 @@ func (e *Endpoint) Start(postStart bool) error {
 				connectAddr = e.peers[0].endpoint
 			}
 		}
-		clientBind := NewClientBind(e.options.Context, e.options.Logger, e.options.Dialer, isConnect, connectAddr, reserved) //H
-		clientBind.onReconnect = e.pathChanged                                                                               //H: MTU discovery, fallback
-		bind = clientBind                                                                                                    //H
+		clientBind := NewClientBind(e.options.Context, e.options.Logger, e.options.Dialer, isConnect, connectAddr, reserved) // H
+		clientBind.onReconnect = e.pathChanged                                                                               // H: MTU discovery, fallback
+		bind = clientBind                                                                                                    // H
 	}
 	if isUDPListener || len(e.peers) > 1 {
 		for _, peer := range e.peers {
@@ -231,11 +235,12 @@ func (e *Endpoint) Start(postStart bool) error {
 			e.options.Logger.Error(fmt.Sprintf(strings.ToLower(format), args...))
 		},
 	}
-	e.setupMTUDiscovery()                 //H
-	e.fallback = newPeerFallback(e, bind) //H
+	e.setupMTUDiscovery()                 // H
+	e.bind = bind                         // H
+	e.fallback = newPeerFallback(e, bind) // H
 	wgDevice := device.NewDevice(e.options.Context, e.returnDevice, bind, logger, e.options.Workers)
-	wgDevice.HNoise = e.options.Noise //H
-	e.tunDevice.SetDevice(wgDevice)
+	wgDevice.HNoise = e.options.Noise    // H
+	e.tunDevice.SetDevice(wgDevice, nil) // H
 	domainPeers := make(map[device.NoisePublicKey]*peerConfig)
 	for peerIndex, peer := range e.peers {
 		if peer.destination.IsDomain() {
@@ -247,30 +252,23 @@ func (e *Endpoint) Start(postStart bool) error {
 	for _, peer := range e.peers {
 		ipcConf.WriteString(peer.GenerateIpcLines())
 	}
-	err = wgDevice.IpcSet(ipcConf.String())
-	if err != nil {
-		wgDevice.Close()
-		return E.Cause(err, "setup wireguard: \n", ipcConf.String())
-	}
-	for publicKey, peerConf := range domainPeers {
-		wgPeer := wgDevice.LookupPeer(publicKey)
-		if wgPeer == nil {
-			wgDevice.Close()
-			return E.New("missing peer after setup for domain destination ", peerConf.destination.Fqdn)
-		}
-		peerConf := peerConf
-		wgPeer.SetEndpointResolver(func() ([]conn.Endpoint, error) {
-			addresses, lookupErr := e.options.ResolvePeer(peerConf.destination.Fqdn)
-			if lookupErr != nil {
-				return nil, lookupErr
+	if len(domainPeers) > 0 { // H: resolve endpoints at device level before IpcSet starts handshakes
+		wgDevice.SetEndpointResolverFunc(func(key device.NoisePublicKey) ([]conn.Endpoint, error) {
+			peerConf := domainPeers[key]
+			if peerConf == nil || e.options.ResolvePeer == nil {
+				return nil, os.ErrNotExist
 			}
-			endpoints := make([]conn.Endpoint, 0, len(addresses))
-			for _, address := range addresses {
-				destination := netip.AddrPortFrom(address, peerConf.destination.Port)
+			addresses, err := e.options.ResolvePeer(peerConf.destination.Fqdn)
+			if err != nil {
+				return nil, err
+			}
+			var endpoints []conn.Endpoint
+			for _, addr := range addresses {
+				target := netip.AddrPortFrom(addr, peerConf.destination.Port)
 				if peerConf.reserved != ([3]uint8{}) {
-					bind.SetReservedForEndpoint(destination, peerConf.reserved)
+					bind.SetReservedForEndpoint(target, peerConf.reserved)
 				}
-				endpoint, parseErr := bind.ParseEndpoint(destination.String())
+				endpoint, parseErr := bind.ParseEndpoint(target.String())
 				if parseErr != nil {
 					return nil, parseErr
 				}
@@ -279,14 +277,30 @@ func (e *Endpoint) Start(postStart bool) error {
 			return endpoints, nil
 		})
 	}
+	err = wgDevice.IpcSet(ipcConf.String())
+	if err != nil {
+		wgDevice.Close()
+		return E.Cause(err, "setup wireguard: \n", ipcConf.String())
+	}
+	var devicePeers []*device.Peer // H
+	for _, peerConf := range e.peers {
+		if wgPeer := wgDevice.LookupPeer(peerConf.publicKey); wgPeer != nil {
+			devicePeers = append(devicePeers, wgPeer)
+		}
+	}
+	e.tunDevice.SetDevice(wgDevice, devicePeers)
 	e.device.Store(wgDevice)
 	e.pause = service.FromContext[pause.Manager](e.options.Context)
 	if e.pause != nil {
 		e.pauseCallback = e.pause.RegisterCallback(e.onPauseUpdated)
 	}
 	e.allowedIPs = wgDevice.AllowedIPs()
-	e.mtuProbe.start()                  //H
-	e.fallback.Start(e.options.Context) //H
+	if e.mtuProbe != nil {
+		e.mtuProbe.start()
+	} // H
+	if e.fallback != nil {
+		e.fallback.Start(e.options.Context)
+	} // H
 	return nil
 }
 
@@ -296,6 +310,14 @@ func (e *Endpoint) DialContext(ctx context.Context, network string, destination 
 	}
 	if err := e.ensureDeviceStarted(ctx); err != nil {
 		return nil, err
+	}
+	if strings.HasPrefix(network, "tcp") {
+		// The userspace TCP stack can keep retransmitting SYNs long after a
+		// silent peer has stopped responding. Bound only connection setup;
+		// an established connection is not subject to the dial deadline.
+		dialCtx, cancel := context.WithTimeout(ctx, C.TCPTimeout)
+		defer cancel()
+		return e.tunDevice.DialContext(dialCtx, network, destination)
 	}
 	return e.tunDevice.DialContext(ctx, network, destination)
 }
@@ -424,8 +446,17 @@ func (e *Endpoint) Close() error {
 			e.egressPool.Close()
 			e.egressPool = nil
 		}
+		if e.bind != nil {
+			_ = e.bind.Close()
+		} // H: release stalled sends before waiting for device locks
 		e.stateAccess.Lock()
 		defer e.stateAccess.Unlock()
+		if e.mtuProbe != nil {
+			e.mtuProbe.stop()
+		} // H
+		if e.fallback != nil {
+			e.fallback.Close()
+		} // H
 		wgDevice := e.device.Swap(nil)
 		if wgDevice != nil {
 			wgDevice.Down()
@@ -520,4 +551,11 @@ func (e *Endpoint) IpcGet() (string, error) {
 		return "", os.ErrInvalid
 	}
 	return wgDevice.IpcGet()
+}
+
+// resume restores a suspended system tunnel when a packet is about to be handled.
+func (e *Endpoint) resume() {
+	if e.options.System {
+		e.SetIdle(false)
+	}
 }

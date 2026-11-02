@@ -3,6 +3,12 @@ package openflux
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/netip"
+	"net/url"
+	"sync"
+	"time"
+
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
 	"github.com/sagernet/sing-box/common/dialer"
@@ -16,11 +22,6 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/service"
-	"net"
-	"net/netip"
-	"net/url"
-	"sync"
-	"time"
 )
 
 func RegisterOutbound(r *outbound.Registry) { outbound.Register(r, "openflux", NewOutbound) }
@@ -49,6 +50,7 @@ func NewOutbound(ctx context.Context, _ adapter.Router, _ log.ContextLogger, tag
 	}
 	return newOutboundWithDialer(ctx, tag, o, d)
 }
+
 func newOutboundWithDialer(ctx context.Context, tag string, o option.OpenFluxOutboundOptions, d N.Dialer) (result adapter.Outbound, err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer func() {
@@ -122,6 +124,7 @@ func newOutboundWithDialer(ctx context.Context, tag string, o option.OpenFluxOut
 	h := &Outbound{Adapter: outbound.NewAdapterWithDialerOptions("openflux", tag, []string{N.NetworkTCP, N.NetworkUDP}, o.DialerOptions), ctx: ctx, cancel: cancel, manager: mgr, dns: service.FromContext[adapter.DNSRouter](ctx)}
 	return h, nil
 }
+
 func (h *Outbound) Start(stage adapter.StartStage) error {
 	if stage != adapter.StartStateStart {
 		return nil
@@ -139,6 +142,7 @@ func (h *Outbound) Start(stage adapter.StartStage) error {
 	}
 	return nil
 }
+
 func (h *Outbound) ready(ctx context.Context) error {
 	ticker := time.NewTicker(25 * time.Millisecond)
 	defer ticker.Stop()
@@ -159,6 +163,7 @@ func (h *Outbound) ready(ctx context.Context) error {
 		}
 	}
 }
+
 func (h *Outbound) resolve(ctx context.Context, d M.Socksaddr) (M.Socksaddr, error) {
 	if !d.IsDomain() {
 		if d.Addr.Is6() {
@@ -180,6 +185,7 @@ func (h *Outbound) resolve(ctx context.Context, d M.Socksaddr) (M.Socksaddr, err
 	}
 	return M.Socksaddr{}, fmt.Errorf("openflux: IPv4 destination is required")
 }
+
 func (h *Outbound) DialContext(ctx context.Context, n string, d M.Socksaddr) (net.Conn, error) {
 	if e := h.ready(ctx); e != nil {
 		return nil, e
@@ -193,12 +199,14 @@ func (h *Outbound) DialContext(ctx context.Context, n string, d M.Socksaddr) (ne
 	}
 	return h.network.DialContext(ctx, n, d)
 }
+
 func (h *Outbound) ListenPacket(ctx context.Context, d M.Socksaddr) (net.PacketConn, error) {
 	if e := h.ready(ctx); e != nil {
 		return nil, e
 	}
 	return h.network.ListenPacket(ctx, d)
 }
+
 func (h *Outbound) Close() error {
 	var e error
 	h.once.Do(func() {

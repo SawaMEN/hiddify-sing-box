@@ -90,12 +90,12 @@ func TestH_BookJSON(t *testing.T) {
 
 func hRequest(book *Book, probe Probe) Request {
 	return Request{
-		Options:  &option.WARPScannerOptions{Concurrency: 1, Count: 10, CIDRs: badoption.Listable[netip.Prefix]{netip.MustParsePrefix("192.0.2.0/24"), netip.MustParsePrefix("2001:db8:1::/64")}, Ports: badoption.Listable[uint16]{1}},
-		IPv4:     true,
-		IPv6:     true,
-		Book:     book,
-		Network:  "home",
-		Probe:    probe,
+		Options: &option.WARPScannerOptions{Concurrency: 1, Count: 10, CIDRs: badoption.Listable[netip.Prefix]{netip.MustParsePrefix("192.0.2.0/24"), netip.MustParsePrefix("2001:db8:1::/64")}, Ports: badoption.Listable[uint16]{1}},
+		IPv4:    true,
+		IPv6:    true,
+		Book:    book,
+		Network: "home",
+		Probe:   probe,
 	}
 }
 

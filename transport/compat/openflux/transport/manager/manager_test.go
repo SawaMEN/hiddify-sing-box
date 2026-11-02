@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"maps"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -17,7 +18,8 @@ type fakeTransport struct {
 	live bool
 }
 
-func (f *fakeTransport) Start() error            { f.mu.Lock(); f.live = true; f.mu.Unlock(); return nil }
+func (f *fakeTransport) Start() error { f.mu.Lock(); f.live = true; f.mu.Unlock(); return nil }
+
 func (f *fakeTransport) Stop() error             { f.mu.Lock(); f.live = false; f.mu.Unlock(); return nil }
 func (f *fakeTransport) Send(data []byte) error  { return nil }
 func (f *fakeTransport) Receive(cb func([]byte)) { f.mu.Lock(); f.cb = cb; f.mu.Unlock() }
@@ -106,9 +108,7 @@ func (f *fakeCookieProvider) FetchCookies() (map[string]string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := make(map[string]string, len(f.jar))
-	for k, v := range f.jar {
-		out[k] = v
-	}
+	maps.Copy(out, f.jar)
 	return out, nil
 }
 
@@ -116,9 +116,7 @@ func (f *fakeCookieProvider) ApplyCookies(jar map[string]string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.jar = make(map[string]string, len(jar))
-	for k, v := range jar {
-		f.jar[k] = v
-	}
+	maps.Copy(f.jar, jar)
 	return nil
 }
 

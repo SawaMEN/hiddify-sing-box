@@ -17,7 +17,6 @@ import (
 	"sync"
 	"syscall"
 
-	upstream "github.com/openlibrecommunity/olcrtc/mobile"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
 	C "github.com/sagernet/sing-box/constant"
@@ -28,6 +27,8 @@ import (
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/protocol/socks"
 	"github.com/sagernet/sing/service"
+
+	upstream "github.com/openlibrecommunity/olcrtc/mobile"
 )
 
 const (
@@ -66,6 +67,7 @@ type loopbackDialer struct{}
 func (loopbackDialer) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
 	return (&net.Dialer{}).DialContext(ctx, network, destination.String())
 }
+
 func (loopbackDialer) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
 	return (&net.ListenConfig{}).ListenPacket(ctx, "udp", "127.0.0.1:0")
 }
@@ -120,8 +122,10 @@ func validate(o option.OlcRTCOutboundOptions) error {
 	if strings.TrimSpace(o.RoomID) == "" || len(o.RoomID) > 2048 || strings.ContainsAny(o.RoomID, "\x00\r\n\t") {
 		return errors.New("olcrtc: invalid room identifier")
 	}
-	for _, n := range []int{o.VP8FPS, o.VP8Batch, o.SEIFPS, o.SEIBatch, o.SEIFragment, o.SEIAckTimeout,
-		o.VideoWidth, o.VideoHeight, o.VideoFPS, o.VideoQRSize, o.VideoTileModule, o.VideoTileRS} {
+	for _, n := range []int{
+		o.VP8FPS, o.VP8Batch, o.SEIFPS, o.SEIBatch, o.SEIFragment, o.SEIAckTimeout,
+		o.VideoWidth, o.VideoHeight, o.VideoFPS, o.VideoQRSize, o.VideoTileModule, o.VideoTileRS,
+	} {
 		if n < 0 {
 			return errors.New("olcrtc: transport parameters must not be negative")
 		}
@@ -315,6 +319,7 @@ func (h *Outbound) Start(stage adapter.StartStage) error {
 	// unused rooms and each runtime establishes its own provider session.
 	return nil
 }
+
 func (h *Outbound) ensure(ctx context.Context) (*socks.Client, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -360,9 +365,11 @@ func (h *Outbound) DialContext(ctx context.Context, network string, destination 
 	defer cancel()
 	return client.DialContext(dialCtx, network, destination)
 }
+
 func (h *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
 	return nil, errors.New("olcrtc: UDP is not supported by the upstream SOCKS bridge")
 }
+
 func (h *Outbound) Close() error {
 	h.cancel()
 	h.mutex.Lock()

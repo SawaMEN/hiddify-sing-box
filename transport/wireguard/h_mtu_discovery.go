@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"math/rand/v2"
-	"net"
 	"net/netip"
 	"sync"
 	"sync/atomic"
@@ -12,9 +11,8 @@ import (
 
 	"github.com/sagernet/sing-box/common/interrupt"
 	"github.com/sagernet/sing-box/hiddify/mtusearch"
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing-tun/gtcpip/header"
-	N "github.com/sagernet/sing/common/network"
 )
 
 // MTU discovery. An endpoint's MTU works only when every layer under it carries the tunnel's UDP
@@ -51,7 +49,6 @@ type mtuProber struct {
 	cancel     context.CancelFunc
 	running    bool
 	again      bool // the path changed during a run
-	handshake  bool // the next run starts a handshake first
 	discovered atomic.Uint32
 	tcp        *interrupt.Group // the TCP connections made through the endpoint
 }
@@ -74,14 +71,6 @@ func (e *Endpoint) discoveredMTU() uint32 {
 		}
 	}
 	return e.options.MTU
-}
-
-// track keeps a TCP connection made through the endpoint, to close it when the MTU is lowered.
-func (p *mtuProber) track(network string, conn net.Conn, err error) (net.Conn, error) {
-	if p == nil || err != nil || N.NetworkName(network) != N.NetworkTCP {
-		return conn, err
-	}
-	return p.tcp.NewConn(conn, true), nil
 }
 
 // filter takes the probe replies out of the packets the device received.

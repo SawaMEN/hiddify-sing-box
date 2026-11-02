@@ -14,6 +14,7 @@ import (
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/wireguard-go/conn"
 	"github.com/sagernet/wireguard-go/hiddify"
+
 	"github.com/stretchr/testify/require"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
@@ -231,7 +232,7 @@ func hCaptureHandshakeWithNoise(t *testing.T, noise hiddify.NoiseOptions) ([][]b
 	})
 	go hTriggerHandshake(ctx, ep)
 	var fakes [][]byte
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		packet := capture.read(t)
 		if len(packet) == 148 && packet[0] == 1 {
 			return fakes, packet
@@ -247,7 +248,7 @@ func TestH_EndpointNoiseFakePacketsPrecedeHandshake(t *testing.T) {
 		fakes, initiation := hCaptureHandshakeWithNoise(t, hNoiseOptions(noModify))
 		require.NotEmpty(t, fakes, "noise must be sent before the handshake initiation")
 		for _, fake := range fakes {
-			require.Equal(t, []byte{0x00, 0x00, 0x44, 0xD0}, fake[6:10], "fake packet trailer before random payload")
+			require.Equal(t, []byte{0x00, 0x00, 0x44, 0xD0}, fake[14:18], "fake packet trailer before random payload")
 		}
 		require.Equal(t, []byte{7, 8, 9}, initiation[1:4])
 	}
@@ -259,13 +260,11 @@ func TestH_EndpointNoiseDisabledSendsOnlyHandshake(t *testing.T) {
 }
 
 func TestH_EndpointNoiseFakePacketCount(t *testing.T) {
-	t.Skip("BUG: replace/wireguard-go leaves a stale token in the buffered device.stopCh (closeBindLocked/Peer.Stop during startup), so sendNoise aborts after the first fake packet")
 	fakes, _ := hCaptureHandshakeWithNoise(t, hNoiseOptions(true))
 	require.Len(t, fakes, 2)
 }
 
 func TestH_EndpointNoiseFakePacketLayout(t *testing.T) {
-	t.Skip("BUG: replace/wireguard-go customSend builds fake packets without MessageEncapsulatingTransportSize headroom, so the bind strips their first 8 bytes (header byte and QUIC-like prefix lost)")
 	fakes, _ := hCaptureHandshakeWithNoise(t, hNoiseOptions(true))
 	require.NotEmpty(t, fakes)
 	for _, fake := range fakes {

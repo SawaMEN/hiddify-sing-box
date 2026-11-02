@@ -7,10 +7,11 @@ import (
 	"testing"
 	"time"
 
-	mierumodel "github.com/enfein/mieru/v3/apis/model"
-	mieruserver "github.com/enfein/mieru/v3/apis/server"
 	"github.com/sagernet/sing-box/adapter/inbound"
 	"github.com/sagernet/sing-box/log"
+
+	mierumodel "github.com/enfein/mieru/v3/apis/model"
+	mieruserver "github.com/enfein/mieru/v3/apis/server"
 	"github.com/stretchr/testify/require"
 )
 

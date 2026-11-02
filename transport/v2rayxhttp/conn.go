@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -39,7 +40,7 @@ func (c *splitConn) Close() error {
 	}
 
 	if err2 != nil {
-		return err
+		return err2
 	}
 
 	return nil
@@ -53,19 +54,22 @@ func (c *splitConn) RemoteAddr() net.Addr {
 	return c.remoteAddr
 }
 
+// NeedAdditionalReadDeadline enables the reader deadline wrapper for split streams.
+func (c *splitConn) NeedAdditionalReadDeadline() bool { return true }
+
 func (c *splitConn) SetDeadline(t time.Time) error {
-	// TODO cannot do anything useful
-	return nil
+	if t.IsZero() {
+		return nil // Clearing a deadline is always safe.
+	}
+	return os.ErrInvalid // let the caller install a deadline-capable wrapper
 }
 
 func (c *splitConn) SetReadDeadline(t time.Time) error {
-	// TODO cannot do anything useful
-	return nil
+	return os.ErrInvalid
 }
 
 func (c *splitConn) SetWriteDeadline(t time.Time) error {
-	// TODO cannot do anything useful
-	return nil
+	return os.ErrInvalid
 }
 
 type H1Conn struct {

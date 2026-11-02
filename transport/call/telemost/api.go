@@ -183,7 +183,6 @@ func MungeSDPAddVideoContent(sdp string) string {
 		if strings.HasPrefix(line, "m=") {
 			if inVideo && !inserted {
 				out = append(out, "a=content:speaker,main")
-				inserted = true
 			}
 			inVideo = strings.HasPrefix(line, "m=video")
 			inserted = false

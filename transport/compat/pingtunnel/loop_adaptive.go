@@ -29,10 +29,7 @@ func (a *adaptiveLoopWait) hit() {
 
 func (a *adaptiveLoopWait) miss() time.Duration {
 	d := a.cur
-	next := a.cur * 2
-	if next > a.max {
-		next = a.max
-	}
+	next := min(a.cur*2, a.max)
 	a.cur = next
 	return d
 }

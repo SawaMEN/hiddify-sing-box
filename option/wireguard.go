@@ -9,23 +9,24 @@ import (
 )
 
 type WireGuardEndpointOptions struct {
-	System       bool                             `json:"system,omitempty"`
-	Name         string                           `json:"name,omitempty"`
-	MTU          uint32                           `json:"mtu,omitempty"`
-	Address      badoption.Listable[netip.Prefix] `json:"address"`
-	PrivateKey   string                           `json:"private_key"`
-	ListenPort   uint16                           `json:"listen_port,omitempty"`
-	Peers        []WireGuardPeer                  `json:"peers,omitempty"`
-	UDPTimeout   badoption.Duration               `json:"udp_timeout,omitempty"`
-	UDPMapping   UDPNATBehavior                   `json:"udp_mapping,omitempty"`
-	UDPFiltering UDPNATBehavior                   `json:"udp_filtering,omitempty"`
-	UDPNATMax    uint32                           `json:"udp_nat_max,omitempty"`
-	Workers      int                              `json:"workers,omitempty"`
-	OnDemand     bool                             `json:"on_demand,omitempty"`
+	System          bool                             `json:"system,omitempty"`
+	Name            string                           `json:"name,omitempty"`
+	MTU             uint32                           `json:"mtu,omitempty"`
+	Address         badoption.Listable[netip.Prefix] `json:"address"`
+	PrivateKey      string                           `json:"private_key"`
+	ListenPort      uint16                           `json:"listen_port,omitempty"`
+	Peers           []WireGuardPeer                  `json:"peers,omitempty"`
+	UDPTimeout      badoption.Duration               `json:"udp_timeout,omitempty"`
+	UDPMapping      UDPNATBehavior                   `json:"udp_mapping,omitempty"`
+	UDPFiltering    UDPNATBehavior                   `json:"udp_filtering,omitempty"`
+	UDPNATMax       uint32                           `json:"udp_nat_max,omitempty"`
+	Workers         int                              `json:"workers,omitempty"`
+	OnDemand        bool                             `json:"on_demand,omitempty"`
+	FallbackAddress badoption.Listable[netip.Addr]   `json:"fallback_address,omitempty"` // H
 	DialerOptions
 
-	Noise hiddify.NoiseOptions `json:"noise,omitempty"` //H
-	AWG   *AwgOptions          `json:"awg,omitempty"`   //H
+	Noise hiddify.NoiseOptions `json:"noise,omitempty"` // H
+	AWG   *AwgOptions          `json:"awg,omitempty"`   // H
 }
 
 type WireGuardPeer struct {
@@ -40,13 +41,17 @@ type WireGuardPeer struct {
 	Reserved                    []uint8                          `json:"reserved,omitempty"`
 }
 
-type WARPEndpointOptions struct { //H
-	System     bool               `json:"system,omitempty"`
-	Name       string             `json:"name,omitempty"`
-	ListenPort uint16             `json:"listen_port,omitempty"`
-	UDPTimeout badoption.Duration `json:"udp_timeout,omitempty"`
-	Workers    int                `json:"workers,omitempty"`
-	Profile    WARPProfile        `json:"profile,omitempty"`
+type WARPEndpointOptions struct { // H
+	System      bool                `json:"system,omitempty"`
+	Name        string              `json:"name,omitempty"`
+	ListenPort  uint16              `json:"listen_port,omitempty"`
+	UDPTimeout  badoption.Duration  `json:"udp_timeout,omitempty"`
+	Workers     int                 `json:"workers,omitempty"`
+	Profile     WARPProfile         `json:"profile,omitempty"`
+	Mode        string              `json:"mode,omitempty"`
+	Scanner     *WARPScannerOptions `json:"scanner,omitempty"`
+	MASQUE      *WARPMASQUEOptions  `json:"masque,omitempty"`
+	RotatePorts *bool               `json:"rotate_ports,omitempty"`
 	DialerOptions
 
 	UniqueIdentifier string `json:"unique_identifier,omitempty"`
@@ -57,7 +62,7 @@ type WARPEndpointOptions struct { //H
 	MTU uint32 `json:"mtu,omitempty"`
 }
 
-type WARPProfile struct { //H
+type WARPProfile struct { // H
 	ID         string `json:"id,omitempty"`
 	PrivateKey string `json:"private_key,omitempty"`
 	AuthToken  string `json:"auth_token,omitempty"`
@@ -66,7 +71,7 @@ type WARPProfile struct { //H
 	License    string `json:"license,omitempty"`
 }
 
-type LegacyWireGuardOutboundOptions struct { //H
+type LegacyWireGuardOutboundOptions struct { // H
 	DialerOptions
 	SystemInterface bool                             `json:"system_interface,omitempty"`
 	GSO             bool                             `json:"gso,omitempty"`
@@ -83,10 +88,24 @@ type LegacyWireGuardOutboundOptions struct { //H
 	Network       NetworkList `json:"network,omitempty"`
 }
 
-type LegacyWireGuardPeer struct { //H
+type LegacyWireGuardPeer struct { // H
 	ServerOptions
 	PublicKey    string                           `json:"public_key,omitempty"`
 	PreSharedKey string                           `json:"pre_shared_key,omitempty"`
 	AllowedIPs   badoption.Listable[netip.Prefix] `json:"allowed_ips,omitempty"`
 	Reserved     []uint8                          `json:"reserved,omitempty"`
 }
+
+// WARPMASQUEOptions selects WARP over MASQUE in the unified WARP endpoint.
+type WARPMASQUEOptions struct {
+	Enabled              bool                     `json:"enabled,omitempty"`
+	VHTTP                string                   `json:"vhttp,omitempty"`
+	TLS                  MASQUEOutboundTLSOptions `json:"tls,omitempty"`
+	UseIPv6              bool                     `json:"use_ipv6,omitempty"`
+	UDPKeepalivePeriod   badoption.Duration       `json:"udp_keepalive_period,omitempty"`
+	UDPInitialPacketSize uint16                   `json:"udp_initial_packet_size,omitempty"`
+	ReconnectDelay       badoption.Duration       `json:"reconnect_delay,omitempty"`
+	ServerName           string                   `json:"server_name,omitempty"`
+}
+
+func (o *WARPMASQUEOptions) IsEnabled() bool { return o != nil && o.Enabled }

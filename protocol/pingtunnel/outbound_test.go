@@ -4,13 +4,14 @@ package pingtunnel
 
 import (
 	"context"
-	"github.com/sagernet/sing-box/option"
-	p "github.com/sagernet/sing-box/transport/compat/pingtunnel"
-	M "github.com/sagernet/sing/common/metadata"
 	"io"
 	"net"
 	"testing"
 	"time"
+
+	"github.com/sagernet/sing-box/option"
+	p "github.com/sagernet/sing-box/transport/compat/pingtunnel"
+	M "github.com/sagernet/sing/common/metadata"
 )
 
 func TestICMPTCPUDP(t *testing.T) {
@@ -104,10 +105,12 @@ func fakeSocket(ip string, ports map[string]int) (*p.PacketConn, error) {
 	ports[ip] = c.LocalAddr().(*net.UDPAddr).Port
 	return &p.PacketConn{PacketConn: &fakeICMPSocket{c, ports}}, nil
 }
+
 func (c *fakeICMPSocket) WriteTo(b []byte, a net.Addr) (int, error) {
 	ip := a.(*net.IPAddr).IP.String()
 	return c.PacketConn.WriteTo(b, &net.UDPAddr{IP: net.ParseIP(ip), Port: c.ports[ip]})
 }
+
 func (c *fakeICMPSocket) ReadFrom(b []byte) (int, net.Addr, error) {
 	n, a, e := c.PacketConn.ReadFrom(b)
 	if e != nil {

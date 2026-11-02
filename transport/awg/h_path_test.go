@@ -13,6 +13,7 @@ import (
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+
 	"github.com/stretchr/testify/require"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
@@ -73,9 +74,15 @@ func TestH_PathFallback(t *testing.T) {
 		real = netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), serverPort)
 		return dead
 	}, DeviceOpts{MTU: 1408})
-	client.path.opts.Fallback = []netip.AddrPort{real}
-	client.path.close()
-	client.path.start(client) // with the fallback, as NewDevice would set it
+	// The helper starts without fallback configured; create the path as it would
+	// be created at construction when fallback_address is supplied.
+	client.path = newDevicePath(ctx, logger.NOP(), client.tun, DeviceOpts{
+		Address:  []netip.Prefix{netip.MustParsePrefix("10.77.0.2/32")},
+		MTU:      1408,
+		Peer:     dead,
+		Fallback: []netip.AddrPort{real},
+	})
+	client.path.start(client)
 
 	listener, err := server.tun.(*networkTun).conn.ListenTCPAddrPort(netip.AddrPortFrom(serverAddress.Addr(), 8080))
 	require.NoError(t, err)

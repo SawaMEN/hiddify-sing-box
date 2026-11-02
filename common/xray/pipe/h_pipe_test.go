@@ -160,7 +160,7 @@ func TestH_PipeDiscardOverflow(t *testing.T) {
 	require.Equal(t, "abc", mb.String())
 
 	r2, w2 := New(WithoutSizeLimit())
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		require.NoError(t, w2.WriteMultiBuffer(mbOf("0123456789")))
 	}
 	mb, err = r2.ReadMultiBuffer()

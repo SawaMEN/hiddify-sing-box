@@ -19,7 +19,7 @@ import (
 	dnsTransport "github.com/sagernet/sing-box/dns/transport"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/service/resolved"
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/control"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -483,12 +483,10 @@ func (t *DBusResolvedResolver) updateStatus(ctx context.Context) error {
 // Only failures discovering the optional D-Bus interface permit resolv.conf fallback.
 // DNS query failures, authorization failures and missing link DNS are not included.
 func isResolvedUnavailableError(err error) bool {
-	var value dbus.Error
-	var pointer *dbus.Error
 	var name string
-	if errors.As(err, &value) {
+	if value, ok := errors.AsType[dbus.Error](err); ok {
 		name = value.Name
-	} else if errors.As(err, &pointer) {
+	} else if pointer, ok := errors.AsType[*dbus.Error](err); ok {
 		name = pointer.Name
 	}
 	switch name {

@@ -17,8 +17,6 @@ import (
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/transport/v2rayhttp"
 	"github.com/sagernet/sing/common"
-	"github.com/sagernet/sing/common/buf"
-	"github.com/sagernet/sing/common/bufio"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
@@ -112,7 +110,7 @@ func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		s.invalidRequest(writer, request, http.StatusInternalServerError, E.New("invalid connection, maybe HTTP/2"))
 		return
 	}
-	conn, reader, err := hijacker.Hijack()
+	conn, _, err := hijacker.Hijack()
 	if err != nil {
 		s.invalidRequest(writer, request, http.StatusInternalServerError, E.Cause(err, "hijack failed"))
 		return
@@ -147,4 +145,12 @@ func (s *Server) ServePacket(listener net.PacketConn) error {
 
 func (s *Server) Close() error {
 	return common.Close(common.PtrOrNil(s.httpServer))
+}
+
+const webSocketGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+// secWebSocketAccept returns the RFC 6455 handshake accept hash. //H
+func secWebSocketAccept(key string) string {
+	sum := sha1.Sum([]byte(key + webSocketGUID))
+	return base64.StdEncoding.EncodeToString(sum[:])
 }

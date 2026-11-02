@@ -229,7 +229,7 @@ func TestH_MultiBufferSplitAndMerge(t *testing.T) {
 func TestH_Compact(t *testing.T) {
 	t.Parallel()
 	var mb MultiBuffer
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		b := New()
 		b.WriteString("0123456789")
 		mb = append(mb, b)

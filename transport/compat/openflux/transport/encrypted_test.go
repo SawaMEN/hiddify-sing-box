@@ -16,6 +16,7 @@ func (t *testTransport) IsConnected() bool             { return true }
 func (t *testTransport) Stats() TransportStats         { return TransportStats{} }
 func (t *testTransport) Receive(callback func([]byte)) { t.receiver = callback }
 func (t *testTransport) Send(data []byte) error        { t.sent = append([]byte(nil), data...); return nil }
+
 func (t *testTransport) deliver(data []byte) {
 	if t.receiver != nil {
 		t.receiver(data)

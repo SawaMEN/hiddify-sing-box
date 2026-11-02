@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sagernet/quic-go"
 	M "github.com/sagernet/sing/common/metadata"
 	wgTun "github.com/sagernet/wireguard-go/tun"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -91,7 +91,7 @@ func TestH_DefaultQuicConfig(t *testing.T) {
 	config = DefaultQuicConfig(0, 1242)
 	require.Equal(t, uint16(1242), config.InitialPacketSize)
 	require.True(t, config.DisablePathMTUDiscovery)
-	var _ *quic.Config = config
+	_ = config
 }
 
 func TestH_ParsePortMapping(t *testing.T) {

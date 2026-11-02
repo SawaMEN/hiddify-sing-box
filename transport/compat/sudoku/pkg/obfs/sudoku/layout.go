@@ -22,7 +22,7 @@ package sudoku
 import (
 	"fmt"
 	"math/bits"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -71,7 +71,7 @@ func resolveLayout(mode string, customPattern string) (*byteLayout, error) {
 
 func newASCIILayout() *byteLayout {
 	padding := make([]byte, 0, 32)
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		padding = append(padding, byte(0x20+i))
 	}
 
@@ -83,8 +83,8 @@ func newASCIILayout() *byteLayout {
 		paddingPool: padding,
 	}
 
-	for val := 0; val < 4; val++ {
-		for pos := 0; pos < 16; pos++ {
+	for val := range 4 {
+		for pos := range 16 {
 			b := byte(0x40 | (byte(val) << 4) | byte(pos))
 			if b == 0x7F {
 				b = '\n'
@@ -92,14 +92,14 @@ func newASCIILayout() *byteLayout {
 			layout.encodeHint[val][pos] = b
 		}
 	}
-	for group := 0; group < 64; group++ {
+	for group := range 64 {
 		b := byte(0x40 | byte(group))
 		if b == 0x7F {
 			b = '\n'
 		}
 		layout.encodeGroup[group] = b
 	}
-	for b := 0; b < 256; b++ {
+	for b := range 256 {
 		layout.decodeGroup[b] = 0xff
 		wire := byte(b)
 		if (wire & 0x40) == 0x40 {
@@ -115,7 +115,7 @@ func newASCIILayout() *byteLayout {
 
 func newEntropyLayout() *byteLayout {
 	padding := make([]byte, 0, 16)
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		padding = append(padding, byte(0x80+i))
 		padding = append(padding, byte(0x10+i))
 	}
@@ -128,16 +128,16 @@ func newEntropyLayout() *byteLayout {
 		paddingPool: padding,
 	}
 
-	for val := 0; val < 4; val++ {
-		for pos := 0; pos < 16; pos++ {
+	for val := range 4 {
+		for pos := range 16 {
 			layout.encodeHint[val][pos] = (byte(val) << 5) | byte(pos)
 		}
 	}
-	for group := 0; group < 64; group++ {
+	for group := range 64 {
 		v := byte(group)
 		layout.encodeGroup[group] = ((v & 0x30) << 1) | (v & 0x0F)
 	}
-	for b := 0; b < 256; b++ {
+	for b := range 256 {
 		layout.decodeGroup[b] = 0xff
 		wire := byte(b)
 		if (wire & 0x90) != 0 {
@@ -203,8 +203,8 @@ func newCustomLayout(pattern string) (*byteLayout, error) {
 	paddingSet := make(map[byte]struct{})
 	var padding []byte
 	for drop := range xBits {
-		for val := 0; val < 4; val++ {
-			for pos := 0; pos < 16; pos++ {
+		for val := range 4 {
+			for pos := range 16 {
 				b := encodeBits(byte(val), byte(pos), drop)
 				if bits.OnesCount8(b) >= 5 {
 					if _, ok := paddingSet[b]; !ok {
@@ -215,7 +215,7 @@ func newCustomLayout(pattern string) (*byteLayout, error) {
 			}
 		}
 	}
-	sort.Slice(padding, func(i, j int) bool { return padding[i] < padding[j] })
+	slices.Sort(padding)
 	if len(padding) == 0 {
 		return nil, fmt.Errorf("custom table produced empty padding pool")
 	}
@@ -228,17 +228,17 @@ func newCustomLayout(pattern string) (*byteLayout, error) {
 		paddingPool: padding,
 	}
 
-	for val := 0; val < 4; val++ {
-		for pos := 0; pos < 16; pos++ {
+	for val := range 4 {
+		for pos := range 16 {
 			layout.encodeHint[val][pos] = encodeBits(byte(val), byte(pos), -1)
 		}
 	}
-	for group := 0; group < 64; group++ {
+	for group := range 64 {
 		val := byte(group>>4) & 0x03
 		pos := byte(group) & 0x0F
 		layout.encodeGroup[group] = encodeBits(val, pos, -1)
 	}
-	for b := 0; b < 256; b++ {
+	for b := range 256 {
 		layout.decodeGroup[b] = 0xff
 		wire := byte(b)
 		if (wire & xMask) != xMask {

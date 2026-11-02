@@ -43,7 +43,7 @@ func (l *Listener) ListenUDPWithConfig(listenConfig net.ListenConfig) (net.Packe
 		udpFragment = l.listenOptions.UDPFragmentDefault
 	}
 	if !udpFragment {
-		listenConfig.Control = control.Append(listenConfig.Control, control.DisableUDPFragment()) //H: enabled is the platform default
+		listenConfig.Control = control.Append(listenConfig.Control, control.DisableUDPFragment()) // H: enabled is the platform default
 	}
 	if l.tproxy {
 		listenConfig.Control = control.Append(listenConfig.Control, func(network, address string, conn syscall.RawConn) error {

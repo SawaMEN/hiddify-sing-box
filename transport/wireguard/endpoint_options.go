@@ -2,11 +2,10 @@ package wireguard
 
 import (
 	"context"
-	hiddify "github.com/sagernet/wireguard-go/hiddify"
 	"net/netip"
 	"time"
 
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common/control"
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
@@ -15,7 +14,6 @@ import (
 )
 
 type EndpointOptions struct {
-	Noise        hiddify.NoiseOptions //H
 	Context      context.Context
 	Logger       logger.ContextLogger
 	System       bool
@@ -26,20 +24,22 @@ type EndpointOptions struct {
 	UDPFiltering tun.NATFiltering
 	UDPNATMax    uint32
 
-	InterfaceFinder   control.InterfaceFinder
-	EgressPoolOptions tun.UDPEgressPoolOptions
-	Dialer            N.Dialer
-	CreateDialer      func(interfaceName string) N.Dialer
-	Tag               string
-	Name              string
-	MTU               uint32
-	Address           []netip.Prefix
-	PrivateKey        string
-	ListenPort        uint16
-	ResolvePeer       func(domain string) ([]netip.Addr, error)
-	Peers             []PeerOptions
-	Workers           int
-	Noise             hiddify.NoiseOptions //H
+	InterfaceFinder     control.InterfaceFinder
+	EgressPoolOptions   tun.UDPEgressPoolOptions
+	Dialer              N.Dialer
+	CreateDialer        func(interfaceName string) N.Dialer
+	Tag                 string
+	Name                string
+	MTU                 uint32
+	Address             []netip.Prefix
+	PrivateKey          string
+	ListenPort          uint16
+	ResolvePeer         func(domain string) ([]netip.Addr, error)
+	Peers               []PeerOptions
+	Workers             int
+	Noise               hiddify.NoiseOptions // H
+	DisableMTUDiscovery bool                 // H
+	PeerFallback        []netip.AddrPort     // H
 }
 
 type PeerOptions struct {

@@ -70,18 +70,18 @@ func (s *StickySession) Select(metadata adapter.InboundContext, net string, touc
 
 	s.lruCache.Add(key, nowIdx)
 	return s.outbounds[net][nowIdx]
-
 }
 
 func (s *StickySession) Now() string {
 	return ""
 }
+
 func (s *StickySession) UpdateOutboundsInfo(history map[string]*adapter.URLTestHistory) bool {
 	_, minDelay := getMinDelay(s.outbounds, history)
 	delayMap := getDelayMap(history)
 	res := map[string]uint16{}
 	for net, d := range minDelay {
-		acceptableDelay := uint16(math.Max(100, float64(d)) * s.delayAcceptableRatio)
+		acceptableDelay := uint16(math.Min(65535, math.Max(100, float64(d))*s.delayAcceptableRatio))
 		res[net] = acceptableDelay
 	}
 	s.mu.Lock()
@@ -96,5 +96,4 @@ func (s *StickySession) Alive(proxy adapter.Outbound, net string) bool {
 		return delay <= s.maxAcceptableDelay[net]
 	}
 	return false
-
 }

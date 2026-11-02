@@ -26,6 +26,7 @@ import (
 	"github.com/sagernet/quic-go"
 	"github.com/sagernet/quic-go/http3"
 	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/adapter/htest"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/buf"
@@ -91,6 +92,7 @@ func (r *quicTestRouter) RoutePacketConnectionEx(ctx context.Context, flow N.Pac
 		}
 	}()
 }
+
 func freeV5Port(t *testing.T) uint16 {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
@@ -101,6 +103,7 @@ func freeV5Port(t *testing.T) uint16 {
 	l.Close()
 	return p
 }
+
 func startV5Inbound(t *testing.T) (M.Socksaddr, *quicTestRouter, *Inbound) {
 	t.Helper()
 	router := &quicTestRouter{users: make(chan string, 64)}
@@ -115,12 +118,13 @@ func startV5Inbound(t *testing.T) (M.Socksaddr, *quicTestRouter, *Inbound) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = in.Start(adapter.StartStateStart); err != nil {
+	if err = htest.Start(in, adapter.StartStateStart); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { in.Close() })
+	t.Cleanup(func() { _ = htest.Close(in) })
 	return M.ParseSocksaddrHostPort("127.0.0.1", port), router, in.(*Inbound)
 }
+
 func v5Outbound(t *testing.T, server M.Socksaddr, key string) *Outbound {
 	t.Helper()
 	var opts option.SnellOutboundOptions
@@ -135,6 +139,7 @@ func v5Outbound(t *testing.T, server M.Socksaddr, key string) *Outbound {
 	t.Cleanup(func() { out.(*Outbound).Close() })
 	return out.(*Outbound)
 }
+
 func serveV5HTTP3(t *testing.T) M.Socksaddr {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -171,10 +176,12 @@ func serveV5HTTP3(t *testing.T) M.Socksaddr {
 	t.Cleanup(func() { server.Close(); pc.Close(); <-done })
 	return M.SocksaddrFromNet(pc.LocalAddr())
 }
+
 func exchangeV5HTTP3(t *testing.T, out *Outbound, dest M.Socksaddr, version quic.Version, bound bool) {
 	t.Helper()
 	exchangeV5HTTP3For(t, out, dest, version, bound, 0)
 }
+
 func exchangeV5HTTP3For(t *testing.T, out *Outbound, dest M.Socksaddr, version quic.Version, bound bool, duration time.Duration) {
 	t.Helper()
 	var pc net.PacketConn
@@ -221,6 +228,7 @@ func exchangeV5HTTP3For(t *testing.T, out *Outbound, dest M.Socksaddr, version q
 		}
 	}
 }
+
 func TestSnellV5HTTP3(t *testing.T) {
 	dest := serveV5HTTP3(t)
 	server, router, _ := startV5Inbound(t)
@@ -232,7 +240,7 @@ func TestSnellV5HTTP3(t *testing.T) {
 	if router.up.Load() == 0 || router.down.Load() == 0 {
 		t.Fatal("traffic accounting is empty")
 	}
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		select {
 		case user := <-router.users:
 			if user != "alice" {
@@ -243,6 +251,7 @@ func TestSnellV5HTTP3(t *testing.T) {
 		}
 	}
 }
+
 func TestSnellV5OfficialServer(t *testing.T) {
 	binary := os.Getenv("SNELL_V5_SERVER")
 	if binary == "" {
@@ -251,7 +260,7 @@ func TestSnellV5OfficialServer(t *testing.T) {
 	port := freeV5Port(t)
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "snell.conf")
-	if err := os.WriteFile(cfg, []byte(fmt.Sprintf("[snell-server]\nlisten = 127.0.0.1:%d\npsk = snell-v5-integration-key\n", port)), 0600); err != nil {
+	if err := os.WriteFile(cfg, []byte(fmt.Sprintf("[snell-server]\nlisten = 127.0.0.1:%d\npsk = snell-v5-integration-key\n", port)), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	logfile, err := os.Create(filepath.Join(dir, "server.log"))
@@ -268,7 +277,7 @@ func TestSnellV5OfficialServer(t *testing.T) {
 	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
 	address := M.ParseSocksaddrHostPort("127.0.0.1", port)
 	ready := false
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		conn, err := net.DialTimeout("tcp", address.String(), 50*time.Millisecond)
 		if err == nil {
 			conn.Close()
@@ -302,6 +311,7 @@ func TestSnellV5LazyReadDeadline(t *testing.T) {
 		t.Fatal("read deadline ignored before first write")
 	}
 }
+
 func TestSnellV5QueueOverflowKeepsSession(t *testing.T) {
 	f := &quicProxySession{input: make(chan []byte, 1), done: make(chan struct{})}
 	f.enqueue([]byte{1})
@@ -312,6 +322,7 @@ func TestSnellV5QueueOverflowKeepsSession(t *testing.T) {
 	default:
 	}
 }
+
 func TestSnellV5SessionDeadline(t *testing.T) {
 	f := &quicProxySession{input: make(chan []byte, 1), done: make(chan struct{})}
 	done := make(chan error, 1)
@@ -369,6 +380,7 @@ func (w *v5LossWriter) WritePacket(b *buf.Buffer, dest M.Socksaddr) error {
 	}
 	return w.PacketWriter.WritePacket(b, dest)
 }
+
 func TestSnellV5HTTP3PacketLoss(t *testing.T) {
 	dest := serveV5HTTP3(t)
 	server, router, in := startV5Inbound(t)
@@ -396,6 +408,7 @@ func TestSnellV5HTTP3PacketLoss(t *testing.T) {
 	default:
 	}
 }
+
 func TestSnellV5HTTP3Soak(t *testing.T) {
 	text := os.Getenv("SNELL_V5_SOAK_TEST")
 	if text == "" {
@@ -414,6 +427,7 @@ func TestSnellV5HTTP3Soak(t *testing.T) {
 		})
 	}
 }
+
 func TestSnellV5UDPOverTCPFallback(t *testing.T) {
 	server, router, _ := startV5Inbound(t)
 	echo, err := net.ListenPacket("udp", "127.0.0.1:0")
@@ -442,7 +456,7 @@ func TestSnellV5UDPOverTCPFallback(t *testing.T) {
 	defer packet.Close()
 	packet.SetDeadline(time.Now().Add(3 * time.Second))
 	payload := []byte("ordinary non-QUIC UDP")
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		if _, err = packet.WriteTo(payload, dest); err != nil {
 			t.Fatal(err)
 		}
@@ -475,6 +489,7 @@ func (d *v5BlockedDialer) DialContext(ctx context.Context, _ string, _ M.Socksad
 	<-ctx.Done()
 	return nil, ctx.Err()
 }
+
 func TestSnellV5CloseCancelsStartup(t *testing.T) {
 	d := &v5BlockedDialer{started: make(chan struct{})}
 	out := &Outbound{dialer: d}

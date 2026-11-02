@@ -1,10 +1,11 @@
 package box
 
 import (
-	"github.com/sagernet/sing-box/log"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sagernet/sing-box/log"
 )
 
 func TestCloseWorkerPanicBecomesError(t *testing.T) {

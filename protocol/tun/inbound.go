@@ -5,7 +5,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
-	"runtime" //H
+	"runtime" // H
 	"slices"
 	"strconv"
 	"strings"
@@ -20,7 +20,7 @@ import (
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/service/oomkiller"
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing-tun/gtcpip/header"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -28,7 +28,7 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/common/ranges"
-	"github.com/sagernet/sing/common/x/list" //H
+	"github.com/sagernet/sing/common/x/list" // H
 	"github.com/sagernet/sing/service"
 
 	"go4.org/netipx"
@@ -55,7 +55,7 @@ type Inbound struct {
 	tunIf                       tun.Tun
 	tunStack                    tun.Stack
 	platformInterface           adapter.PlatformInterface
-	usePlatformInterface        bool //H
+	usePlatformInterface        bool // H
 	platformOptions             option.TunPlatformOptions
 	autoRedirect                tun.AutoRedirect
 	routeRuleSet                []adapter.RuleSet
@@ -425,7 +425,7 @@ func (t *Inbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 			}
 		}
 		var tunInterface tun.Tun
-		var err error //H: share interface creation and stack start errors
+		var err error // H: share interface creation and stack start errors
 		monitor := taskmonitor.New(t.logger, C.StartTimeout)
 		tunOptions := t.tunOptions
 		if t.autoRedirect == nil && !(runtime.GOOS == "android" && t.platformInterface != nil) {

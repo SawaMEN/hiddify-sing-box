@@ -103,7 +103,7 @@ func TestH_WARPEndpointScanner(t *testing.T) {
 		ctx := include.Context(context.Background())
 		options, err := json.UnmarshalExtendedContext[option.Options](ctx, []byte(`{
 			"log": {"disabled": true},
-			"experimental": {"cache_file": {"enabled": true, "path": "`+cachePath+`"}},
+			"experimental": {"cache_file": {"enabled": true, "path": `+strconv.Quote(cachePath)+`}},
 			"endpoints": [{"type": "warp", "tag": "warp",
 				"private_key": "`+clientPrivate+`",
 				"interface": {"addresses": {"v4": "172.16.9.2"}},
@@ -178,7 +178,7 @@ func TestH_WARPEndpointFailover(t *testing.T) {
 	ctx := include.Context(context.Background())
 	options, err := json.UnmarshalExtendedContext[option.Options](ctx, []byte(`{
 		"log": {"disabled": true},
-		"experimental": {"cache_file": {"enabled": true, "path": "`+filepath.Join(t.TempDir(), "cache.db")+`"}},
+		"experimental": {"cache_file": {"enabled": true, "path": `+strconv.Quote(filepath.Join(t.TempDir(), "cache.db"))+`}},
 		"endpoints": [{"type": "warp", "tag": "warp",
 			"private_key": "`+clientPrivate+`",
 			"interface": {"addresses": {"v4": "172.16.9.2"}},

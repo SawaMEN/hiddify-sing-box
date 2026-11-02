@@ -2,15 +2,16 @@ package openflux
 
 import (
 	"context"
+	"net"
+	"net/netip"
+	"testing"
+	"time"
+
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/internal/paneltest"
 	"github.com/sagernet/sing-box/option"
 	tr "github.com/sagernet/sing-box/transport/compat/openflux/transport"
 	M "github.com/sagernet/sing/common/metadata"
-	"net"
-	"net/netip"
-	"testing"
-	"time"
 )
 
 func TestNegotiatedDirectTCPUDP(t *testing.T) {
@@ -75,7 +76,6 @@ func TestNegotiatedDirectTCPUDP(t *testing.T) {
 		t.Fatalf("UDP packet round trip: %v", e)
 	}
 	packet.Close()
-
 }
 
 type testDialer struct{}
@@ -83,6 +83,7 @@ type testDialer struct{}
 func (testDialer) DialContext(ctx context.Context, n string, d M.Socksaddr) (net.Conn, error) {
 	return (&net.Dialer{}).DialContext(ctx, n, d.String())
 }
+
 func (testDialer) ListenPacket(ctx context.Context, d M.Socksaddr) (net.PacketConn, error) {
 	return net.ListenPacket("udp", "127.0.0.1:0")
 }

@@ -7,15 +7,14 @@ import (
 	"net/netip"
 	"strings"
 
-	"github.com/amnezia-vpn/amneziawg-go/v3/conn"
-	"github.com/amnezia-vpn/amneziawg-go/v3/device"
-
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing/common/exceptions"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/logger"
 	"github.com/sagernet/sing/common/metadata"
 	"github.com/sagernet/sing/common/network"
+
+	"github.com/amnezia-vpn/amneziawg-go/v3/conn"
+	"github.com/amnezia-vpn/amneziawg-go/v3/device"
 )
 
 type DeviceOpts struct {
@@ -24,6 +23,10 @@ type DeviceOpts struct {
 	AllowedIps       []netip.Prefix
 	ExcludedIps      []netip.Prefix
 	MTU              uint32
+	Peer             netip.AddrPort   // H
+	Fallback         []netip.AddrPort // H
+	MTUDiscovery     bool             // H
+	Reserved         *Reserved        // H
 }
 
 type Device struct {
@@ -32,6 +35,7 @@ type Device struct {
 	bind      conn.Bind
 	logger    *device.Logger
 	ipcConfig string
+	path      *devicePath // H
 }
 
 func NewDevice(ctx context.Context, logger logger.ContextLogger, dial network.Dialer, ipcConfig string, opts DeviceOpts) (*Device, error) {
@@ -43,7 +47,7 @@ func NewDevice(ctx context.Context, logger logger.ContextLogger, dial network.Di
 	if opts.UseIntegratedTun {
 		tun, err = newSystemTun(ctx, opts.Address, opts.AllowedIps, opts.ExcludedIps, opts.MTU, logger)
 		if err != nil {
-			return nil, exceptions.Cause(err, "create tunnel")
+			return nil, E.Cause(err, "create tunnel")
 		}
 	} else {
 		tun, err = newNetworkTun(opts.Address, opts.MTU)
@@ -53,20 +57,24 @@ func NewDevice(ctx context.Context, logger logger.ContextLogger, dial network.Di
 	}
 
 	awgLogger := &device.Logger{
-		Verbosef: func(format string, args ...interface{}) {
+		Verbosef: func(format string, args ...any) {
 			logger.Debug(fmt.Sprintf(strings.ToLower(format), args...))
 		},
-		Errorf: func(format string, args ...interface{}) {
+		Errorf: func(format string, args ...any) {
 			logger.Error(fmt.Sprintf(strings.ToLower(format), args...))
 		},
 	}
 
-	return &Device{
+	result := &Device{
 		tun:       tun,
-		bind:      newBind(ctx, dial),
+		bind:      newBind(ctx, dial, opts.Peer, opts.Reserved),
 		logger:    awgLogger,
 		ipcConfig: ipcConfig,
-	}, nil
+	}
+	if opts.MTUDiscovery || len(opts.Fallback) > 0 {
+		result.path = newDevicePath(ctx, logger, tun, opts)
+	}
+	return result, nil
 }
 
 func (d *Device) Start(stage adapter.StartStage) error {
@@ -83,7 +91,13 @@ func (d *Device) Start(stage adapter.StartStage) error {
 		return E.Cause(err, "tun start")
 	}
 
-	return d.awgDevice.Up()
+	if err := d.awgDevice.Up(); err != nil {
+		return err
+	}
+	if d.path != nil {
+		d.path.start(d)
+	}
+	return nil
 }
 
 func (d *Device) IsUnderLoad() bool {
@@ -94,10 +108,17 @@ func (d *Device) IsUnderLoad() bool {
 }
 
 func (d *Device) Close() error {
+	if d.path != nil {
+		d.path.close()
+	}
+	// Close the socket first to release writes that hold the device network lock. //H
+	if d.bind != nil {
+		_ = d.bind.Close()
+	} // H
 	if d.awgDevice != nil {
 		d.awgDevice.Close()
 	}
-	return nil
+	return d.tun.Close()
 }
 
 func (d *Device) DialContext(ctx context.Context, network string, destination metadata.Socksaddr) (net.Conn, error) {
@@ -106,4 +127,11 @@ func (d *Device) DialContext(ctx context.Context, network string, destination me
 
 func (d *Device) ListenPacket(ctx context.Context, destination metadata.Socksaddr) (net.PacketConn, error) {
 	return d.tun.ListenPacket(ctx, destination)
+}
+
+func (d *Device) IpcGet() (string, error) {
+	if d.awgDevice == nil {
+		return "", net.ErrClosed
+	}
+	return d.awgDevice.IpcGet()
 }

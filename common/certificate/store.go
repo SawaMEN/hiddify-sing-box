@@ -163,7 +163,9 @@ func (s *Store) CurrentPEM() []string {
 
 func (s *Store) update() error {
 	currentPool, anchorPEM, err := s.load()
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	s.access.Lock()
 	defer s.access.Unlock()
 	s.currentPool = currentPool
@@ -284,10 +286,12 @@ func isSameDirSymlink(f fs.DirEntry, dir string) bool {
 	return err == nil && !strings.Contains(target, "/")
 }
 
- // Close releases resources when used without a lifecycle scope. //H
- func (s *Store) Close() error {
- 	if s.watcher != nil {
- 		if err := s.watcher.Close(); err != nil { return err }
- 	}
- 	return s.closePlatform()
- }
+// Close releases resources when used without a lifecycle scope. //H
+func (s *Store) Close() error {
+	if s.watcher != nil {
+		if err := s.watcher.Close(); err != nil {
+			return err
+		}
+	}
+	return s.closePlatform()
+}

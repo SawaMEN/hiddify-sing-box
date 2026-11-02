@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"net"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -38,6 +39,13 @@ func TestH_WireGuardPacketsMayFragment(t *testing.T) {
 			}()
 		}
 	}()
+	// Windows UDP loopback does not reliably reassemble oversized IP
+	// fragments. Exercise the large TCP transfer on Windows with an
+	// ordinary tunnel MTU, while Unix still verifies UDP fragmentation.
+	tunnelMTU := 20000
+	if runtime.GOOS == "windows" {
+		tunnelMTU = 1408
+	}
 	serverPrivate, serverPublic := hWireGuardKey(t)
 	clientPrivate, clientPublic := hWireGuardKey(t)
 	serverPort := hFreeUDPPort(t)
@@ -45,10 +53,10 @@ func TestH_WireGuardPacketsMayFragment(t *testing.T) {
 	options, err := json.UnmarshalExtendedContext[option.Options](ctx, []byte(`{
 		"log": {"disabled": true},
 		"endpoints": [
-			{"type": "wireguard", "tag": "server", "mtu": 20000, "address": ["10.77.0.1/32"], "private_key": "`+serverPrivate+`",
+			{"type": "wireguard", "tag": "server", "mtu": `+strconv.Itoa(tunnelMTU)+`, "address": ["10.77.0.1/32"], "private_key": "`+serverPrivate+`",
 				"listen_port": `+strconv.Itoa(serverPort)+`,
 				"peers": [{"public_key": "`+clientPublic+`", "allowed_ips": ["10.77.0.2/32"]}]},
-			{"type": "wireguard", "tag": "client", "mtu": 20000, "address": ["10.77.0.2/32"], "private_key": "`+clientPrivate+`",
+			{"type": "wireguard", "tag": "client", "mtu": `+strconv.Itoa(tunnelMTU)+`, "address": ["10.77.0.2/32"], "private_key": "`+clientPrivate+`",
 				"peers": [{"address": "127.0.0.1", "port": `+strconv.Itoa(serverPort)+`, "public_key": "`+serverPublic+`",
 					"allowed_ips": ["10.77.0.1/32"], "persistent_keepalive_interval": 1}]}
 		],

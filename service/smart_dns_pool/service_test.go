@@ -137,7 +137,7 @@ func TestSmartDNSPool_EndToEnd(t *testing.T) {
 
 	// Run several queries — round-robin should distribute across both upstreams.
 	answers := map[string]int{}
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		ip := digOnce(t, addr, "smart.test.")
 		answers[ip]++
 	}
@@ -203,7 +203,7 @@ func TestSmartDNSPool_FailoverWithinDeadline(t *testing.T) {
 	}
 
 	saw := false
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		ip := digOnce(t, addr, "fail.test.")
 		if ip == "192.0.2.60" {
 			saw = true
@@ -217,10 +217,10 @@ func TestSmartDNSPool_FailoverWithinDeadline(t *testing.T) {
 // TestSmartDNSPool_RejectsBadConfig verifies validation at NewService time.
 func TestSmartDNSPool_RejectsBadConfig(t *testing.T) {
 	cases := []struct {
-		name     string
-		opts     option.SmartDNSPoolServiceOptions
-		wantErr  string
-		wantOK   bool
+		name    string
+		opts    option.SmartDNSPoolServiceOptions
+		wantErr string
+		wantOK  bool
 	}{
 		{
 			name: "no upstreams",

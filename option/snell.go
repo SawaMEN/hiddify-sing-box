@@ -18,9 +18,9 @@ type _SnellInboundOptions struct {
 
 type AbstractSnellInboundOptions struct {
 	ListenOptions
-	QuicProxy bool `json:"quic_proxy,omitempty"`
-	PSK   string      `json:"psk"`
-	Users []SnellUser `json:"users,omitempty"`
+	QuicProxy bool        `json:"quic_proxy,omitempty"`
+	PSK       string      `json:"psk"`
+	Users     []SnellUser `json:"users,omitempty"`
 }
 
 type SnellInboundOptions _SnellInboundOptions

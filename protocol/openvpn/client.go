@@ -21,7 +21,7 @@ import (
 	"github.com/sagernet/sing-box/transport/device"
 	ovpntransport "github.com/sagernet/sing-box/transport/openvpn"
 	ovpn "github.com/sagernet/sing-openvpn"
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing-tun/gtcpip/header"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/buf"
@@ -599,7 +599,7 @@ func (c *ClientEndpoint) uninstallDNSTransport(dnsTransport *DNSTransport) {
 	c.stateAccess.Unlock()
 }
 
-func (c *ClientEndpoint) Start(stage adapter.StartStage) error {
+func (c *ClientEndpoint) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage == adapter.StartStateInitialize {
 		c.deviceOptions.MemoryPressure = oomkiller.MemoryPressure(c.ctx)
 		tunnelDevice, err := device.New(*c.deviceOptions)
@@ -608,6 +608,7 @@ func (c *ClientEndpoint) Start(stage adapter.StartStage) error {
 		}
 		tunnelDevice.SetPacketWriter(c.writePacketBuffers)
 		c.device = tunnelDevice
+		scope.Add(c.Close) // H
 		c.deviceOptions = nil
 		return nil
 	}
@@ -615,28 +616,6 @@ func (c *ClientEndpoint) Start(stage adapter.StartStage) error {
 		return nil
 	}
 	return nil
-}
-
-func (c *ClientEndpoint) readLoop(ctx context.Context) {
-	for {
-		packetBuffers, err := c.client.ReadDataPackets(ctx)
-		if err != nil {
-			if E.IsClosedOrCanceled(err) || ctx.Err() != nil {
-				return
-			}
-			c.logger.Error(E.Cause(err, "client terminated"))
-			c.setTerminalError(err)
-			return
-		}
-		err = c.device.WriteInboundBuffers(packetBuffers)
-		buf.ReleaseMulti(packetBuffers)
-		if err != nil {
-			err = E.Cause(err, "write packet to device")
-			c.logger.Error(err)
-			c.setTerminalError(err)
-			return
-		}
-	}
 }
 
 func (c *ClientEndpoint) Close() error {

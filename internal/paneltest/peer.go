@@ -2,13 +2,14 @@
 package paneltest
 
 import (
-	"github.com/sagernet/sing-box/transport/iptunnel/netstack"
 	"io"
 	"net"
 	"net/netip"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/sagernet/sing-box/transport/iptunnel/netstack"
 )
 
 type Peer struct {
@@ -84,6 +85,7 @@ func NewPeer(t *testing.T, addresses []netip.Addr, send func([]byte) error) Peer
 	t.Cleanup(close)
 	return Peer{Inject: func(p []byte) { device.Write([][]byte{p}, 0) }, Close: close}
 }
+
 func Echo(t *testing.T, c net.Conn) {
 	t.Helper()
 	defer c.Close()

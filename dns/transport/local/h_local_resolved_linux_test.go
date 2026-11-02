@@ -18,8 +18,7 @@ import (
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/service/resolved"
-	"github.com/sagernet/sing-tun"
-	"github.com/sagernet/sing/common"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common/control"
 	"github.com/sagernet/sing/common/json/badoption"
 	M "github.com/sagernet/sing/common/metadata"
@@ -56,6 +55,7 @@ type resolvedTestMonitor struct{ tun.DefaultInterfaceMonitor }
 func (*resolvedTestMonitor) DefaultInterface() *control.Interface {
 	return &control.Interface{Index: 1, Name: "lo"}
 }
+
 func (*resolvedTestMonitor) MyInterfaces() []string                                               { return nil }
 func (*resolvedTestMonitor) UnregisterCallback(*list.Element[tun.DefaultInterfaceUpdateCallback]) {}
 func (*resolvedTestMonitor) RegisterCallback(tun.DefaultInterfaceUpdateCallback) *list.Element[tun.DefaultInterfaceUpdateCallback] {
@@ -259,7 +259,7 @@ func (m *resolvedTestServices) Services() []adapter.Service { return m.services 
 func TestH_ResolvedFallbackRejectsOwnListener(t *testing.T) {
 	for _, bind := range []string{"127.0.0.53", "0.0.0.0", "::"} {
 		t.Run(bind, func(t *testing.T) {
-			instance, err := resolved.NewService(context.Background(), log.NewNOPFactory().Logger(), "self", option.ResolvedServiceOptions{ListenOptions: option.ListenOptions{Listen: common.Ptr(badoption.Addr(netip.MustParseAddr(bind))), ListenPort: 53}})
+			instance, err := resolved.NewService(context.Background(), log.NewNOPFactory().Logger(), "self", option.ResolvedServiceOptions{ListenOptions: option.ListenOptions{Listen: new(badoption.Addr(netip.MustParseAddr(bind))), ListenPort: 53}})
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -9,7 +9,6 @@ import (
 )
 
 func Test0001(t *testing.T) {
-
 	my := &MyMsg{}
 	my.Id = "12345"
 	my.Target = "111:11"
@@ -178,10 +177,7 @@ func TestBBCongestionFrameMgrBehavior(t *testing.T) {
 
 	packetSize := 1000
 	sentBytes := 0
-	for {
-		if !bb.CanSend(0, packetSize) {
-			break
-		}
+	for bb.CanSend(0, packetSize) {
 		sentBytes += packetSize
 	}
 

@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/gofrs/uuid/v5"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/endpoint"
 	"github.com/sagernet/sing-box/adapter/outbound"
@@ -19,6 +18,8 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/service"
+
+	"github.com/gofrs/uuid/v5"
 )
 
 func RegisterClientEndpoint(registry *endpoint.Registry) {
@@ -61,7 +62,7 @@ func NewClientEndpoint(ctx context.Context, router adapter.Router, logger log.Co
 	return client, nil
 }
 
-func (c *ClientEndpoint) Start(stage adapter.StartStage, scope *adapter.Scope) error { //H
+func (c *ClientEndpoint) Start(stage adapter.StartStage, scope *adapter.Scope) error { // H
 	if stage != adapter.StartStatePostStart {
 		return nil
 	}

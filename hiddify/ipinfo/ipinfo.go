@@ -4,19 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
-
-	C "github.com/sagernet/sing-box/constant"
-
-	"github.com/sagernet/sing-box/log"
-
 	"time"
 
-	"github.com/sagernet/sing/common"
+	C "github.com/sagernet/sing-box/constant"
+	"github.com/sagernet/sing-box/log"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 )
@@ -49,7 +45,6 @@ func GetAllIPCheckerDomainsDomains() []string {
 			if net.ParseIP(d.Hostname()) == nil {
 				domains = append(domains, d.Hostname())
 			}
-
 		}
 	}
 	return domains
@@ -90,7 +85,7 @@ func (p *BaseProvider) GetName() string {
 }
 
 // fetchData retrieves the data from the provider's URL with a custom user agent and dialer.
-func (p *BaseProvider) fetchData(ctx context.Context, detour N.Dialer) (map[string]interface{}, uint16, error) {
+func (p *BaseProvider) fetchData(ctx context.Context, detour N.Dialer) (map[string]any, uint16, error) {
 	link := p.URL
 	linkURL, err := url.Parse(link)
 	if err != nil {
@@ -123,7 +118,7 @@ func (p *BaseProvider) fetchData(ctx context.Context, detour N.Dialer) (map[stri
 			return nil, 65535, err
 		}
 		defer instance.Close()
-		if earlyConn, isEarlyConn := common.Cast[N.EarlyConn](instance); isEarlyConn && earlyConn.NeedHandshake() {
+		if N.NeedHandshakeForWrite(instance) { // H
 			start = time.Now()
 		}
 
@@ -154,19 +149,18 @@ func (p *BaseProvider) fetchData(ctx context.Context, detour N.Dialer) (map[stri
 	if resp.StatusCode != http.StatusOK {
 		return nil, 65535, fmt.Errorf("non-200 response from [%s]: %d", p.URL, resp.StatusCode)
 	}
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, 65535, fmt.Errorf("failed to read response from [%s]: %v", p.URL, err)
 	}
 	t := uint16(time.Since(start) / time.Millisecond)
-	var jsonResponse map[string]interface{}
+	var jsonResponse map[string]any
 	err = json.Unmarshal(body, &jsonResponse)
 	if err != nil {
 		return nil, 65535, fmt.Errorf("failed to parse JSON from [%s]: %v", p.URL, err)
 	}
 
 	return jsonResponse, t, nil
-
 }
 
 // getCurrentIpInfo iterates over the providers to fetch and parse IP information.
@@ -225,11 +219,19 @@ func GetIpInfo(logger log.Logger, ctx context.Context, detour N.Dialer) (*IpInfo
 // GetIpInfoFromURL retrieves IP information from a custom provider through the outbound. //H
 func GetIpInfoFromURL(ctx context.Context, detour N.Dialer, url string) (*IpInfo, uint16, error) {
 	data, elapsed, err := (&BaseProvider{URL: url}).fetchData(ctx, detour)
-	if err != nil { return nil, elapsed, err }
+	if err != nil {
+		return nil, elapsed, err
+	}
 	raw, err := json.Marshal(data)
-	if err != nil { return nil, elapsed, err }
+	if err != nil {
+		return nil, elapsed, err
+	}
 	var info IpInfo
-	if err = json.Unmarshal(raw, &info); err != nil { return nil, elapsed, err }
-	if info.IP == "" { return nil, elapsed, fmt.Errorf("IP provider %s did not supply an IP", url) }
+	if err = json.Unmarshal(raw, &info); err != nil {
+		return nil, elapsed, err
+	}
+	if info.IP == "" {
+		return nil, elapsed, fmt.Errorf("IP provider %s did not supply an IP", url)
+	}
 	return &info, elapsed, nil
 }

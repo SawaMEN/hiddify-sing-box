@@ -282,8 +282,8 @@ type DefaultHeadlessRule struct {
 	AdGuardDomain        badoption.Listable[string] `json:"-"`
 	AdGuardDomainMatcher *domain.AdGuardMatcher     `json:"-"`
 
-	TunnelSource      badoption.Listable[string] `json:"tunnel_source,omitempty"`      //E
-	TunnelDestination badoption.Listable[string] `json:"tunnel_destination,omitempty"` //E
+	TunnelSource      badoption.Listable[string] `json:"tunnel_source,omitempty"`      // E
+	TunnelDestination badoption.Listable[string] `json:"tunnel_destination,omitempty"` // E
 }
 
 func (r DefaultHeadlessRule) IsValid() bool {

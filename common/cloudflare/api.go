@@ -13,6 +13,7 @@ import (
 
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+
 	"github.com/tidwall/gjson"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
@@ -32,6 +33,7 @@ func NewCloudflareApiDetour(detour N.Dialer) *CloudflareApi {
 	}
 	return NewCloudflareApi(opts...)
 }
+
 func NewCloudflareApi(opts ...CloudflareApiOption) *CloudflareApi {
 	api := &CloudflareApi{http.Client{Timeout: 30 * time.Second}}
 	for _, opt := range opts {
@@ -126,13 +128,11 @@ func (api *CloudflareApi) CreateProfileLicense(ctx context.Context, privateKey s
 	if privateKey != "" {
 		wgKey, err = wgtypes.ParseKey(privateKey)
 		if err != nil {
-
 			return nil, err
 		}
 	} else {
 		wgKey, err = wgtypes.GeneratePrivateKey()
 		if err != nil {
-
 			return nil, err
 		}
 	}

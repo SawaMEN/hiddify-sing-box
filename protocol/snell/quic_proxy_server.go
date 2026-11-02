@@ -22,6 +22,7 @@ import (
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+
 	"golang.org/x/crypto/argon2"
 )
 
@@ -293,6 +294,7 @@ func (f *quicProxySession) ReadPacket(buffer *buf.Buffer) (M.Socksaddr, error) {
 		}
 	}
 }
+
 func (f *quicProxySession) WritePacket(buffer *buf.Buffer, _ M.Socksaddr) error {
 	if f.writeDeadline.expired() {
 		buffer.Release()
@@ -314,6 +316,7 @@ func (f *quicProxySession) WritePacket(buffer *buf.Buffer, _ M.Socksaddr) error 
 	}
 	return writer.WritePacket(buffer, f.source)
 }
+
 func (f *quicProxySession) Close() error {
 	f.once.Do(func() {
 		close(f.done)

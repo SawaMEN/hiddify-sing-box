@@ -32,7 +32,7 @@ func loadYandexCookies(path string, jar http.CookieJar) error {
 
 		fields := strings.Split(line, "\t")
 		if len(fields) != 7 {
-			return fmt.Errorf("Yandex cookie file line %d: expected 7 tab-separated fields", lineNo)
+			return fmt.Errorf("yandex cookie file line %d: expected 7 tab-separated fields", lineNo)
 		}
 		rawDomain := strings.TrimPrefix(fields[0], "#HttpOnly_")
 		domain := strings.ToLower(strings.TrimPrefix(rawDomain, "."))
@@ -40,24 +40,24 @@ func loadYandexCookies(path string, jar http.CookieJar) error {
 			continue
 		}
 		if fields[1] != "TRUE" && fields[1] != "FALSE" {
-			return fmt.Errorf("Yandex cookie file line %d: invalid subdomain flag", lineNo)
+			return fmt.Errorf("yandex cookie file line %d: invalid subdomain flag", lineNo)
 		}
 		if fields[3] != "TRUE" && fields[3] != "FALSE" {
-			return fmt.Errorf("Yandex cookie file line %d: invalid secure flag", lineNo)
+			return fmt.Errorf("yandex cookie file line %d: invalid secure flag", lineNo)
 		}
 		expires, err := strconv.ParseInt(fields[4], 10, 64)
 		if err != nil {
-			return fmt.Errorf("Yandex cookie file line %d: invalid expiry", lineNo)
+			return fmt.Errorf("yandex cookie file line %d: invalid expiry", lineNo)
 		}
 		if expires != 0 && expires <= time.Now().Unix() {
 			continue
 		}
 		if fields[5] == "" {
-			return fmt.Errorf("Yandex cookie file line %d: empty cookie name", lineNo)
+			return fmt.Errorf("yandex cookie file line %d: empty cookie name", lineNo)
 		}
 		path := fields[2]
 		if !strings.HasPrefix(path, "/") {
-			return fmt.Errorf("Yandex cookie file line %d: invalid cookie path", lineNo)
+			return fmt.Errorf("yandex cookie file line %d: invalid cookie path", lineNo)
 		}
 		cookie := &http.Cookie{
 			Name:   fields[5],
@@ -78,7 +78,7 @@ func loadYandexCookies(path string, jar http.CookieJar) error {
 		return fmt.Errorf("read Yandex cookie file: %w", err)
 	}
 	if loaded == 0 {
-		return fmt.Errorf("Yandex cookie file has no unexpired yandex.ru cookies")
+		return fmt.Errorf("yandex cookie file has no unexpired yandex.ru cookies")
 	}
 	return nil
 }

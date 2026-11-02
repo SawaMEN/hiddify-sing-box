@@ -7,10 +7,6 @@ import (
 
 var icmpDatagram atomic.Bool
 
-func setICMPDatagram(enabled bool) {
-	icmpDatagram.Store(enabled)
-}
-
 func icmpDstAddr(ip *net.IPAddr) net.Addr {
 	if icmpDatagram.Load() {
 		return &net.UDPAddr{IP: ip.IP}

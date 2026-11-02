@@ -1,7 +1,6 @@
 package openvpn
 
 import (
-	"context"
 	"slices"
 
 	"github.com/sagernet/sing-box/adapter"
@@ -73,42 +72,4 @@ func (c *ClientEndpoint) notifyStatusUpdated() {
 func (c *ClientEndpoint) notifyStatusUpdatedLocked() {
 	close(c.statusUpdated)
 	c.statusUpdated = make(chan struct{})
-}
-
-func (c *ClientEndpoint) setTerminalError(err error) {
-	c.statusAccess.Lock()
-	c.terminalError = err.Error()
-	c.notifyStatusUpdatedLocked()
-	c.statusAccess.Unlock()
-}
-
-func (c *ClientEndpoint) watchChallenges(ctx context.Context) {
-	var loggedChallengeID string
-	for {
-		challengeUpdated := c.client.ChallengeUpdated()
-		challenge := c.client.PendingChallenge()
-		if challenge != nil && challenge.ID != loggedChallengeID {
-			loggedChallengeID = challenge.ID
-			c.logChallenge(challenge)
-		}
-		c.notifyStatusUpdated()
-		select {
-		case <-ctx.Done():
-			return
-		case <-challengeUpdated:
-		}
-	}
-}
-
-func (c *ClientEndpoint) logChallenge(challenge *ovpn.Challenge) {
-	switch challenge.Kind {
-	case ovpn.ChallengeCredentials:
-		c.logger.Info("waiting for credentials")
-	case ovpn.ChallengeSecret:
-		c.logger.Info("waiting for challenge response: ", challenge.Message)
-	case ovpn.ChallengeMessage:
-		c.logger.Info("authentication message: ", challenge.Message)
-	case ovpn.ChallengeOpenURL:
-		c.logger.Info("waiting for authentication: ", challenge.URL)
-	}
 }

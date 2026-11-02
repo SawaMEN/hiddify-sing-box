@@ -10,8 +10,6 @@ import (
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/convertor/adguard"
 	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing/common"
-	"github.com/sagernet/sing/common/json/badoption"
 	slogger "github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
@@ -60,7 +58,6 @@ func TestRouteRuleSetMergeDestinationAddressGroup(t *testing.T) {
 		},
 	}
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			ruleSet := newLocalRuleSetForTest("merge-destination", testCase.inner)
@@ -226,7 +223,6 @@ func TestRouteRuleSetOuterGroupedStateMergesIntoSameGroup(t *testing.T) {
 		},
 	}
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			ruleSet := newLocalRuleSetForTest("outer-merge-"+testCase.name, headlessDefaultRule(t, func(rule *abstractDefaultRule) {
@@ -1027,7 +1023,6 @@ func TestDNSAddressLimitIgnoresDestinationAddresses(t *testing.T) {
 		},
 	}
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			rule := dnsRuleForTest(func(rule *abstractDefaultRule) {
@@ -1083,7 +1078,6 @@ func TestDNSLegacyAddressLimitPreLookupDefersDirectRules(t *testing.T) {
 		},
 	}
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -1183,7 +1177,6 @@ func TestDNSLegacyInvertAddressLimitPreLookupRegression(t *testing.T) {
 		},
 	}
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -1284,7 +1277,6 @@ func TestDNSInvertAddressLimitPreLookupRegression(t *testing.T) {
 		},
 	}
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			rule := dnsRuleForTest(func(rule *abstractDefaultRule) {
@@ -1514,10 +1506,4 @@ func addDestinationPortRangeItem(t *testing.T, rule *abstractDefaultRule, ranges
 	require.NoError(t, err)
 	rule.destinationPortItems = append(rule.destinationPortItems, item)
 	rule.allItems = append(rule.allItems, item)
-}
-
-func parsePrefixables(cidrs []string) []*badoption.Prefixable {
-	return common.Map(cidrs, func(it string) *badoption.Prefixable {
-		return common.Ptr(badoption.Prefixable(netip.MustParsePrefix(it)))
-	})
 }

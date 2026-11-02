@@ -226,9 +226,11 @@ func TestH_XrayXHTTP(t *testing.T) {
 			singBox string
 		}{
 			{"packet-up", `"mode": "packet-up", "path": "/xh"`, `"mode": "packet-up", "path": "/xh"`},
-			{"packet-up obfs header",
+			{
+				"packet-up obfs header",
 				`"mode": "packet-up", "path": "/xh", "xPaddingObfsMode": true, "xPaddingPlacement": "header", "xPaddingHeader": "X-Pad", "xPaddingKey": "x_pad"`,
-				`"mode": "packet-up", "path": "/xh", "x_padding_obfs_mode": true, "x_padding_placement": "header", "x_padding_header": "X-Pad", "x_padding_key": "x_pad"`},
+				`"mode": "packet-up", "path": "/xh", "x_padding_obfs_mode": true, "x_padding_placement": "header", "x_padding_header": "X-Pad", "x_padding_key": "x_pad"`,
+			},
 		} {
 			t.Run(version+"/"+variant.name+"/sing-box to xray", func(t *testing.T) {
 				xrayPort := hFreeTCPPort(t)

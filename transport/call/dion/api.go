@@ -101,7 +101,6 @@ type Session struct {
 	AccessTokenExp time.Time
 	UserID         string
 	SessionID      string
-	cookiesPath    string
 	email          string
 	password       string
 	refreshMu      sync.Mutex

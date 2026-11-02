@@ -642,11 +642,11 @@ func (r *Recorder) sampleLocked(now time.Time) *profileRequest {
 			if !found {
 				continue
 			}
-			packets := hInterfaceCounterDelta(counters.inPackets, previousCounters.inPackets) + hInterfaceCounterDelta(counters.outPackets, previousCounters.outPackets) //H
+			packets := hInterfaceCounterDelta(counters.inPackets, previousCounters.inPackets) + hInterfaceCounterDelta(counters.outPackets, previousCounters.outPackets) // H
 			if packets > 0 {
 				interfacePackets[name] = packets
 			}
-			bytesDelta := hInterfaceCounterDelta(counters.inBytes, previousCounters.inBytes) + hInterfaceCounterDelta(counters.outBytes, previousCounters.outBytes) //H
+			bytesDelta := hInterfaceCounterDelta(counters.inBytes, previousCounters.inBytes) + hInterfaceCounterDelta(counters.outBytes, previousCounters.outBytes) // H
 			if bytesDelta > 0 {
 				interfaceBytes[name] = bytesDelta
 			}

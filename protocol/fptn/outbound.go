@@ -6,7 +6,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/websocket"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
 	"github.com/sagernet/sing-box/common/dialer"
@@ -17,13 +24,8 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/service"
-	"io"
-	"net"
-	"net/http"
-	"net/url"
-	"strings"
-	"sync"
-	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 func RegisterOutbound(r *outbound.Registry) { outbound.Register(r, "fptn", NewOutbound) }
@@ -83,6 +85,7 @@ func NewOutbound(ctx context.Context, _ adapter.Router, _ log.ContextLogger, tag
 	life, cancel := context.WithCancel(ctx)
 	return &Outbound{Adapter: outbound.NewAdapterWithDialerOptions("fptn", tag, []string{N.NetworkTCP, N.NetworkUDP}, o.DialerOptions), ctx: life, cancel: cancel, opts: o, dialer: d, dns: service.FromContext[adapter.DNSRouter](ctx)}, nil
 }
+
 func (h *Outbound) dialTLS(ctx context.Context, n, a string) (net.Conn, error) {
 	raw, e := h.dialer.DialContext(ctx, N.NetworkTCP, h.opts.ServerOptions.Build())
 	if e != nil {
@@ -90,6 +93,7 @@ func (h *Outbound) dialTLS(ctx context.Context, n, a string) (net.Conn, error) {
 	}
 	return wire.DialTLS(ctx, raw, h.opts.SNI, h.opts.Fingerprint, h.opts.Bypass)
 }
+
 func (h *Outbound) ensure(ctx context.Context) (*session, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -167,6 +171,7 @@ func (h *Outbound) ensure(ctx context.Context) (*session, error) {
 	go h.read(s)
 	return s, nil
 }
+
 func (h *Outbound) read(s *session) {
 	defer func() {
 		s.close()
@@ -195,6 +200,7 @@ func (h *Outbound) read(s *session) {
 		}
 	}
 }
+
 func (h *Outbound) resolve(ctx context.Context, d M.Socksaddr) (M.Socksaddr, error) {
 	if !d.IsDomain() {
 		return d, nil
@@ -211,6 +217,7 @@ func (h *Outbound) resolve(ctx context.Context, d M.Socksaddr) (M.Socksaddr, err
 	}
 	return M.SocksaddrFrom(a[0], d.Port), nil
 }
+
 func (h *Outbound) DialContext(ctx context.Context, n string, d M.Socksaddr) (net.Conn, error) {
 	s, e := h.ensure(ctx)
 	if e != nil {
@@ -222,6 +229,7 @@ func (h *Outbound) DialContext(ctx context.Context, n string, d M.Socksaddr) (ne
 	}
 	return s.network.DialContext(ctx, n, d)
 }
+
 func (h *Outbound) ListenPacket(ctx context.Context, d M.Socksaddr) (net.PacketConn, error) {
 	s, e := h.ensure(ctx)
 	if e != nil {
@@ -229,6 +237,7 @@ func (h *Outbound) ListenPacket(ctx context.Context, d M.Socksaddr) (net.PacketC
 	}
 	return s.network.ListenPacket(ctx, d)
 }
+
 func (h *Outbound) Close() error {
 	h.cancel()
 	h.mu.Lock()

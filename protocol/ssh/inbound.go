@@ -14,11 +14,10 @@ import (
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
-
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
-
 	N "github.com/sagernet/sing/common/network"
+
 	"golang.org/x/crypto/ssh"
 )
 
@@ -46,13 +45,12 @@ func NewInbound(
 	tag string,
 	options option.SSHInboundOptions,
 ) (adapter.Inbound, error) {
-
 	users := map[string]option.SSHUser{}
 	for _, u := range options.Users {
 		users[u.User] = u
 	}
 
-	serverConfig := &ssh.ServerConfig{}
+	serverConfig := &ssh.ServerConfig{ServerVersion: options.ServerVersion}
 
 	// Password auth
 	serverConfig.PasswordCallback = func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
@@ -119,7 +117,7 @@ func NewInbound(
 }
 
 // Start listener
-func (h *Inbound) Start(stage adapter.StartStage) error {
+func (h *Inbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage != adapter.StartStateStart {
 		return nil
 	}
@@ -128,6 +126,7 @@ func (h *Inbound) Start(stage adapter.StartStage) error {
 		return err
 	}
 
+	scope.Add(h.Close)
 	return nil
 }
 

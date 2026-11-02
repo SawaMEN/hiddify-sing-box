@@ -56,7 +56,7 @@ func TestH_SavedBinaryMalformed(t *testing.T) {
 	saved := SavedBinary{Content: []byte("content"), LastUpdated: time.Unix(5, 0), LastEtag: "etag", URLHash: []byte{1, 2, 3}}
 	data, err := saved.MarshalBinary()
 	require.NoError(t, err)
-	for i := 0; i < len(data); i++ {
+	for i := range data {
 		var decoded SavedBinary
 		require.Error(t, decoded.UnmarshalBinary(data[:i]), "truncated at %d", i)
 	}

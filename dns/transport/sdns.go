@@ -3,18 +3,16 @@ package transport
 import (
 	"context"
 	"net"
-	"sync"
 	"time"
 
-	"github.com/ameshkov/dnscrypt/v2"
-	mDNS "github.com/miekg/dns"
 	"github.com/sagernet/sing-box/adapter"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/dns"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
-	M "github.com/sagernet/sing/common/metadata"
-	N "github.com/sagernet/sing/common/network"
+
+	"github.com/ameshkov/dnscrypt/v2"
+	mDNS "github.com/miekg/dns"
 )
 
 var _ adapter.DNSTransport = (*SDNSTransport)(nil)
@@ -28,8 +26,6 @@ type SDNSTransport struct {
 	client *dnscrypt.Client
 	name   string
 	stamp  string
-
-	mtx sync.Mutex
 }
 
 func NewSDNSTransport(ctx context.Context, logger log.ContextLogger, tag string, options option.SDNSDNSServerOptions) (adapter.DNSTransport, error) {
@@ -38,11 +34,13 @@ func NewSDNSTransport(ctx context.Context, logger log.ContextLogger, tag string,
 		return nil, err
 	}
 	return &SDNSTransport{
+		TransportAdapter: dns.NewTransportAdapterWithRemoteOptions(C.DNSTypeSDNS, tag, options.RemoteDNSServerOptions),
+		name:             tag,
 		client: &dnscrypt.Client{
 			Net:     "udp",
 			Timeout: 10 * time.Second,
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return transportDialer.DialContext(ctx, N.NetworkName(network), M.ParseSocksaddr(addr))
+				return hSDNSDialPacket(ctx, transportDialer, network, addr) // H
 			},
 		},
 		stamp: options.Stamp,
@@ -53,7 +51,7 @@ func (t *SDNSTransport) Name() string {
 	return t.name
 }
 
-func (t *SDNSTransport) Start(adapter.StartStage) error {
+func (t *SDNSTransport) Start(adapter.StartStage, *adapter.Scope) error {
 	return nil
 }
 

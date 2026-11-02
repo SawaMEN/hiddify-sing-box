@@ -3,11 +3,12 @@ package xdrive
 
 import (
 	"context"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/utils"
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/utils"
 )
 
 var errStalled = errors.New("the request made no progress")

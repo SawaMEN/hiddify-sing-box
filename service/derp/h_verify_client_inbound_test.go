@@ -16,8 +16,10 @@ import (
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/adapter/htest"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,6 +59,6 @@ func TestH_DERPStartFailsWithVerifyClientInboundWithoutTailcat(t *testing.T) {
 		VerifyClientInbound: []string{"tailcat-in"},
 	})
 	require.NoError(t, err)
-	err = svc.Start(adapter.StartStateStart)
+	err = htest.Start(svc, adapter.StartStateStart)
 	require.ErrorContains(t, err, "verify_client_inbound requires Tailcat")
 }

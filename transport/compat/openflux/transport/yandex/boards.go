@@ -17,11 +17,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gorilla/websocket"
-
 	"github.com/sagernet/sing-box/transport/compat/openflux/netbind"
 	"github.com/sagernet/sing-box/transport/compat/openflux/transport"
 	"github.com/sagernet/sing-box/transport/compat/openflux/utils"
+
+	"github.com/gorilla/websocket"
 )
 
 const (
@@ -84,9 +84,9 @@ func shortStr(s string, n int) string {
 	return s[:n]
 }
 
-func (s *boardsSession) writeEventObj(ns string, obj interface{}) error {
+func (s *boardsSession) writeEventObj(ns string, obj any) error {
 	ack := s.ack.Add(1) - 1
-	payload, err := json.Marshal([]interface{}{ns, obj})
+	payload, err := json.Marshal([]any{ns, obj})
 	if err != nil {
 		return err
 	}
@@ -238,9 +238,10 @@ func (t *BoardsTransport) getAllowCaptcha(client *http.Client, u, hash string) e
 
 func (t *BoardsTransport) authorize(hash, name string) (boardsInfo, error) {
 	jar := t.jar()
-	client := &http.Client{Transport: netbind.HTTPTransport(t.DialContext),
-		Jar:     jar,
-		Timeout: 15 * time.Second,
+	client := &http.Client{
+		Transport: netbind.HTTPTransport(t.DialContext),
+		Jar:       jar,
+		Timeout:   15 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -311,25 +312,10 @@ func (t *BoardsTransport) authorize(hash, name string) (boardsInfo, error) {
 	}, nil
 }
 
-func (t *BoardsTransport) get(client *http.Client, u, accept, referer string) error {
-	req, _ := http.NewRequest("GET", u, nil)
-	req.Header.Set("User-Agent", boardsUA)
-	req.Header.Set("Accept", accept)
-	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Set("Referer", referer)
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
-	return nil
-}
-
 // apiRequest builds a POST /api call: the action and its content (JSON,
 // base64-encoded) in a JSON body. The API used to take a form and now
 // answers 415 "Request body must use a JSON Content-Type" to one.
-func apiRequest(hash, action string, content interface{}) *http.Request {
+func apiRequest(hash, action string, content any) *http.Request {
 	raw, _ := json.Marshal(content)
 	body, _ := json.Marshal(map[string]string{
 		"action":  action,
@@ -345,7 +331,7 @@ func apiRequest(hash, action string, content interface{}) *http.Request {
 	return req
 }
 
-func (t *BoardsTransport) postAPI(client *http.Client, hash, action string, content interface{}) error {
+func (t *BoardsTransport) postAPI(client *http.Client, hash, action string, content any) error {
 	resp, err := client.Do(apiRequest(hash, action, content))
 	if err != nil {
 		return err
@@ -353,10 +339,7 @@ func (t *BoardsTransport) postAPI(client *http.Client, hash, action string, cont
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
-		n := len(body)
-		if n > 200 {
-			n = 200
-		}
+		n := min(len(body), 200)
 		return fmt.Errorf("status %d: %s", resp.StatusCode, string(body[:n]))
 	}
 	return nil
@@ -394,7 +377,7 @@ func (t *BoardsTransport) getWhiteboardInfo(client *http.Client, hash string) (m
 	}
 	if info.Presentation.Items != "" {
 		if rawItems, err := base64.StdEncoding.DecodeString(info.Presentation.Items); err == nil {
-			var arr []map[string]interface{}
+			var arr []map[string]any
 			if json.Unmarshal(rawItems, &arr) == nil && len(arr) > 0 {
 				if h, _ := arr[0]["hash"].(string); h != "" && out["dashboard"] == "" {
 					out["dashboard"] = h
@@ -409,7 +392,7 @@ func (t *BoardsTransport) getWhiteboardInfo(client *http.Client, hash string) (m
 	return out, nil
 }
 
-func jwtPayload(jwt string) map[string]interface{} {
+func jwtPayload(jwt string) map[string]any {
 	parts := strings.Split(jwt, ".")
 	if len(parts) < 2 {
 		return nil
@@ -420,7 +403,7 @@ func jwtPayload(jwt string) map[string]interface{} {
 	if err != nil {
 		return nil
 	}
-	var m map[string]interface{}
+	var m map[string]any
 	_ = json.Unmarshal(raw, &m)
 	return m
 }
@@ -489,14 +472,8 @@ func reconnectBackoffBoards(n int) time.Duration {
 	if n < 1 {
 		n = 1
 	}
-	shift := n - 1
-	if shift > 4 {
-		shift = 4
-	}
-	d := 500 * time.Millisecond * time.Duration(1<<uint(shift))
-	if d > 15*time.Second {
-		d = 15 * time.Second
-	}
+	shift := min(n-1, 4)
+	d := min(500*time.Millisecond*time.Duration(1<<uint(shift)), 15*time.Second)
 	d += time.Duration(mrand.Int63n(int64(d/2) + 1))
 	return d
 }
@@ -597,7 +574,7 @@ func (t *BoardsTransport) handshake(sess *boardsSession) error {
 		return fmt.Errorf("socket.io connect ack: %w", err)
 	}
 
-	if err := sess.writeEventObj("im", map[string]interface{}{
+	if err := sess.writeEventObj("im", map[string]any{
 		"operation": "subscribe", "user": nil,
 	}); err != nil {
 		return err
@@ -652,11 +629,11 @@ func readRaw(conn *websocket.Conn) ([]byte, error) {
 }
 
 func (t *BoardsTransport) sendSubscribe(sess *boardsSession, participant string) error {
-	data := map[string]interface{}{
+	data := map[string]any{
 		"session":      sess.Info.session,
 		"dashboard":    sess.Info.dashboard,
 		"presentation": sess.Info.hash,
-		"properties": map[string]interface{}{
+		"properties": map[string]any{
 			"guest_mode":                     true,
 			"guest_role":                     1,
 			"guest_password":                 nil,
@@ -665,17 +642,17 @@ func (t *BoardsTransport) sendSubscribe(sess *boardsSession, participant string)
 		},
 		"participant_team_role": -1,
 		"participant":           participant,
-		"options": map[string]interface{}{
+		"options": map[string]any{
 			"type": "landing",
-			"participant": map[string]interface{}{
+			"participant": map[string]any{
 				"hash":         participant,
 				"partner":      "yandex",
 				"userHash":     sess.Info.userHash,
 				"name":         sess.Info.name,
-				"additional":   map[string]interface{}{"guest": true},
+				"additional":   map[string]any{"guest": true},
 				"module":       "yandex",
 				"presentation": sess.Info.hash,
-				"identityCandidates": map[string]interface{}{
+				"identityCandidates": map[string]any{
 					"uidHash":    nil,
 					"legacyHash": participant,
 					"uid":        nil,
@@ -685,7 +662,7 @@ func (t *BoardsTransport) sendSubscribe(sess *boardsSession, participant string)
 				"participantCaptionName": sess.Info.name,
 			},
 			"intermediate": "",
-			"device": map[string]interface{}{
+			"device": map[string]any{
 				"screen":              "674 x 619",
 				"screen_width":        674,
 				"screen_height":       619,
@@ -706,7 +683,7 @@ func (t *BoardsTransport) sendSubscribe(sess *boardsSession, participant string)
 			},
 		},
 	}
-	return sess.writeEventObj("dashboard", map[string]interface{}{
+	return sess.writeEventObj("dashboard", map[string]any{
 		"action":      "subscribe-slide-dashboard",
 		"data":        data,
 		"participant": participant,
@@ -748,12 +725,12 @@ func (t *BoardsTransport) sendNotifyPosition(sess *boardsSession, pkt []byte) er
 	x := mrand.Intn(2000)
 	y := mrand.Intn(1200)
 
-	obj := map[string]interface{}{
+	obj := map[string]any{
 		"action": "modify-objects",
-		"data": map[string]interface{}{
-			"objects": []map[string]interface{}{
+		"data": map[string]any{
+			"objects": []map[string]any{
 				{
-					"_attributes_": map[string]interface{}{
+					"_attributes_": map[string]any{
 						"id":          objID,
 						"value":       b64, // payload как base64
 						"style":       "text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=1;",
@@ -763,9 +740,9 @@ func (t *BoardsTransport) sendNotifyPosition(sess *boardsSession, pkt []byte) er
 						"parent":      "DASHBOARD",
 						"index":       "1",
 					},
-					"mxGeometry": []map[string]interface{}{
+					"mxGeometry": []map[string]any{
 						{
-							"_attributes_": map[string]interface{}{
+							"_attributes_": map[string]any{
 								"x":      fmt.Sprintf("%d", x),
 								"y":      fmt.Sprintf("%d", y),
 								"width":  "1",
@@ -787,13 +764,13 @@ func (t *BoardsTransport) sendNotifyPosition(sess *boardsSession, pkt []byte) er
 }
 
 // dropObjects отправляет drop-objects для удаления объектов с доски.
-func (t *BoardsTransport) dropObjects(sess *boardsSession, objects []map[string]interface{}) {
+func (t *BoardsTransport) dropObjects(sess *boardsSession, objects []map[string]any) {
 	if len(objects) == 0 {
 		return
 	}
-	obj := map[string]interface{}{
+	obj := map[string]any{
 		"action": "drop-objects",
-		"data": map[string]interface{}{
+		"data": map[string]any{
 			"objects": objects,
 		},
 		"participant": *sess.participant.Load(),
@@ -817,9 +794,9 @@ func (t *BoardsTransport) keepAliveLoop(sess *boardsSession, stop chan struct{})
 		case <-t.done:
 			return
 		case <-tick.C:
-			obj := map[string]interface{}{
+			obj := map[string]any{
 				"action":      "heartbeat",
-				"data":        map[string]interface{}{},
+				"data":        map[string]any{},
 				"participant": *sess.participant.Load(),
 			}
 			if err := sess.writeEventObj("dashboard", obj); err != nil {
@@ -909,9 +886,9 @@ func (t *BoardsTransport) handleServerModifyObjects(sess *boardsSession, raw jso
 		Name      string `json:"name"`
 		Session   string `json:"session"`
 		Objects   []struct {
-			Attributes map[string]interface{}   `json:"_attributes_"`
-			Hash       string                   `json:"hash"`
-			Geometry   []map[string]interface{} `json:"mxGeometry"`
+			Attributes map[string]any   `json:"_attributes_"`
+			Hash       string           `json:"hash"`
+			Geometry   []map[string]any `json:"mxGeometry"`
 		} `json:"objects"`
 	}
 	if err := json.Unmarshal(raw, &d); err != nil {
@@ -925,7 +902,7 @@ func (t *BoardsTransport) handleServerModifyObjects(sess *boardsSession, raw jso
 	myUser := sess.Info.userHash
 	myName := sess.Info.name
 
-	var toDelete []map[string]interface{}
+	var toDelete []map[string]any
 
 	for _, o := range d.Objects {
 		val, _ := o.Attributes["value"].(string)
@@ -965,7 +942,7 @@ func (t *BoardsTransport) handleServerModifyObjects(sess *boardsSession, raw jso
 		}
 
 		// Собираем объект для удаления
-		toDelete = append(toDelete, map[string]interface{}{
+		toDelete = append(toDelete, map[string]any{
 			"_attributes_": o.Attributes,
 			"mxGeometry":   o.Geometry,
 			"hash":         o.Hash,

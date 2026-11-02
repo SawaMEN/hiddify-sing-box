@@ -590,17 +590,3 @@ func (s *Service) handleResponseWithTracking(writer http.ResponseWriter, respons
 		}
 	}
 }
-
-func (s *Service) References() []string {
-	if s.detour == "" {
-		return nil
-	}
-	return []string{s.detour}
-}
-
-func (s *Service) References() []string {
-	if s.detour == "" {
-		return nil
-	}
-	return []string{s.detour}
-}

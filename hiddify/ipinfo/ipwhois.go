@@ -37,7 +37,7 @@ func (p *IpWhoIsProvider) GetIPInfo(ctx context.Context, dialer N.Dialer) (*IpIn
 		info.City = city
 	}
 
-	if connection, ok := data["connection"].(map[string]interface{}); ok {
+	if connection, ok := data["connection"].(map[string]any); ok {
 		if asn, ok := connection["asn"].(float64); ok {
 			info.ASN = int(asn)
 		}

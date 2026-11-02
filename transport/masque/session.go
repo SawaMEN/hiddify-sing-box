@@ -232,7 +232,7 @@ func (s *session) writePacket(buffer *buf.Buffer) error {
 			mtu := tooLarge.MaxPayloadSize - 1
 			if mtu < minimumLinkMTU {
 				datagram.Release()
-				return E.New("QUIC connection is unable to carry ", minimumLinkMTU, " bytes packets")
+				return E.Cause1(transportHTTP.ErrHTTP3Unavailable, E.New("QUIC connection is unable to carry ", minimumLinkMTU, " bytes packets"))
 			}
 			datagram.Advance(1)
 			s.handler.handlePacketTooBig(datagram, mtu)

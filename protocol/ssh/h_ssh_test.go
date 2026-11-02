@@ -16,12 +16,14 @@ import (
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/adapter/htest"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/json/badoption"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ssh"
 )
@@ -149,8 +151,8 @@ func startInbound(t *testing.T, mutate func(*option.SSHInboundOptions)) *sshFixt
 	in, err := NewInbound(context.Background(), f.router, log.NewNOPFactory().Logger(), "ssh-in", f.inOption)
 	require.NoError(t, err)
 	f.inbound = in.(*Inbound)
-	require.NoError(t, f.inbound.Start(adapter.StartStateStart))
-	t.Cleanup(func() { f.inbound.Close() })
+	require.NoError(t, htest.Start(f.inbound, adapter.StartStateStart))
+	t.Cleanup(func() { _ = htest.Close(f.inbound) })
 	f.addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(int(f.port)))
 	return f
 }
@@ -281,7 +283,6 @@ func TestH_SSHInboundRejectsNonForwardChannels(t *testing.T) {
 }
 
 func TestH_SSHInboundServerVersion(t *testing.T) {
-	t.Skip("BUG: SSHInboundOptions.ServerVersion is never applied to ssh.ServerConfig (protocol/ssh/inbound.go:55)")
 	t.Parallel()
 	f := startInbound(t, func(o *option.SSHInboundOptions) { o.ServerVersion = "SSH-2.0-HiddifyTest" })
 	client, err := f.dial("alice", ssh.Password("wonderland"))
@@ -316,7 +317,7 @@ func TestH_SSHOutboundToInboundTCP(t *testing.T) {
 	conn, err := out.DialContext(ctx, N.NetworkTCP, M.ParseSocksaddr("198.51.100.7:9000"))
 	require.NoError(t, err)
 	require.True(t, out.IsReady())
-	require.Empty(t, out.connectionErr)
+	require.Empty(t, out.connectionErr.Load())
 	echoOnce(t, conn, "outbound tcp")
 	conn.Close()
 	md := f.router.last(t)
@@ -345,12 +346,11 @@ func TestH_SSHOutboundConnectErrorRecorded(t *testing.T) {
 	defer cancel()
 	_, err := out.DialContext(ctx, N.NetworkTCP, M.ParseSocksaddr("10.0.0.1:80"))
 	require.ErrorContains(t, err, "host key mismatch")
-	require.Contains(t, out.connectionErr, "host key mismatch")
+	require.Contains(t, out.connectionErr.Load(), "host key mismatch")
 	require.False(t, out.IsReady())
 }
 
 func TestH_SSHOutboundProxyDisplayName(t *testing.T) {
-	t.Skip("BUG: ProxyDisplayName builds a status string but returns s.connectionErr (protocol/ssh/outbound.go:375)")
 	t.Parallel()
 	f := startInbound(t, nil)
 	out := newTestOutbound(t, f, nil)
@@ -411,7 +411,6 @@ func TestH_SSHOutboundUDPWithoutUoT(t *testing.T) {
 }
 
 func TestH_SSHOutboundUoTStreamAccounting(t *testing.T) {
-	t.Skip("BUG: DialContext(udp) with UoT increments s.streams before delegating to uotClient, which dials again; the first increment is never released (protocol/ssh/outbound.go:299,310)")
 	t.Parallel()
 	f := startInbound(t, nil)
 	out := newTestOutbound(t, f, func(o *option.SSHOutboundOptions) {

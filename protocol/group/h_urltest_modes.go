@@ -3,6 +3,7 @@ package group
 import (
 	"context"
 	"errors"
+	"maps"
 	"net"
 	"os"
 	"sync/atomic"
@@ -306,9 +307,7 @@ func (g *URLTestGroup) failoverCheck(ctx context.Context) map[string]uint16 {
 			others = append(others, detour)
 		}
 	}
-	for tag, delay := range g.testMembers(ctx, others, false) {
-		result[tag] = delay
-	}
+	maps.Copy(result, g.testMembers(ctx, others, false))
 	return result
 }
 

@@ -32,6 +32,8 @@ func TestH_HTTP3TransportErrorClassification(t *testing.T) {
 		{"handshake_timeout", &quic.HandshakeTimeoutError{}, true},
 		{"idle_timeout", &quic.IdleTimeoutError{}, true},
 		{"connection_reset", &quic.StatelessResetError{}, true},
+		{"remote_http3_internal", &http3.Error{Remote: true, ErrorCode: http3.ErrCodeInternalError}, true},
+		{"local_http3_internal", &http3.Error{Remote: false, ErrorCode: http3.ErrCodeInternalError}, false},
 		{"connect_eof", io.EOF, true},
 		{"no_h3_alpn", &quic.TransportError{ErrorCode: 0x178}, true},
 		{"bad_certificate", &quic.TransportError{ErrorCode: 0x12a}, false},

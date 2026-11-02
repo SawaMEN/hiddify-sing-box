@@ -3,13 +3,12 @@ package psiphon
 import (
 	"context"
 	"encoding/base64"
-	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing/service"
 	"net"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/sagernet/sing-box/adapter"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/hiddify/secret"
 	"github.com/sagernet/sing-box/log"
@@ -17,6 +16,8 @@ import (
 	"github.com/sagernet/sing/common/json/badoption"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+	"github.com/sagernet/sing/service"
+
 	"github.com/stretchr/testify/require"
 )
 

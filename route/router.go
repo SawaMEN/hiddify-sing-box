@@ -50,7 +50,7 @@ type Router struct {
 	pauseManager      pause.Manager
 	trackers          []adapter.ConnectionTracker
 	platformInterface adapter.PlatformInterface
-	dnsHijackSlots    chan struct{} //H: bounds the hijacked DNS queries handed off by HijackDNSPacket
+	dnsHijackSlots    chan struct{} // H: bounds the hijacked DNS queries handed off by HijackDNSPacket
 }
 
 func NewRouter(ctx context.Context, logFactory log.Factory, options option.RouteOptions, dnsOptions option.DNSOptions) *Router {

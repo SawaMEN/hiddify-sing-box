@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"sync"
@@ -16,9 +17,7 @@ func (f *fakeExchanger) FetchCookies() (map[string]string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := make(map[string]string, len(f.jar))
-	for k, v := range f.jar {
-		out[k] = v
-	}
+	maps.Copy(out, f.jar)
 	return out, nil
 }
 
@@ -26,9 +25,7 @@ func (f *fakeExchanger) ApplyCookies(jar map[string]string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.jar = make(map[string]string, len(jar))
-	for k, v := range jar {
-		f.jar[k] = v
-	}
+	maps.Copy(f.jar, jar)
 	return nil
 }
 
@@ -154,7 +151,7 @@ func TestCookieStoreConcurrentSave(t *testing.T) {
 	store, _ := NewCookieStore(path)
 
 	var wg sync.WaitGroup
-	for i := 0; i < 16; i++ {
+	for i := range 16 {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()

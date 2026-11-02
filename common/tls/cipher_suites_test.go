@@ -74,20 +74,20 @@ func TestExplicitLegacyRSACipherNegotiatesTLS12(t *testing.T) {
 	}
 	certDER, err := x509.CreateCertificate(rand.Reader, &x509.Certificate{
 		SerialNumber: big.NewInt(1),
-		Subject: pkix.Name{CommonName: "localhost"},
-		DNSNames: []string{"localhost"},
-		NotBefore: time.Now().Add(-time.Minute),
-		NotAfter: time.Now().Add(time.Hour),
-		KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		Subject:      pkix.Name{CommonName: "localhost"},
+		DNSNames:     []string{"localhost"},
+		NotBefore:    time.Now().Add(-time.Minute),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}, &x509.Certificate{
 		SerialNumber: big.NewInt(1),
-		Subject: pkix.Name{CommonName: "localhost"},
-		DNSNames: []string{"localhost"},
-		NotBefore: time.Now().Add(-time.Minute),
-		NotAfter: time.Now().Add(time.Hour),
-		KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		Subject:      pkix.Name{CommonName: "localhost"},
+		DNSNames:     []string{"localhost"},
+		NotBefore:    time.Now().Add(-time.Minute),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}, &key.PublicKey, key)
 	if err != nil {
 		t.Fatal(err)
@@ -101,15 +101,15 @@ func TestExplicitLegacyRSACipherNegotiatesTLS12(t *testing.T) {
 	server := tls.Server(srv, &tls.Config{
 		Certificates: []tls.Certificate{{Certificate: [][]byte{certDER}, PrivateKey: key}},
 		CipherSuites: ids,
-		MinVersion: tls.VersionTLS12,
-		MaxVersion: tls.VersionTLS12,
+		MinVersion:   tls.VersionTLS12,
+		MaxVersion:   tls.VersionTLS12,
 	})
 	client := tls.Client(cli, &tls.Config{
-		ServerName: "localhost",
+		ServerName:         "localhost",
 		InsecureSkipVerify: true, // Test-only certificate: the cipher is under test.
-		CipherSuites: ids,
-		MinVersion: tls.VersionTLS12,
-		MaxVersion: tls.VersionTLS12,
+		CipherSuites:       ids,
+		MinVersion:         tls.VersionTLS12,
+		MaxVersion:         tls.VersionTLS12,
 	})
 	serverResult := make(chan error, 1)
 	go func() { serverResult <- server.Handshake() }()
@@ -124,7 +124,6 @@ func TestExplicitLegacyRSACipherNegotiatesTLS12(t *testing.T) {
 	}
 }
 
-
 func TestEveryGoLegacyTLS12SuiteNegotiatesWhenSelected(t *testing.T) {
 	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -138,12 +137,12 @@ func TestEveryGoLegacyTLS12SuiteNegotiatesWhenSelected(t *testing.T) {
 		t.Helper()
 		template := &x509.Certificate{
 			SerialNumber: big.NewInt(42),
-			Subject: pkix.Name{CommonName: "localhost"},
-			DNSNames: []string{"localhost"},
-			NotBefore: time.Now().Add(-time.Minute),
-			NotAfter: time.Now().Add(time.Hour),
-			KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-			ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+			Subject:      pkix.Name{CommonName: "localhost"},
+			DNSNames:     []string{"localhost"},
+			NotBefore:    time.Now().Add(-time.Minute),
+			NotAfter:     time.Now().Add(time.Hour),
+			KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+			ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		}
 		der, err := x509.CreateCertificate(rand.Reader, template, template, publicKey, key)
 		if err != nil {
@@ -174,15 +173,15 @@ func TestEveryGoLegacyTLS12SuiteNegotiatesWhenSelected(t *testing.T) {
 			server := tls.Server(serverConn, &tls.Config{
 				Certificates: []tls.Certificate{certificate},
 				CipherSuites: ids,
-				MinVersion: tls.VersionTLS12,
-				MaxVersion: tls.VersionTLS12,
+				MinVersion:   tls.VersionTLS12,
+				MaxVersion:   tls.VersionTLS12,
 			})
 			client := tls.Client(clientConn, &tls.Config{
-				ServerName: "localhost",
+				ServerName:         "localhost",
 				InsecureSkipVerify: true, // The generated test certificate is self-signed.
-				CipherSuites: ids,
-				MinVersion: tls.VersionTLS12,
-				MaxVersion: tls.VersionTLS12,
+				CipherSuites:       ids,
+				MinVersion:         tls.VersionTLS12,
+				MaxVersion:         tls.VersionTLS12,
 			})
 			result := make(chan error, 1)
 			go func() { result <- server.Handshake() }()

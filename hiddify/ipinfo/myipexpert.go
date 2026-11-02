@@ -5,8 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/biter777/countries"
 	N "github.com/sagernet/sing/common/network"
+
+	"github.com/biter777/countries"
 )
 
 // MyIPExpertProvider struct and implementation.

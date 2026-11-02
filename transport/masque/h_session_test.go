@@ -21,7 +21,7 @@ func TestH_InsufficientQUICMTUAllowsVersionFallback(t *testing.T) {
 	current := &session{datagrams: &limitedDatagramStream{}}
 	packet := buf.NewSize(PacketHeadroom + minimumLinkMTU)
 	packet.Resize(PacketHeadroom, minimumLinkMTU)
-	err := current.writePackets([]*buf.Buffer{packet})
+	err := current.writePacket(packet)
 	require.ErrorIs(t, err, transportHTTP.ErrHTTP3Unavailable)
 	require.ErrorContains(t, err, "unable to carry 1280 bytes packets")
 }

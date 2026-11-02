@@ -21,7 +21,6 @@ import (
 	mierucommon "github.com/enfein/mieru/v3/apis/common"
 	mierumodel "github.com/enfein/mieru/v3/apis/model"
 	mierupb "github.com/enfein/mieru/v3/pkg/appctl/appctlpb"
-	"google.golang.org/protobuf/proto"
 )
 
 type Outbound struct {
@@ -174,22 +173,22 @@ func buildMieruClientConfig(options option.MieruOutboundOptions, dialer mieruDia
 		intport := int32(pr.Port)
 
 		server.PortBindings = append(server.PortBindings, &mierupb.PortBinding{
-			PortRange: proto.String(pr.PortRange),
+			PortRange: new(pr.PortRange),
 			Port:      &intport,
 			Protocol:  getTransportProtocol(pr.Protocol),
 		})
 	}
 	if M.IsDomainName(options.Server) {
-		server.DomainName = proto.String(options.Server)
+		server.DomainName = new(options.Server)
 	} else {
-		server.IpAddress = proto.String(options.Server)
+		server.IpAddress = new(options.Server)
 	}
 	config := &mieruclient.ClientConfig{
 		Profile: &mierupb.ClientProfile{
-			ProfileName: proto.String("sing-box"),
+			ProfileName: new("sing-box"),
 			User: &mierupb.User{
-				Name:     proto.String(options.UserName),
-				Password: proto.String(options.Password),
+				Name:     new(options.UserName),
+				Password: new(options.Password),
 			},
 			Servers:       []*mierupb.ServerEndpoint{server},
 			HandshakeMode: getHandshakeMode(options.HandshakeMode),
@@ -204,7 +203,7 @@ func buildMieruClientConfig(options option.MieruOutboundOptions, dialer mieruDia
 		},
 	}
 	if options.MTU != 0 {
-		config.Profile.Mtu = proto.Int32(options.MTU)
+		config.Profile.Mtu = new(options.MTU)
 	}
 	if multiplexing, ok := mierupb.MultiplexingLevel_value[options.Multiplexing]; ok {
 		config.Profile.Multiplexing = &mierupb.MultiplexingConfig{
@@ -213,9 +212,10 @@ func buildMieruClientConfig(options option.MieruOutboundOptions, dialer mieruDia
 	}
 	return config, nil
 }
+
 func validateMieruOptions(options option.MieruOutboundOptions) error {
 	if options.MTU != 0 && (options.MTU < 1280 || options.MTU > 1500) {
-		return fmt.Errorf("Mieru MTU must be between 1280 and 1500")
+		return fmt.Errorf("mieru MTU must be between 1280 and 1500")
 	}
 	if options.Server == "" {
 		return fmt.Errorf("server is empty")
@@ -224,7 +224,7 @@ func validateMieruOptions(options option.MieruOutboundOptions) error {
 		return fmt.Errorf("either server_port or transport must be set")
 	}
 	if options.ServerPort != 0 && (len(options.PortBindings) != 1 || options.PortBindings[0].Port != options.ServerPort) {
-		return fmt.Errorf("Transport of Server Port is not defined!")
+		return fmt.Errorf("transport of Server Port is not defined")
 	}
 	if options.UserName == "" {
 		return fmt.Errorf("username is empty")

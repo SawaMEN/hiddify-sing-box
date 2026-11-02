@@ -33,6 +33,23 @@ linters:
         - -SA4023 # impossible nil comparison, false positive on platform-specific implementations
   exclusions:
     generated: lax
+    rules:
+      # These APIs define existing wire/cache formats or low-level HTTP/2
+      # CONNECT streams. Replacing them changes compatibility, not correctness.
+      - linters: [staticcheck]
+        text: 'SA1019: .*github.com/sagernet/sing/common/varbin\.'
+      - linters: [staticcheck]
+        text: 'SA1019: .*golang.org/x/net/http2'
+      # Explicit legacy configuration support and its regression tests.
+      - linters: [staticcheck]
+        text: 'SA1019: .*MultiDNSServerOptions|SA1019: .*RuleSetIPCIDRAcceptEmpty|SA1019: .*InboundDetour|SA1019: .*RemoteServerListUrl'
+      # Keep the existing retry behaviour for older net.Error implementations.
+      - linters: [staticcheck]
+        text: 'SA1019: .*net.Error.*Temporary'
+      # Xray exposes these byte-slice pools as a stable API.
+      - linters: [staticcheck]
+        path: 'common/xray/(buf/buffer|bytespool/pool)\.go|protocol/vless/encryption/common\.go'
+        text: 'SA6002:'
     presets:
       - comments
       - common-false-positives

@@ -24,6 +24,7 @@ func (d *quicProxyDeadline) set(at time.Time) {
 	}
 	d.changed = make(chan struct{})
 }
+
 func (d *quicProxyDeadline) snapshot() (time.Time, <-chan struct{}) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -32,10 +33,12 @@ func (d *quicProxyDeadline) snapshot() (time.Time, <-chan struct{}) {
 	}
 	return d.at, d.changed
 }
+
 func (d *quicProxyDeadline) expired() bool {
 	at, _ := d.snapshot()
 	return !at.IsZero() && !time.Now().Before(at)
 }
+
 func (d *quicProxyDeadline) wait(ctx context.Context, ready <-chan struct{}) error {
 	for {
 		select {

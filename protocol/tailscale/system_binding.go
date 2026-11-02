@@ -9,11 +9,10 @@ import (
 	"syscall"
 
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/control"
 	"github.com/sagernet/sing/common/logger"
-	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/service"
 	"github.com/sagernet/tailscale/net/netmon"
 	"github.com/sagernet/tailscale/types/nettype"
@@ -101,8 +100,4 @@ func newSystemBinding(ctx context.Context, logger logger.ContextLogger) (systemB
 			return tun.NewUDPEgressConn(udpConn, egressPool), nil
 		},
 	}, nil
-}
-
-func (b systemBinding) hooks(dialer N.Dialer) netmon.Hooks {
-	return netmon.Hooks{Dialer: dialer, Control: b.control, ListenPacket: b.listenPacket}
 }

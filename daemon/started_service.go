@@ -51,7 +51,7 @@ type StartedService struct {
 	oomKillerEnabled  bool
 	oomKillerDisabled bool
 	oomMemoryLimit    uint64
-	extraServices     []adapter.LifecycleService //H
+	extraServices     []adapter.LifecycleService // H
 	// workingDirectory string
 	// tempDirectory    string
 	// userID           int
@@ -87,7 +87,7 @@ type ServiceOptions struct {
 	OOMKillerEnabled  bool
 	OOMKillerDisabled bool
 	OOMMemoryLimit    uint64
-	ExtraServices     []adapter.LifecycleService //H
+	ExtraServices     []adapter.LifecycleService // H
 	// WorkingDirectory   string
 	// TempDirectory      string
 	// UserID             int
@@ -105,7 +105,7 @@ func NewStartedService(options ServiceOptions) *StartedService {
 		oomKillerEnabled:  options.OOMKillerEnabled,
 		oomKillerDisabled: options.OOMKillerDisabled,
 		oomMemoryLimit:    options.OOMMemoryLimit,
-		extraServices:     options.ExtraServices, //H
+		extraServices:     options.ExtraServices, // H
 		// workingDirectory: options.WorkingDirectory,
 		// tempDirectory:    options.TempDirectory,
 		// userID:           options.UserID,
@@ -292,7 +292,7 @@ func (s *StartedService) StartOrReloadService(ctx context.Context, profileConten
 		s.serviceAccess.Unlock()
 		return err
 	}
-	for _, extraService := range s.extraServices { //H
+	for _, extraService := range s.extraServices { // H
 		instance.Box().AddService(extraService)
 	}
 	instance.urlTestHistoryStorage.AddUpdateHook(s.urlTestSubscriber)

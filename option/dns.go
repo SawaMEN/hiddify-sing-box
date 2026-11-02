@@ -210,8 +210,10 @@ type RemoteHTTPSDNSServerOptions struct {
 
 type GroupDNSServerOptions struct {
 	Servers      []string           `json:"servers" reference:"dns_server"`
-	Mode         string             `json:"mode,omitempty"`          //H
-	IgnoreRanges []badoption.Prefix `json:"ignore_ranges,omitempty"` //H
+	Mode         string             `json:"mode,omitempty"`          // H
+	ErrorTTL     badoption.Duration `json:"error_ttl,omitempty"`     // H
+	WinTTL       badoption.Duration `json:"win_ttl,omitempty"`       // H
+	IgnoreRanges []badoption.Prefix `json:"ignore_ranges,omitempty"` // H
 }
 
 type FakeIPDNSServerOptions struct {
@@ -229,13 +231,13 @@ type MDNSDNSServerOptions struct {
 	Interface badoption.Listable[string] `json:"interface,omitempty"`
 }
 
-type SDNSDNSServerOptions struct { //H
+type SDNSDNSServerOptions struct { // H
 	RemoteDNSServerOptions
 	Stamp string `json:"stamp"`
 }
 
 // Deprecated: use GroupDNSServerOptions.
-type MultiDNSServerOptions struct { //H
+type MultiDNSServerOptions struct { // H
 	RawLocalDNSServerOptions
 	Servers      []string           `json:"servers,omitempty"`
 	Parallel     bool               `json:"parallel,omitempty"`

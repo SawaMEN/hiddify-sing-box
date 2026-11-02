@@ -359,7 +359,7 @@ func TestH_LegacyRouteActionTimeoutApplied(t *testing.T) {
 		defaultDomainStrategy: C.DomainStrategyAsIS,
 	}
 	require.NoError(t, router.Initialize([]option.DNSRule{rule, hLegacyModeRule()}))
-	require.NoError(t, router.Start(adapter.StartStateStart))
+	require.NoError(t, router.Start(adapter.StartStateStart, adapter.NewScope(context.Background(), log.NewNOPFactory().NewLogger("dns"))))
 	t.Cleanup(func() { router.Close() })
 
 	_, err := router.Exchange(context.Background(), hQuery("example.com"), adapter.DNSQueryOptions{})

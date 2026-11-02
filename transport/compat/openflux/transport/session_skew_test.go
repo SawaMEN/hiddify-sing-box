@@ -75,7 +75,7 @@ func TestSessionEqualPriorityCarriersWithLatencySkew(t *testing.T) {
 
 	const total = 3000
 	sent := 0
-	for i := 0; i < total; i++ {
+	for i := range total {
 		p := testIPv4(40, 17)
 		copy(p[12:], []byte{10, 10, 10, 2})
 		copy(p[16:], []byte{8, 8, 8, 8})

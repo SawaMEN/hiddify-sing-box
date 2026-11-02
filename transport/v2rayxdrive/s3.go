@@ -96,7 +96,7 @@ func validS3Name(name string) bool {
 			return false
 		}
 	}
-	for _, part := range strings.Split(name, "/") {
+	for part := range strings.SplitSeq(name, "/") {
 		if part == "" || part == "." || part == ".." {
 			return false
 		}
@@ -262,7 +262,7 @@ func (s *s3Storage) do(ctx context.Context, method, key string, query url.Values
 	backoff := s.backoff
 	var lastErr error
 	var retryAfter time.Duration
-	for attempt := 0; attempt < driveMaxAttempts; attempt++ {
+	for attempt := range driveMaxAttempts {
 		if attempt > 0 {
 			delay := max(jitter(backoff), retryAfter)
 			timer := time.NewTimer(min(delay, driveMaxBackoff))
@@ -299,8 +299,7 @@ func (s *s3Storage) do(ctx context.Context, method, key string, query url.Values
 }
 
 func retryS3Error(err error) bool {
-	var dns *net.DNSError
-	if stderrors.As(err, &dns) {
+	if dns, ok := stderrors.AsType[*net.DNSError](err); ok {
 		return dns.IsTimeout || dns.IsTemporary
 	}
 	var op *net.OpError

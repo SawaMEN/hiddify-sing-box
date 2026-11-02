@@ -14,6 +14,7 @@ import (
 
 	"github.com/sagernet/sing-box/common/xray/crypto"
 	E "github.com/sagernet/sing/common/exceptions"
+
 	"lukechampine.com/blake3"
 )
 
@@ -143,7 +144,7 @@ func (i *ServerInstance) Handshake(conn net.Conn, fallback *[]byte) (*CommonConn
 		if lastCTR != nil {
 			lastCTR.XORKeyStream(relays, relays[:32]) // recover this relay
 		}
-		var index = 32
+		index := 32
 		if _, ok := k.(*mlkem.DecapsulationKey768); ok {
 			index = 1088
 		}

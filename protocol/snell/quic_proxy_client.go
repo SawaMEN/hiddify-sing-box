@@ -115,6 +115,7 @@ func (c *quicProxyLazyClient) connect(initial []byte, addr net.Addr) error {
 	close(c.ready)
 	return nil
 }
+
 func (c *quicProxyLazyClient) WriteTo(b []byte, addr net.Addr) (int, error) {
 	if c.closed.Load() {
 		return 0, net.ErrClosed
@@ -135,6 +136,7 @@ func (c *quicProxyLazyClient) WriteTo(b []byte, addr net.Addr) (int, error) {
 	c.mu.Unlock()
 	return conn.WriteTo(b, addr)
 }
+
 func (c *quicProxyLazyClient) ReadFrom(b []byte) (int, net.Addr, error) {
 	if err := c.readDeadline.wait(c.ctx, c.ready); err != nil {
 		if c.closed.Load() {
@@ -153,6 +155,7 @@ func (c *quicProxyLazyClient) ReadFrom(b []byte) (int, net.Addr, error) {
 	}
 	return conn.ReadFrom(b)
 }
+
 func (c *quicProxyLazyClient) Close() error {
 	if c.closed.Swap(true) {
 		return nil
@@ -168,6 +171,7 @@ func (c *quicProxyLazyClient) Close() error {
 	}
 	return nil
 }
+
 func (c *quicProxyLazyClient) LocalAddr() net.Addr {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -176,6 +180,7 @@ func (c *quicProxyLazyClient) LocalAddr() net.Addr {
 	}
 	return &net.UDPAddr{}
 }
+
 func (c *quicProxyLazyClient) SetDeadline(t time.Time) error {
 	c.readDeadline.set(t)
 	c.writeDeadline.set(t)
@@ -186,6 +191,7 @@ func (c *quicProxyLazyClient) SetDeadline(t time.Time) error {
 	}
 	return nil
 }
+
 func (c *quicProxyLazyClient) SetReadDeadline(t time.Time) error {
 	c.readDeadline.set(t)
 	c.mu.Lock()
@@ -195,6 +201,7 @@ func (c *quicProxyLazyClient) SetReadDeadline(t time.Time) error {
 	}
 	return nil
 }
+
 func (c *quicProxyLazyClient) SetWriteDeadline(t time.Time) error {
 	c.writeDeadline.set(t)
 	c.mu.Lock()
@@ -237,6 +244,7 @@ func (c *quicProxyDatagramConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 	}
 	return c.Conn.Write(p)
 }
+
 func (c *quicProxyDatagramConn) ReadFrom(p []byte) (int, net.Addr, error) {
 	n, err := c.Conn.Read(p)
 	if n > 0 {

@@ -63,7 +63,7 @@ func (w *WARPEndpoint) scannerEnabled() bool {
 // connect starts the first inner endpoint. Network work runs without w.mtx, which is taken
 // only to publish the inner endpoint: a dial during the start must not wait for a scan.
 func (w *WARPEndpoint) connect(done <-chan struct{}, config *C.WARPConfig) {
-	peerAddr, peerPort, err := warpPeerEndpoint(config, w.options.ServerOptions) //H: a config without peers or ports crashed the process
+	peerAddr, peerPort, err := warpPeerEndpoint(config, w.options.ServerOptions) // H: a config without peers or ports crashed the process
 	if err != nil {
 		w.fail(err)
 		return
@@ -370,7 +370,7 @@ func (w *WARPEndpoint) saveScores() {
 // InterfaceUpdated passes the network change to the inner endpoint (which rebinds its socket)
 // and checks the endpoint in use on the new network.
 func (w *WARPEndpoint) InterfaceUpdated(ctx context.Context) {
-	w.clearFailedModes() //H: auto mode: on a new network every tunnel may connect again
+	w.clearFailedModes() // H: auto mode: on a new network every tunnel may connect again
 	w.mtx.Lock()
 	inner := w.endpoint
 	w.mtx.Unlock()

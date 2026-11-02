@@ -13,26 +13,26 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/urltest"
+	"github.com/sagernet/sing-box/hiddify/ipinfo"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	tun "github.com/sagernet/sing-tun"
-	E "github.com/sagernet/sing/common/exceptions"
-	"github.com/sagernet/sing/service"
-
-	"github.com/sagernet/sing-box/hiddify/ipinfo"
-	"github.com/sagernet/sing/common/x/list"
-
 	"github.com/sagernet/sing/common"
+	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/json/badoption"
 	N "github.com/sagernet/sing/common/network"
+	"github.com/sagernet/sing/common/x/list"
+	"github.com/sagernet/sing/service"
 	"github.com/sagernet/sing/service/pause"
 )
 
 const TimeoutDelay uint16 = 65535
 
-var _ adapter.ConnectionTracker = (*OutboundMonitoring)(nil)
-var _ adapter.LifecycleService = (*OutboundMonitoring)(nil)
-var _ adapter.InterfaceUpdateListener = (*OutboundMonitoring)(nil)
+var (
+	_ adapter.ConnectionTracker       = (*OutboundMonitoring)(nil)
+	_ adapter.LifecycleService        = (*OutboundMonitoring)(nil)
+	_ adapter.InterfaceUpdateListener = (*OutboundMonitoring)(nil)
+)
 
 const (
 	defaultWorkerCount    = 10
@@ -61,12 +61,11 @@ type OutboundMonitoring struct {
 	cache            adapter.CacheFile
 	ctx              context.Context
 	cancel           context.CancelFunc
-	tag              string
 	pause            pause.Manager
 	pauseCallback    *list.Element[pause.Callback]
 	started          atomic.Bool
 	urls             []string
-	ipInfoURL        string //H
+	ipInfoURL        string // H
 	currentLinkIndex atomic.Uint32
 	access           sync.Mutex
 	idleTimeout      time.Duration
@@ -89,7 +88,7 @@ type OutboundMonitoring struct {
 
 	cacheDirty atomic.Bool
 
-	cycleSeq     uint64
+	cycleSeq     atomic.Uint64
 	cycleRunning atomic.Bool
 
 	workerWG    sync.WaitGroup
@@ -98,6 +97,10 @@ type OutboundMonitoring struct {
 }
 
 // InterfaceUpdated implements [adapter.InterfaceUpdateListener].
+func (m *OutboundMonitoring) NetworkChanged() { // Force a new test cycle when the network changes.
+	m.InterfaceUpdated(m.ctx)
+}
+
 func (m *OutboundMonitoring) InterfaceUpdated(ctx context.Context) {
 	m.startCycleOnce()
 }
@@ -108,7 +111,6 @@ func (m *OutboundMonitoring) Name() string {
 }
 
 func (m *OutboundMonitoring) OutboundsHistory(groupTag string) map[string]*adapter.URLTestHistory {
-
 	histories := make(map[string]*adapter.URLTestHistory)
 
 	grp, ok := m.reg().groups[groupTag]
@@ -119,7 +121,6 @@ func (m *OutboundMonitoring) OutboundsHistory(groupTag string) map[string]*adapt
 	for outboundTag := range grp.outbounds {
 		histories[outboundTag] = m.getUrlTest(outboundTag)
 		// m.logger.Error("checking history for outbound ", outboundTag)
-
 	}
 	return histories
 }
@@ -143,10 +144,9 @@ func (m *OutboundMonitoring) getUrlTest(outboundTag string) *adapter.URLTestHist
 	state.mu.Lock()
 	his := state.history
 	his.IsFromCache = state.from_cache
-	his.IpInfoFromCache = state.ipInfoFromCache //H
+	his.IpInfoFromCache = state.ipInfoFromCache // H
 	state.mu.Unlock()
 	return &his
-
 }
 
 func (m *OutboundMonitoring) getMinGroupOutboundHistory(groupTag string) *adapter.URLTestHistory {
@@ -190,13 +190,13 @@ func (m *OutboundMonitoring) getMinGroupOutboundHistory(groupTag string) *adapte
 	}
 
 	return final
-
 }
 
 func (m *OutboundMonitoring) RoutedConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, matchedRule adapter.Rule, matchOutbound adapter.Outbound) net.Conn {
 	m.Touch()
 	return conn
 }
+
 func (m *OutboundMonitoring) RoutedPacketConnection(ctx context.Context, conn N.PacketConn, metadata adapter.InboundContext, matchedRule adapter.Rule, matchOutbound adapter.Outbound) N.PacketConn {
 	m.Touch()
 	return conn
@@ -252,7 +252,7 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 		ctx:             ctx,
 		cancel:          cancel,
 		urls:            cloned,
-		ipInfoURL:       options.IpInfoURL, //H
+		ipInfoURL:       options.IpInfoURL, // H
 		pause:           service.FromContext[pause.Manager](ctx),
 		logger:          logger,
 		outboundManager: service.FromContext[adapter.OutboundManager](ctx),
@@ -314,6 +314,7 @@ func (m *OutboundMonitoring) startTimerWorkers() {
 	m.schedulerWG.Add(1)
 	go m.scheduleLoop(m.mainTicker) // H: the field is cleared by stopTimerWorkers
 }
+
 func (m *OutboundMonitoring) stopTimerWorkers() {
 	m.access.Lock() // H: mainTicker is also read by Touch
 	defer m.access.Unlock()
@@ -359,10 +360,13 @@ func (m *OutboundMonitoring) signalChange(outboundTag string, visited map[string
 		m.signalChange(dependent, visited)
 	}
 }
+
 func (m *OutboundMonitoring) TestNow(outboundTag string) error {
-	m.testParents(outboundTag, true)
+	// Test the dependency first. Its completed result schedules dependents,
+	// rather than probing them concurrently through an untested detour.
 	return m.testNow(outboundTag, true)
 }
+
 func (m *OutboundMonitoring) testNow(outboundTag string, priority bool) error {
 	m.logger.Info("testing outbound ", outboundTag, " with priority: ", priority)
 	if grp, ok := m.reg().groups[outboundTag]; ok {
@@ -377,13 +381,11 @@ func (m *OutboundMonitoring) testNow(outboundTag string, priority bool) error {
 
 		task := &testTask{
 			outboundTag: outboundTag,
-			cycleID:     atomic.LoadUint64(&m.cycleSeq),
+			cycleID:     m.cycleSeq.Load(),
 			priority:    priority,
 		}
 
-		if !m.enqueueTask(task) {
-			// return errors.New("test already queued")
-		}
+		m.enqueueTask(task) // H
 	}
 	return nil
 }
@@ -415,7 +417,7 @@ func (m *OutboundMonitoring) InvalidateTest(outboundTag string) error {
 
 	m.enqueueTask(&testTask{
 		outboundTag: outboundTag,
-		cycleID:     atomic.LoadUint64(&m.cycleSeq),
+		cycleID:     m.cycleSeq.Load(),
 		priority:    true,
 	})
 
@@ -423,12 +425,12 @@ func (m *OutboundMonitoring) InvalidateTest(outboundTag string) error {
 }
 
 func (m *OutboundMonitoring) SubscribeGroup(groupTag string) (observer <-chan GroupEvent, err error) {
-
 	if g, ok := m.reg().groups[groupTag]; ok {
 		return g.observer.Subscribe(1), nil
 	}
 	return nil, E.New("group not found ", groupTag)
 }
+
 func (m *OutboundMonitoring) UnsubscribeGroup(groupTag string, observer <-chan GroupEvent) (err error) {
 	if g, ok := m.reg().groups[groupTag]; ok {
 		g.observer.Unsubscribe(observer)
@@ -453,7 +455,6 @@ func (m *OutboundMonitoring) Close() error {
 		m.cancel()
 		m.workerWG.Wait()
 		m.schedulerWG.Wait()
-
 	})
 	return nil
 }
@@ -478,15 +479,13 @@ func (m *OutboundMonitoring) scheduleLoop(ticker *time.Ticker) {
 }
 
 func (m *OutboundMonitoring) workerLoop() {
-
 	defer m.workerWG.Done()
 	for {
-
 		select {
 		case <-m.ctx.Done():
 			return
 		case task := <-m.priorityQueue:
-			m.executeTask(task) //for prioritising tasks, we execute them immediately
+			m.executeTask(task) // for prioritising tasks, we execute them immediately
 		default:
 			select {
 			case <-m.ctx.Done():
@@ -520,22 +519,22 @@ func (m *OutboundMonitoring) executeTask(task *testTask) {
 		state.testing = false
 		state.mu.Unlock()
 	}()
-	state.mu.Lock()
-	cycle := task.cycleID
-	state.mu.Unlock()
-
-	if cycle < 10 && !state.outbound.IsReady() {
-		m.logger.Info("outbound ", task.outboundTag, " is not ready, skipping test")
+	if !adapter.IsReady(state.outbound) {
+		m.logger.Info("outbound ", task.outboundTag, " is not ready, deferring test")
+		state.mu.Lock()
+		state.priorityQueued = false
+		state.queued = false
+		state.enqueuedCycle = 0
+		state.mu.Unlock()
+		next := *task
+		next.cycleID++
 		go func() {
 			select {
 			case <-m.ctx.Done():
 				return
-			case <-time.After(3 * time.Second):
+			case <-time.After(250 * time.Millisecond):
 			}
-			state.mu.Lock()
-			task.cycleID++
-			state.mu.Unlock()
-			m.enqueueTask(task)
+			m.enqueueTask(&next)
 		}()
 		return
 	}
@@ -559,7 +558,6 @@ func (m *OutboundMonitoring) executeTask(task *testTask) {
 			case <-m.ctx.Done():
 			default:
 			}
-
 		}
 	}()
 	select {
@@ -567,7 +565,6 @@ func (m *OutboundMonitoring) executeTask(task *testTask) {
 		return
 	case <-done:
 	}
-
 }
 
 func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter.URLTestHistory, error) {
@@ -597,15 +594,15 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 		return his, parent.Err()
 	default:
 	}
-	if out.history.IpInfo == nil || out.ipInfoFromCache { //H
+	if out.history.IpInfo == nil || out.ipInfoFromCache { // H
 
 		ctx, cancel2 := context.WithTimeout(parent, m.urlTestTimeout)
 		defer cancel2()
 
-		var newip *ipinfo.IpInfo //H
-		var t uint16 //H
-		var err error //H
-		if m.ipInfoURL != "" { //H
+		var newip *ipinfo.IpInfo // H
+		var t uint16             // H
+		var err error            // H
+		if m.ipInfoURL != "" {   // H
 			newip, t, err = ipinfo.GetIpInfoFromURL(ctx, out.outbound, m.ipInfoURL)
 		} else {
 			newip, t, err = ipinfo.GetIpInfo(m.logger, ctx, out.outbound)
@@ -638,7 +635,7 @@ func (m *OutboundMonitoring) startCycleOnce() bool {
 }
 
 func (m *OutboundMonitoring) runCycle() {
-	cycleID := atomic.AddUint64(&m.cycleSeq, 1)
+	cycleID := m.cycleSeq.Add(1)
 	tags := m.collectCycleTargets()
 
 	if len(tags) == 0 {
@@ -650,7 +647,7 @@ func (m *OutboundMonitoring) runCycle() {
 		}
 	}()
 
-	for idx, _ := range m.urls {
+	for idx := range m.urls {
 		outcomes := m.runStage(cycleID, tags)
 		success := 0
 		for _, result := range outcomes {
@@ -703,7 +700,6 @@ func (m *OutboundMonitoring) runStage(cycleID uint64, tags []string) []testOutco
 }
 
 func (m *OutboundMonitoring) enqueueTask(task *testTask) bool {
-
 	select {
 	case <-m.ctx.Done():
 		return false
@@ -737,7 +733,6 @@ func (m *OutboundMonitoring) enqueueTask(task *testTask) bool {
 			state.priorityQueued = false
 			return false
 		}
-
 	} else {
 		select {
 		case m.normalQueue <- task:
@@ -748,7 +743,6 @@ func (m *OutboundMonitoring) enqueueTask(task *testTask) bool {
 			return false
 		}
 	}
-
 }
 
 func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHistory {
@@ -762,8 +756,8 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 		return nil
 	}
 	state.mu.Lock()
-	defer state.mu.Unlock()
-
+	firstResult := state.history.Time.IsZero()
+	wasInvalid := state.invalid
 	state.queued = false
 	state.priorityQueued = false
 	state.enqueuedCycle = 0
@@ -776,13 +770,18 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 	state.history.Time = outcome.history.Time
 	state.from_cache = false
 	if outcome.history.IpInfo != nil {
-		state.ipInfoFromCache = false //H
+		state.ipInfoFromCache = false // H
 		state.history.IpInfo = outcome.history.IpInfo
 	}
 	snapshot := state.history
 	m.history.StoreURLTestHistory(outcome.outboundTag, &snapshot)
 
+	state.mu.Unlock()
 	m.emitGroupEvent(state.groupTags)
+	if firstResult || wasInvalid != (outcome.err != nil) {
+		// Retest routes through this member once its availability is known.
+		m.testParents(outcome.outboundTag, true)
+	}
 	return &snapshot
 }
 
@@ -803,8 +802,39 @@ func mergeIpInfo(old, new *ipinfo.IpInfo) *ipinfo.IpInfo {
 	return &new2
 }
 
-func (m *OutboundMonitoring) collectCycleTargets() []string {
+// hasUnmeasuredDependency resolves group detours recursively. A cycle must not
+// probe a route through a parent whose first test has not finished.
+func (m *OutboundMonitoring) hasUnmeasuredDependency(tag string, seen map[string]bool) bool {
+	if seen[tag] {
+		return false
+	}
+	seen[tag] = true
+	registry := m.reg()
+	state := registry.outbounds[tag]
+	if state == nil {
+		return false
+	}
+	for _, dependency := range state.dependencies {
+		parent := registry.outbounds[dependency]
+		if parent == nil {
+			continue
+		}
+		if _, group := registry.groups[dependency]; !group {
+			parent.mu.Lock()
+			untested := parent.history.Time.IsZero()
+			parent.mu.Unlock()
+			if untested {
+				return true
+			}
+		}
+		if m.hasUnmeasuredDependency(dependency, seen) {
+			return true
+		}
+	}
+	return false
+}
 
+func (m *OutboundMonitoring) collectCycleTargets() []string {
 	tags := make([]string, 0, len(m.reg().outbounds))
 
 	delays := make(map[string]uint16, len(tags))
@@ -818,15 +848,27 @@ func (m *OutboundMonitoring) collectCycleTargets() []string {
 			state.mu.Unlock()
 			continue
 		}
-		if state.invalid || time.Since(state.history.Time) >= m.mainInterval {
-			tags = append(tags, tag)
-			delays[tag] = state.history.Delay
-		}
+		needsTest := state.invalid || time.Since(state.history.Time) >= m.mainInterval
+		delay := state.history.Delay
 		state.mu.Unlock()
+		if needsTest && !m.hasUnmeasuredDependency(tag, make(map[string]bool)) {
+			tags = append(tags, tag)
+			delays[tag] = delay
+		}
 	}
 
-	sort.SliceStable(tags, func(i, j int) bool {
-		return delays[tags[i]] < delays[tags[j]]
+	sort.Slice(tags, func(i, j int) bool {
+		a, b := delays[tags[i]], delays[tags[j]]
+		if a == 0 {
+			a = TimeoutDelay
+		}
+		if b == 0 {
+			b = TimeoutDelay
+		}
+		if a == b {
+			return tags[i] < tags[j]
+		}
+		return a < b
 	})
 	return tags
 }
@@ -845,7 +887,6 @@ func (m *OutboundMonitoring) Touch() {
 		return
 	}
 	m.startTimerWorkers()
-
 }
 
 func (m *OutboundMonitoring) emitGroupEvent(groupTags []string) {
@@ -855,6 +896,11 @@ func (m *OutboundMonitoring) emitGroupEvent(groupTags []string) {
 			continue
 		}
 
+		if !m.started.Load() {
+			// Startup and hot-reload changes must reach subscribers even before
+			// the group notifier workers have started.
+			m.emitGroupEventThrottled(groupTag, time.Time{})
+		}
 		select {
 		case grp.notifyCh <- struct{}{}:
 		default:
@@ -863,7 +909,6 @@ func (m *OutboundMonitoring) emitGroupEvent(groupTags []string) {
 }
 
 func (m *OutboundMonitoring) emitGroupEventThrottled(groupTag string, since time.Time) {
-
 	grp, ok := m.reg().groups[groupTag]
 	if !ok || grp.observer == nil {
 		return
@@ -909,7 +954,6 @@ func RealTag(detour adapter.Outbound) string {
 }
 
 func (m *OutboundMonitoring) groupNotifierLoop(grp *groupState) {
-
 	defer m.schedulerWG.Done()
 
 	var (
@@ -977,14 +1021,14 @@ type outboundState struct {
 	dependencies        []string
 	lastURL             string
 
-	invalid        bool
-	queued         bool
-	priorityQueued bool
-	testing        bool
-	enqueuedCycle  uint64
-	from_cache     bool
-	ipInfoFromCache bool //H
-	history adapter.URLTestHistory
+	invalid         bool
+	queued          bool
+	priorityQueued  bool
+	testing         bool
+	enqueuedCycle   uint64
+	from_cache      bool
+	ipInfoFromCache bool // H
+	history         adapter.URLTestHistory
 }
 
 type GroupEvent struct {
@@ -1031,6 +1075,7 @@ func (m *OutboundMonitoring) saveHistory() error {
 	})
 	return nil
 }
+
 func (m *OutboundMonitoring) loadHistory() *History {
 	history := &History{}
 	if m.cache == nil {
@@ -1056,16 +1101,16 @@ func (m *OutboundMonitoring) loadHistory() *History {
 			state.mu.Lock()
 			state.history = *his
 			state.from_cache = true
-			state.ipInfoFromCache = his.IpInfo != nil //H
+			state.ipInfoFromCache = his.IpInfo != nil // H
 			state.mu.Unlock()
 		}
 	}
 	return history
 }
 
- // tested tells whether a completed URL test has recorded a timestamp. //H
- func (s *outboundState) tested() bool {
- 	s.mu.Lock()
- 	defer s.mu.Unlock()
- 	return !s.history.Time.IsZero()
- }
+// tested tells whether a completed URL test has recorded a timestamp. //H
+func (s *outboundState) tested() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return !s.history.Time.IsZero()
+}

@@ -255,16 +255,13 @@ func (r *Resolver) lookupOnServer(ctx context.Context, srv nameServer, host stri
 
 	var wg sync.WaitGroup
 	for _, network := range networks {
-		network := network
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			ips, err := srv.LookupIP(ctx, network, host)
 			select {
 			case ch <- result{ips: ips, err: err}:
 			case <-ctx.Done():
 			}
-		}()
+		})
 	}
 
 	go func() {

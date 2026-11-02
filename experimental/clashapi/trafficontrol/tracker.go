@@ -5,7 +5,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gofrs/uuid/v5"
 	"github.com/sagernet/sing-box/adapter"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing/common"
@@ -13,6 +12,8 @@ import (
 	F "github.com/sagernet/sing/common/format"
 	"github.com/sagernet/sing/common/json"
 	N "github.com/sagernet/sing/common/network"
+
+	"github.com/gofrs/uuid/v5"
 )
 
 type TrackerMetadata struct {
@@ -86,7 +87,7 @@ func (t TrackerMetadata) MarshalJSON() ([]byte, error) {
 		"upload":      t.Upload.Load(),
 		"download":    t.Download.Load(),
 		"start":       t.CreatedAt,
-		"chains":      t.Chain,
+		"chains":      chains, // H
 		"rule":        rule,
 		"rulePayload": "",
 	})

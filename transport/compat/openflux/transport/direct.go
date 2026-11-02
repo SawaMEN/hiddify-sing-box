@@ -322,10 +322,7 @@ func (t *DirectTransport) dialLoop() {
 			return
 		case <-time.After(delay):
 		}
-		delay = time.Duration(float64(delay) * t.config.ReconnectMultiplier)
-		if delay > t.config.ReconnectMaxDelay {
-			delay = t.config.ReconnectMaxDelay
-		}
+		delay = min(time.Duration(float64(delay)*t.config.ReconnectMultiplier), t.config.ReconnectMaxDelay)
 	}
 }
 

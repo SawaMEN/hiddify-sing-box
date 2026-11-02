@@ -233,7 +233,12 @@ func (h *vlessDialer) DialContext(ctx context.Context, network string, destinati
 	} else {
 		conn, err = h.dialer.DialContext(ctx, N.NetworkTCP, h.serverAddr)
 		if err == nil && h.tlsConfig != nil {
+			rawConn := conn
 			conn, err = tls.ClientHandshake(ctx, conn, h.tlsConfig)
+			if err != nil {
+				_ = rawConn.Close()
+				return nil, E.Cause(err, "TLS handshake")
+			}
 			if err == nil && h.vision && baseConn == nil {
 				baseConn = conn
 			}
@@ -245,8 +250,20 @@ func (h *vlessDialer) DialContext(ctx context.Context, network string, destinati
 
 	// Apply encryption if configured
 	if h.encryption != nil {
+		rawConn := conn
+		// The encryption handshake performs blocking reads. Interrupt them when
+		// the caller's deadline expires; a plain net.Conn has no context API.
+		stopHandshake := context.AfterFunc(ctx, func() {
+			_ = rawConn.Close()
+		})
 		conn, err = h.encryption.Handshake(conn)
+		stopHandshake()
+		if ctx.Err() != nil {
+			_ = rawConn.Close()
+			return nil, E.Cause(ctx.Err(), "encryption handshake")
+		}
 		if err != nil {
+			_ = rawConn.Close()
 			return nil, E.Cause(err, "encryption handshake")
 		}
 	}
@@ -298,7 +315,7 @@ func (h *vlessDialer) DialContext(ctx context.Context, network string, destinati
 		if h.xudp {
 			return h.client.DialEarlyXUDPPacketConn(conn, destination)
 		} else if h.packetAddr {
-			if destination.IsFqdn() {
+			if destination.IsDomain() {
 				return nil, E.New("packetaddr: domain destination is not supported")
 			}
 			packetConn, err := h.client.DialEarlyPacketConn(conn, M.Socksaddr{Fqdn: packetaddr.SeqPacketMagicAddress})
@@ -326,7 +343,12 @@ func (h *vlessDialer) ListenPacket(ctx context.Context, destination M.Socksaddr)
 	} else {
 		conn, err = h.dialer.DialContext(ctx, N.NetworkTCP, h.serverAddr)
 		if err == nil && h.tlsConfig != nil {
+			rawConn := conn
 			conn, err = tls.ClientHandshake(ctx, conn, h.tlsConfig)
+			if err != nil {
+				_ = rawConn.Close()
+				return nil, E.Cause(err, "TLS handshake")
+			}
 		}
 	}
 	if err != nil {
@@ -335,16 +357,27 @@ func (h *vlessDialer) ListenPacket(ctx context.Context, destination M.Socksaddr)
 	}
 	// Apply encryption if configured
 	if h.encryption != nil {
+		rawConn := conn
+		// The encryption handshake performs blocking reads. Interrupt them when
+		// the caller's deadline expires; a plain net.Conn has no context API.
+		stopHandshake := context.AfterFunc(ctx, func() {
+			_ = rawConn.Close()
+		})
 		conn, err = h.encryption.Handshake(conn)
+		stopHandshake()
+		if ctx.Err() != nil {
+			_ = rawConn.Close()
+			return nil, E.Cause(ctx.Err(), "encryption handshake")
+		}
 		if err != nil {
-			common.Close(conn)
+			_ = rawConn.Close()
 			return nil, E.Cause(err, "encryption handshake")
 		}
 	}
 	if h.xudp {
 		return h.client.DialEarlyXUDPPacketConn(conn, destination)
 	} else if h.packetAddr {
-		if destination.IsFqdn() {
+		if destination.IsDomain() {
 			return nil, E.New("packetaddr: domain destination is not supported")
 		}
 		conn, err := h.client.DialEarlyPacketConn(conn, M.Socksaddr{Fqdn: packetaddr.SeqPacketMagicAddress})

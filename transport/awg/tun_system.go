@@ -6,8 +6,6 @@ import (
 	"net/netip"
 	"os"
 
-	awgTun "github.com/amnezia-vpn/amneziawg-go/v3/tun"
-
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/dialer"
 	"github.com/sagernet/sing-box/option"
@@ -18,6 +16,8 @@ import (
 	"github.com/sagernet/sing/common/metadata"
 	"github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/service"
+
+	awgTun "github.com/amnezia-vpn/amneziawg-go/v3/tun"
 )
 
 type systemTun struct {
@@ -105,7 +105,7 @@ func (t *systemTun) Read(bufs [][]byte, sizes []int, offset int) (int, error) {
 
 func (t *systemTun) Write(bufs [][]byte, offset int) (int, error) {
 	for _, buf := range bufs {
-		common.ClearArray(buf[offset-tun.PacketOffset : offset])
+		clear(buf[offset-tun.PacketOffset : offset])
 		tun.PacketFillHeader(buf[offset-tun.PacketOffset:], tun.PacketIPVersion(buf[offset:]))
 
 		if _, err := t.singtun.Write(buf[offset-tun.PacketOffset:]); err != nil {

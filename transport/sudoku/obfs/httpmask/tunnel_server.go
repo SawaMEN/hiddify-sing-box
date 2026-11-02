@@ -13,6 +13,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -565,12 +566,7 @@ func (s *TunnelServer) handleStream(rawConn net.Conn, req *httpRequestHeader, he
 }
 
 func (s *TunnelServer) isAllowedBasePath(path string) bool {
-	for _, p := range paths {
-		if path == p {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(paths, path)
 }
 
 func newRequestBodyReader(conn net.Conn, headers map[string]string) (io.Reader, error) {
@@ -999,7 +995,7 @@ func (s *TunnelServer) pollPush(rawConn net.Conn, token string, sequence uint64,
 	}
 
 	var decodedPayload bytes.Buffer
-	for _, line := range bytes.Split(payload, []byte{'\n'}) {
+	for line := range bytes.SplitSeq(payload, []byte{'\n'}) {
 		line = bytes.TrimSpace(line)
 		if len(line) == 0 {
 			continue

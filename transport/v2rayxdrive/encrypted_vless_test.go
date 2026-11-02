@@ -42,6 +42,7 @@ func (h authenticatedEcho) NewConnectionEx(ctx context.Context, c net.Conn, _, _
 	h.users <- user
 	io.Copy(c, c)
 }
+
 func (authenticatedEcho) NewPacketConnectionEx(_ context.Context, c N.PacketConn, _, _ M.Socksaddr, _ N.CloseHandlerFunc) {
 	c.Close()
 }

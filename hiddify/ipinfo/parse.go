@@ -6,7 +6,7 @@ import (
 )
 
 // parseASN accepts JSON numbers, "12322", "AS12322", or "AS12322 Org Name".
-func parseASN(v interface{}) int {
+func parseASN(v any) int {
 	switch x := v.(type) {
 	case float64:
 		return int(x)
@@ -33,7 +33,7 @@ func parseASN(v interface{}) int {
 	}
 }
 
-func stringField(data map[string]interface{}, keys ...string) string {
+func stringField(data map[string]any, keys ...string) string {
 	for _, key := range keys {
 		if v, ok := data[key].(string); ok {
 			if s := strings.TrimSpace(v); s != "" && s != "null" {
@@ -44,7 +44,7 @@ func stringField(data map[string]interface{}, keys ...string) string {
 	return ""
 }
 
-func floatField(data map[string]interface{}, keys ...string) float64 {
+func floatField(data map[string]any, keys ...string) float64 {
 	for _, key := range keys {
 		if v, ok := data[key].(float64); ok {
 			return v
@@ -57,7 +57,7 @@ func floatField(data map[string]interface{}, keys ...string) float64 {
 // custom panel schema:
 //
 //	ip, city, region, country_code, latitude, longitude, asn ("AS1234"|1234), org, ...
-func parseIpApiJSON(data map[string]interface{}, info *IpInfo) {
+func parseIpApiJSON(data map[string]any, info *IpInfo) {
 	info.IP = stringField(data, "ip")
 	info.CountryCode = strings.ToUpper(stringField(data, "country_code"))
 	if info.CountryCode == "" {

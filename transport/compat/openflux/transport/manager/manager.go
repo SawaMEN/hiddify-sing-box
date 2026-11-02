@@ -10,6 +10,7 @@ package manager
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"sync"
@@ -278,12 +279,8 @@ func (m *Manager) AcceptCookies(name string, jar map[string]string) error {
 		kept, _ = m.FetchCookiesFor(name)
 	}
 	merged := make(map[string]string, len(kept)+len(jar))
-	for k, v := range kept {
-		merged[k] = v
-	}
-	for k, v := range jar {
-		merged[k] = v
-	}
+	maps.Copy(merged, kept)
+	maps.Copy(merged, jar)
 	if err := m.ApplyCookiesFor(name, merged); err != nil {
 		return err
 	}

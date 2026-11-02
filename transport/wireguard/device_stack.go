@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
@@ -22,6 +22,8 @@ var _ Device = (*stackDevice)(nil)
 type stackDevice struct {
 	stack        *tun.Go
 	memoryTun    *tun.MemoryTun
+	router       *peerRouter   // H
+	done         chan struct{} // H
 	mtu          uint32
 	events       chan wgTun.Event
 	closeOnce    sync.Once
@@ -30,7 +32,8 @@ type stackDevice struct {
 }
 
 func newStackDevice(options DeviceOptions) (*stackDevice, error) {
-	memoryTun := tun.NewMemoryTun(tun.MemoryTunOptions{MTU: int(options.MTU)})
+	router := newPeerRouter(options)
+	memoryTun := router.memoryTun // H
 	stack, err := newStack(options, memoryTun)
 	if err != nil {
 		router.close()
@@ -40,6 +43,8 @@ func newStackDevice(options DeviceOptions) (*stackDevice, error) {
 	return &stackDevice{
 		stack:        stack,
 		memoryTun:    memoryTun,
+		router:       router,
+		done:         make(chan struct{}),
 		mtu:          options.MTU,
 		events:       make(chan wgTun.Event, 1),
 		inet4Address: inet4Address,
@@ -128,7 +133,8 @@ func (w *stackDevice) File() *os.File {
 }
 
 func (w *stackDevice) Read(bufs [][]byte, sizes []int, offset int) (int, error) {
-	return w.memoryTun.ReadPackets(bufs, sizes, offset)
+	<-w.done // H: the peer router delivers packets directly to peer outbound queues
+	return 0, os.ErrClosed
 }
 
 func (w *stackDevice) Write(bufs [][]byte, offset int) (int, error) {
@@ -158,8 +164,9 @@ func (w *stackDevice) Events() <-chan wgTun.Event {
 func (w *stackDevice) Close() error {
 	var err error
 	w.closeOnce.Do(func() {
+		close(w.done)
 		close(w.events)
-		err = E.Errors(w.stack.Close(), w.memoryTun.Close())
+		err = E.Errors(w.stack.Close(), w.router.close())
 	})
 	return err
 }

@@ -71,6 +71,7 @@ func (h *Outbound) unmarshalOptions(ctx context.Context, registry OutboundOption
 			return E.New("legacy inbound fields are deprecated in sing-box 1.11.0 and removed in sing-box 1.13.0, use rule actions instead")
 		}
 	}
+	MigrateTLSFragment(options)
 	h.Options = options
 	return nil
 }
@@ -93,7 +94,7 @@ type DialerOptionsWrapper interface {
 type DialerOptions struct {
 	// Deprecated: accepted from legacy subscriptions.
 	TLSFragment TLSFragmentOptions `json:"tls_fragment,omitempty" schema:"omit"`
-	Detour string `json:"detour,omitempty" reference:"outbound"`
+	Detour      string             `json:"detour,omitempty" reference:"outbound"`
 	// H: Xray-style finalmask applied to the connections this dialer opens
 	FinalMask *FinalMaskOptions `json:"final_mask,omitempty"`
 	AbstractDialerOptions

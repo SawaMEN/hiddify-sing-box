@@ -9,15 +9,17 @@ import (
 	"testing"
 	"time"
 
-	mieruclient "github.com/enfein/mieru/v3/apis/client"
-	mieruserver "github.com/enfein/mieru/v3/apis/server"
-	mierupb "github.com/enfein/mieru/v3/pkg/appctl/appctlpb"
 	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/adapter/htest"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/buf"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+
+	mieruclient "github.com/enfein/mieru/v3/apis/client"
+	mieruserver "github.com/enfein/mieru/v3/apis/server"
+	mierupb "github.com/enfein/mieru/v3/pkg/appctl/appctlpb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -108,11 +110,11 @@ func TestH_MieruOutboundOptionsValidation(t *testing.T) {
 		{"empty server", func(o *option.MieruOutboundOptions) { o.Server = "" }, "server is empty"},
 		{"no port", func(o *option.MieruOutboundOptions) { o.PortBindings = nil }, "either server_port or transport"},
 		{"server_port matches binding", func(o *option.MieruOutboundOptions) { o.ServerPort = 8964 }, ""},
-		{"server_port mismatch", func(o *option.MieruOutboundOptions) { o.ServerPort = 1 }, "Transport of Server Port"},
+		{"server_port mismatch", func(o *option.MieruOutboundOptions) { o.ServerPort = 1 }, "transport of Server Port"},
 		{"server_port with two bindings", func(o *option.MieruOutboundOptions) {
 			o.ServerPort = 8964
 			o.PortBindings = append(o.PortBindings, option.MieruPortBinding{Protocol: "UDP", Port: 8964})
-		}, "Transport of Server Port"},
+		}, "transport of Server Port"},
 		{"empty username", func(o *option.MieruOutboundOptions) { o.UserName = "" }, "username is empty"},
 		{"empty password", func(o *option.MieruOutboundOptions) { o.Password = "" }, "password is empty"},
 		{"bad multiplexing", func(o *option.MieruOutboundOptions) { o.Multiplexing = "huge" }, "invalid multiplexing level"},
@@ -190,7 +192,7 @@ func TestH_MieruInboundOptionsValidation(t *testing.T) {
 		{"valid", func(o *option.MieruInboundOptions) {}, ""},
 		{"no ports", func(o *option.MieruInboundOptions) { o.PortBindings = nil }, "either server_port or transport"},
 		{"listen_port matches", func(o *option.MieruInboundOptions) { o.ListenPort = 8964 }, ""},
-		{"listen_port mismatch", func(o *option.MieruInboundOptions) { o.ListenPort = 1 }, "Transport of Server Port"},
+		{"listen_port mismatch", func(o *option.MieruInboundOptions) { o.ListenPort = 1 }, "transport of Server Port"},
 		{"no users", func(o *option.MieruInboundOptions) { o.Users = nil }, "users is empty"},
 		{"empty username", func(o *option.MieruInboundOptions) { o.Users[0].Name = "" }, "username is empty"},
 		{"empty password", func(o *option.MieruInboundOptions) { o.Users[0].Password = "" }, "password is empty"},
@@ -354,8 +356,8 @@ func TestH_MieruLoopbackRoundTrip(t *testing.T) {
 		PortBindings: []option.MieruPortBinding{{Protocol: "TCP", Port: port}},
 	})
 	require.NoError(t, err)
-	require.NoError(t, in.Start(adapter.StartStateStart))
-	defer in.Close()
+	require.NoError(t, htest.Start(in, adapter.StartStateStart))
+	defer htest.Close(in)
 
 	out, err := NewOutbound(ctx, router, logger, "mieru-out", option.MieruOutboundOptions{
 		ServerOptions: option.ServerOptions{Server: "127.0.0.1"},

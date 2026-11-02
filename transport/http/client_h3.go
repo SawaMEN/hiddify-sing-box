@@ -4,7 +4,9 @@ package http
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -15,7 +17,7 @@ import (
 	"github.com/sagernet/quic-go"
 	"github.com/sagernet/quic-go/http3"
 	"github.com/sagernet/sing-box/common/httpclient"
-	"github.com/sagernet/sing-quic"
+	qtls "github.com/sagernet/sing-quic"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
@@ -96,7 +98,7 @@ func (c *http3ClientImpl) acquire(ctx context.Context) (*http3.ClientConn, error
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		return nil, E.Cause1(ErrHTTP3Unavailable, err)
+		return nil, wrapHTTP3Error(err) // H
 	}
 	c.conn = c.transport.NewClientConn(quicConn)
 	c.rawConn = rawConn
@@ -113,7 +115,7 @@ func (c *http3ClientImpl) openStream(ctx context.Context, request *http.Request)
 		if ctx.Err() != nil {
 			return nil, nil, ctx.Err()
 		}
-		return nil, nil, E.Cause1(ErrHTTP3Unavailable, err)
+		return nil, nil, wrapHTTP3Error(err) // H
 	}
 	stop := context.AfterFunc(ctx, func() {
 		stream.CancelRead(0)
@@ -142,7 +144,7 @@ func (c *http3ClientImpl) openStream(ctx context.Context, request *http.Request)
 		if ctx.Err() != nil {
 			return nil, nil, ctx.Err()
 		}
-		return nil, nil, E.Cause(err, "HTTP/3 CONNECT")
+		return nil, nil, E.Cause(wrapHTTP3Error(err), "HTTP/3 CONNECT")
 	}
 	if response.StatusCode != http.StatusOK {
 		stream.CancelRead(0)
@@ -237,7 +239,7 @@ func (c *http3StreamConn) wrapError(err error) error {
 	if c.closed.Load() {
 		return net.ErrClosed
 	}
-	return qtls.WrapError(err)
+	return wrapHTTP3Error(err)
 }
 
 func (c *http3StreamConn) CloseWrite() error {
@@ -282,17 +284,21 @@ func (c *http3StreamConn) NeedAdditionalReadDeadline() bool {
 type http3RequestDatagramStream struct {
 	stream           *http3.RequestStream
 	datagramsEnabled bool
+	closed           atomic.Bool
 }
 
 func (s *http3RequestDatagramStream) Read(p []byte) (int, error) {
-	return s.stream.Read(p)
+	n, err := s.stream.Read(p)
+	return n, s.wrapError(err)
 }
 
 func (s *http3RequestDatagramStream) Write(p []byte) (int, error) {
-	return s.stream.Write(p)
+	n, err := s.stream.Write(p)
+	return n, s.wrapError(err)
 }
 
 func (s *http3RequestDatagramStream) Close() error {
+	s.closed.Store(true)
 	s.stream.SetWriteDeadline(time.Now())
 	s.stream.CancelRead(0)
 	return s.stream.Close()
@@ -306,15 +312,15 @@ func (s *http3RequestDatagramStream) SendDatagram(payload []byte) error {
 	if err == nil {
 		return nil
 	}
-	var tooLarge *quic.DatagramTooLargeError
-	if errors.As(err, &tooLarge) {
+	if tooLarge, ok := errors.AsType[*quic.DatagramTooLargeError](err); ok {
 		return &DatagramTooLargeError{MaxPayloadSize: int(tooLarge.MaxDatagramPayloadSize) - VarintLen(uint64(s.stream.StreamID()/4))}
 	}
-	return err
+	return s.wrapError(err)
 }
 
 func (s *http3RequestDatagramStream) ReceiveDatagram(ctx context.Context) ([]byte, error) {
-	return s.stream.ReceiveDatagram(ctx)
+	data, err := s.stream.ReceiveDatagram(ctx)
+	return data, s.wrapError(err)
 }
 
 var (
@@ -322,3 +328,53 @@ var (
 	_ N.WriteCloser  = (*http3StreamConn)(nil)
 	_ DatagramStream = (*http3RequestDatagramStream)(nil)
 )
+
+// wrapHTTP3Error marks connection-level QUIC failures as eligible for HTTP/2
+// fallback, while preserving authentication, certificate and caller errors.
+func wrapHTTP3Error(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	if _, ok := errors.AsType[*tls.CertificateVerificationError](err); ok {
+		return err
+	}
+	if transportErr, ok := errors.AsType[*quic.TransportError](err); ok {
+		if transportErr.ErrorCode == 0x178 { // QUIC NO_APPLICATION_PROTOCOL
+			return E.Cause1(ErrHTTP3Unavailable, err)
+		}
+		return err
+	}
+	if h3Err, ok := errors.AsType[*http3.Error](err); ok {
+		if h3Err.Remote {
+			return E.Cause1(ErrHTTP3Unavailable, err)
+		}
+		return err
+	}
+	if appErr, ok := errors.AsType[*quic.ApplicationError](err); ok {
+		if appErr.Remote {
+			return E.Cause1(ErrHTTP3Unavailable, err)
+		}
+		return err
+	}
+	var handshakeErr *quic.HandshakeTimeoutError
+	var idleErr *quic.IdleTimeoutError
+	var resetErr *quic.StatelessResetError
+	if errors.As(err, &handshakeErr) || errors.As(err, &idleErr) ||
+		errors.As(err, &resetErr) || errors.Is(err, io.EOF) {
+		return E.Cause1(ErrHTTP3Unavailable, err)
+	}
+	return qtls.WrapError(err)
+}
+
+func (s *http3RequestDatagramStream) wrapError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if s.closed.Load() {
+		return net.ErrClosed
+	}
+	return wrapHTTP3Error(err)
+}

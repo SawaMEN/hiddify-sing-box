@@ -14,10 +14,15 @@ type AwgEndpointOptions struct {
 	ListenPort       uint16                           `json:"listen_port,omitempty"`
 	Awg              AwgOptions                       `json:"awg,omitempty"`
 	Peers            []AwgPeerOptions                 `json:"peers,omitempty"`
+	FallbackAddress  badoption.Listable[netip.Addr]   `json:"fallback_address,omitempty"`
+	MTUDiscovery     bool                             `json:"mtu_discovery,omitempty"`
 	DialerOptions
 }
 
 type AwgOptions struct {
+	IP                     string `json:"ip,omitempty"`
+	ID                     string `json:"id,omitempty"`
+	IB                     string `json:"ib,omitempty"`
 	Jc                     int    `json:"jc,omitempty"`
 	Jmin                   int    `json:"jmin,omitempty"`
 	Jmax                   int    `json:"jmax,omitempty"`
@@ -49,7 +54,7 @@ func (o *AwgOptions) IsAvailble() bool {
 	if o == nil {
 		return false
 	}
-	if o.HeaderProtectionKey != "" || o.ContentPaddingAddition != "" || o.RekeyAfterTime != "" || o.RekeyTimeout != "" || o.RejectAfterTime != "" || o.KeepaliveTimeout != "" || o.MaxHandshakeAttempts != "" || o.RandomTrailers || o.DisableCookies {
+	if o.IP != "" || o.ID != "" || o.IB != "" || o.HeaderProtectionKey != "" || o.ContentPaddingAddition != "" || o.RekeyAfterTime != "" || o.RekeyTimeout != "" || o.RejectAfterTime != "" || o.KeepaliveTimeout != "" || o.MaxHandshakeAttempts != "" || o.RandomTrailers || o.DisableCookies {
 		return true
 	}
 	return o.Jc != 0 || o.Jmin != 0 || o.Jmax != 0 || o.S1 != 0 || o.S2 != 0 || o.S3 != 0 || o.S4 != 0 || o.H1 != "" || o.H2 != "" || o.H3 != "" || o.H4 != "" || o.I1 != "" || o.I2 != "" || o.I3 != "" || o.I4 != "" || o.I5 != ""
@@ -64,4 +69,5 @@ type AwgPeerOptions struct {
 	PresharedKey                string                           `json:"preshared_key,omitempty"`
 	AllowedIPs                  badoption.Listable[netip.Prefix] `json:"allowed_ips,omitempty"`
 	PersistentKeepaliveInterval uint16                           `json:"persistent_keepalive_interval,omitempty"`
+	Reserved                    []uint8                          `json:"reserved,omitempty"`
 }

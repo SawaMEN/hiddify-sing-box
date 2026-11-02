@@ -102,7 +102,7 @@ func NewPool(outbounds []adapter.Outbound, options option.BalancerOutboundOption
 
 func (p *Pool) alive(tag string) bool {
 	delay, loaded := p.delays[tag]
-	return loaded && delay < monitoring.TimeoutDelay
+	return loaded && delay > 0 && delay < monitoring.TimeoutDelay
 }
 
 // UpdateOutboundsInfo refills the slots from the test results. It never asks to interrupt

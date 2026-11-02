@@ -191,7 +191,7 @@ func TestH_RandBetween(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, 5, RandBetween(5, 5))
 	seen := make(map[int]bool)
-	for i := 0; i < 2000; i++ {
+	for range 2000 {
 		value := RandBetween(3, 6)
 		require.GreaterOrEqual(t, value, 3)
 		require.LessOrEqual(t, value, 6)

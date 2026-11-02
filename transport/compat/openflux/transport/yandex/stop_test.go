@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
-
 	"github.com/sagernet/sing-box/transport/compat/openflux/transport"
+
+	"github.com/gorilla/websocket"
 )
 
 func writerLoops() int {

@@ -97,10 +97,8 @@ func TestConcurrentReconfigure(t *testing.T) {
 	capture(t, LevelDebug)
 	var wg sync.WaitGroup
 	stop := make(chan struct{})
-	for i := 0; i < 4; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 4 {
+		wg.Go(func() {
 			for {
 				select {
 				case <-stop:
@@ -110,9 +108,9 @@ func TestConcurrentReconfigure(t *testing.T) {
 					Packetf("y")
 				}
 			}
-		}()
+		})
 	}
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		SetLevel(i % 4)
 		SetOutput(nopWriter{})
 		SetDebug(i%2 == 0)

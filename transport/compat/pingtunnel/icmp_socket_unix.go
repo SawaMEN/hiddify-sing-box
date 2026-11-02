@@ -4,11 +4,16 @@ package pingtunnel
 
 import (
 	"fmt"
-	"golang.org/x/sys/unix"
 	"net"
 	"os"
 	"runtime"
+
+	"golang.org/x/sys/unix"
 )
+
+func setICMPDatagram(enabled bool) {
+	icmpDatagram.Store(enabled)
+}
 
 func listenICMP(addr string, protect func(uintptr) error) (*PacketConn, error) {
 	sockType := unix.SOCK_RAW
