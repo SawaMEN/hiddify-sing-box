@@ -22,6 +22,8 @@ type MASQUEOutboundOptions struct { // H
 	DialerOptions
 	Profile                  CloudflareProfile        `json:"profile,omitempty"`
 	Device                   *MASQUEDeviceOptions     `json:"device,omitempty"`
+	// Retained for ray2sing MASQUE share-link compatibility and saved profile naming.
+	UniqueIdentifier         string                   `json:"unique_identifier,omitempty"`
 	MTU                      uint32                   `json:"mtu,omitempty"`
 	ServerName               string                   `json:"server_name,omitempty"`
 	MASQUEOutboundTLSOptions MASQUEOutboundTLSOptions `json:"tls,omitempty"`
