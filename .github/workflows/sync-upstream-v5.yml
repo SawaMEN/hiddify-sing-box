@@ -91,6 +91,12 @@ jobs:
           git restore --source="$BASE" --staged --worktree -- \
             common/monitoring/outbound_monitoring.go \
             common/monitoring/h_monitoring_test.go
+          # The fork already has its own sequential DNS group, with legacy multi
+          # support and custom modes. The upstream-only replacement assumes a
+          # different GroupTransport state model and duplicates exchangeSequential.
+          if ! git cat-file -e "$BASE:dns/transport/h_group_sequential.go" 2>/dev/null; then
+            git rm -f --ignore-unmatch -- dns/transport/h_group_sequential.go
+          fi
           # These v5-only monitoring helpers depend on the upstream monitoring
           # state machine, which differs from the fork's custom priority-queue
           # implementation. Keep the fork's working monitor; port these changes
@@ -161,7 +167,7 @@ jobs:
             echo "- Original upstream: \`$UPSTREAM\`"
             echo "- Merge base: \`$(cat /tmp/upstream-merge-base)\`"
             echo "- Fork-exclusive paths: $(wc -l < /tmp/fork-exclusive-paths)"
-            echo "- Deferred: upstream-only monitoring helper files requiring a full state-machine port; existing fork monitor left unchanged."
+            echo "- Deferred: upstream-only monitoring and sequential DNS helpers requiring a full state-machine port; existing fork monitor left unchanged."
             echo "- Paths requiring fork-preferred conflict handling: $(wc -l < /tmp/upstream-conflict-paths)"
             echo "- Validation: production-tag package compilation, custom protocol tests, and short regression suite passed."
             echo ""
