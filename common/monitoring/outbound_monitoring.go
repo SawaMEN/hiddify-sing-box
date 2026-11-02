@@ -66,6 +66,7 @@ type OutboundMonitoring struct {
 	started          atomic.Bool
 	urls             []string
 	ipInfoURL        string // H
+	ipv6Probe        string // H
 	currentLinkIndex atomic.Uint32
 	access           sync.Mutex
 	idleTimeout      time.Duration
@@ -253,6 +254,7 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 		cancel:          cancel,
 		urls:            cloned,
 		ipInfoURL:       options.IpInfoURL, // H
+		ipv6Probe:       ipv6ProbeAddress(options.IPv6Probe), // H
 		pause:           service.FromContext[pause.Manager](ctx),
 		logger:          logger,
 		outboundManager: service.FromContext[adapter.OutboundManager](ctx),
@@ -270,6 +272,10 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 		normalQueue:   make(chan *testTask, 10000),
 	}
 	m.registry.Store(newMonitoringRegistry())
+	// DNS and routing look up the monitored IPv6 transport capability through the shared registry.
+	if service.FromContext[adapter.IPv6Capability](ctx) == nil {
+		service.MustRegister[adapter.IPv6Capability](ctx, m)
+	}
 
 	return m, nil
 }
@@ -594,6 +600,7 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 		return his, parent.Err()
 	default:
 	}
+	his.IPv6 = m.ipv6Of(parent, out) // H: test the IPv6 path of this outbound
 	if out.history.IpInfo == nil || out.ipInfoFromCache { // H
 
 		ctx, cancel2 := context.WithTimeout(parent, m.urlTestTimeout)
@@ -768,6 +775,12 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 	}
 	state.history.Delay = outcome.history.Delay
 	state.history.Time = outcome.history.Time
+	if outcome.history.IPv6 != nil {
+		if state.history.IPv6 == nil || *state.history.IPv6 != *outcome.history.IPv6 {
+			m.cacheDirty.Store(true)
+		}
+		state.history.IPv6 = outcome.history.IPv6
+	}
 	state.from_cache = false
 	if outcome.history.IpInfo != nil {
 		state.ipInfoFromCache = false // H
