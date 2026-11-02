@@ -91,6 +91,11 @@ jobs:
           git restore --source="$BASE" --staged --worktree -- \
             common/monitoring/outbound_monitoring.go \
             common/monitoring/h_monitoring_test.go
+          # MASQUE's outbound object is the owner of its registration lifecycle.
+          # Keep its implementation and matching device tests as a unit; a
+          # partial merge otherwise references absent registration methods.
+          git restore --source="$BASE" --staged --worktree -- \
+            protocol/masque/outbound.go protocol/masque/h_device_test.go
           # Keep DNS group unit tests paired with the fork implementation.
           git restore --source="$BASE" --staged --worktree -- dns/transport/h_group_test.go
           # Upstream's device re-enrolment helper expects a rewritten MASQUE
@@ -177,7 +182,7 @@ jobs:
             echo "- Original upstream: \`$UPSTREAM\`"
             echo "- Merge base: \`$(cat /tmp/upstream-merge-base)\`"
             echo "- Fork-exclusive paths: $(wc -l < /tmp/fork-exclusive-paths)"
-            echo "- Deferred: upstream-only monitoring, sequential DNS and MASQUE registration helpers requiring a full state-machine port; existing fork monitor left unchanged."
+            echo "- Deferred: upstream-only monitoring, sequential DNS and MASQUE registration helpers requiring a full state-machine port; fork MASQUE outbound preserved whole; existing fork monitor left unchanged."
             echo "- Paths requiring fork-preferred conflict handling: $(wc -l < /tmp/upstream-conflict-paths)"
             echo "- Validation: production-tag package compilation, custom protocol tests, and short regression suite passed."
             echo ""
