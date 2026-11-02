@@ -35,7 +35,7 @@ func (p *CloudflareTraceProvider) GetIPInfo(ctx context.Context, dialer N.Dialer
 		return nil, t, err
 	}
 	info := &IpInfo{}
-	for _, line := range strings.SplitSeq(string(body), "\n") {
+	for line := range strings.SplitSeq(string(body), "\n") {
 		key, value, found := strings.Cut(strings.TrimSpace(line), "=")
 		if !found {
 			continue
