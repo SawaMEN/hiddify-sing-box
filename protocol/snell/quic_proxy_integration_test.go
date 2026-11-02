@@ -95,13 +95,24 @@ func (r *quicTestRouter) RoutePacketConnectionEx(ctx context.Context, flow N.Pac
 
 func freeV5Port(t *testing.T) uint16 {
 	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
+	// The inbound listens on TCP and UDP with the same port. A TCP-only free-port
+	// check can select a port already held by UDP (notably on macOS runners).
+	for range 32 {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		port := M.SocksaddrFromNet(listener.Addr()).Port
+		packet, err := net.ListenPacket("udp", fmt.Sprintf("127.0.0.1:%d", port))
+		if err == nil {
+			packet.Close()
+			listener.Close()
+			return port
+		}
+		listener.Close()
 	}
-	p := M.SocksaddrFromNet(l.Addr()).Port
-	l.Close()
-	return p
+	t.Fatal("unable to find a port available for both TCP and UDP")
+	return 0
 }
 
 func startV5Inbound(t *testing.T) (M.Socksaddr, *quicTestRouter, *Inbound) {
