@@ -549,33 +549,54 @@ func (m *OutboundMonitoring) executeTask(task *testTask) {
 		}()
 		return
 	}
-	done := make(chan struct{})
+	// A broken dialer can ignore the context deadline. Do not allow it to hold
+	// the worker or a whole monitoring cycle indefinitely. Only this worker
+	// applies the result, so a dialer returning late cannot overwrite the timeout.
+	limit := 2*m.urlTestTimeout + ipv6ProbeTimeout + time.Second
+	if task.priority && len(m.onDemand) > 0 {
+		limit = m.onDemand[len(m.onDemand)-1] + m.urlTestTimeout + ipv6ProbeTimeout + time.Second
+	}
+	testContext, cancel := context.WithTimeout(m.ctx, limit)
+	defer cancel()
+	completed := make(chan testOutcome, 1)
 	go func() {
-		defer close(done)
-		delay, err := m.tester(m.ctx, task.outboundTag, task.priority)
-
-		outcome := testOutcome{
+		history, err := m.tester(testContext, task.outboundTag, task.priority)
+		completed <- testOutcome{
 			outboundTag: task.outboundTag,
-			history:     delay,
+			history:     history,
 			err:         err,
 			cycleID:     task.cycleID,
 			priority:    task.priority,
 		}
-
-		m.applyResult(outcome)
-		if task.resultCh != nil {
-			select {
-			case task.resultCh <- outcome:
-			case <-m.ctx.Done():
-			default:
-			}
-		}
 	}()
+
+	var result testOutcome
 	select {
 	case <-m.ctx.Done():
 		return
-	case <-done:
+	case result = <-completed:
+	case <-testContext.Done():
+		if m.ctx.Err() != nil {
+			return
+		}
+		m.logger.Warn("outbound ", task.outboundTag, " URL test exceeded ", limit, "; worker continues")
+		result = testOutcome{
+			outboundTag: task.outboundTag,
+			history:     adapter.URLTestHistory{Time: time.Now(), Delay: TimeoutDelay},
+			err:         testContext.Err(),
+			cycleID:     task.cycleID,
+			priority:    task.priority,
+		}
 	}
+	m.applyResult(result)
+	if task.resultCh != nil {
+		select {
+		case task.resultCh <- result:
+		case <-m.ctx.Done():
+		default:
+		}
+	}
+
 }
 
 func (m *OutboundMonitoring) tester(parent context.Context, tag string, priority bool) (adapter.URLTestHistory, error) {
