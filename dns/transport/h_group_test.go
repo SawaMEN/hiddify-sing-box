@@ -272,11 +272,13 @@ func TestH_GroupSequentialHonorsCancellation(t *testing.T) {
 	silent := hMember("silent", hHang)
 	next := hMember("next", hReply("5.5.5.5"))
 	group := hNewGroup(t, option.GroupDNSServerOptions{Mode: C.DNSGroupModeSequential}, silent, next)
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	stop := time.AfterFunc(20*time.Millisecond, cancel)
+	defer stop.Stop()
 	_, err := group.Exchange(ctx, new(mDNS.Msg).SetQuestion("example.com.", mDNS.TypeA))
-	require.ErrorIs(t, err, context.DeadlineExceeded)
-	require.EqualValues(t, 0, next.calls.Load())
+	require.ErrorIs(t, err, context.Canceled)
+	require.EqualValues(t, 0, next.calls.Load(), "parent cancellation must stop sequential fallbacks")
 }
 
 func TestH_GroupNilResponseIsError(t *testing.T) {
