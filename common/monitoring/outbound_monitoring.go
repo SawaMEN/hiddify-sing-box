@@ -304,6 +304,7 @@ func (m *OutboundMonitoring) Start(stage adapter.StartStage, scope *adapter.Scop
 		}
 
 		m.started.Store(true)
+		m.testSelections() // prioritize selected members ahead of the regular cycle
 		m.Touch()
 	}
 
@@ -346,6 +347,7 @@ func (m *OutboundMonitoring) SignalChange(outboundTag string) error {
 	}
 	m.signalChange(outboundTag, make(map[string]bool))
 	m.testParents(outboundTag, true)
+	m.testSelected(outboundTag) // selection changed: probe the selected member immediately
 	return nil
 }
 
@@ -376,6 +378,7 @@ func (m *OutboundMonitoring) TestNow(outboundTag string) error {
 func (m *OutboundMonitoring) testNow(outboundTag string, priority bool) error {
 	m.logger.Info("testing outbound ", outboundTag, " with priority: ", priority)
 	if grp, ok := m.reg().groups[outboundTag]; ok {
+		m.testSelected(outboundTag) // selected outbound gets priority
 		for tag := range grp.outbounds {
 			m.testNow(tag, false)
 		}
