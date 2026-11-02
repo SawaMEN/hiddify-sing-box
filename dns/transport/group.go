@@ -73,6 +73,10 @@ func newGroup(ctx context.Context, logger log.ContextLogger, transportType strin
 		ignoreRanges = append(ignoreRanges, netip.Prefix(prefix))
 	}
 	var modes *groupModes
+	var sequentialMode *groupSequential
+	if sequential {
+		sequentialMode = newGroupSequential(options)
+	}
 	if options.Mode == C.DNSGroupModeStable || options.Mode == C.DNSGroupModeFastest {
 		modes = newGroupModes(options)
 	}
@@ -81,7 +85,7 @@ func newGroup(ctx context.Context, logger log.ContextLogger, transportType strin
 		ctx:              ctx,
 		logger:           logger,
 		serverTags:       options.Servers,
-		sequential:       func() *groupSequential { if sequential { return newGroupSequential(options) }; return nil }(),
+		sequential:       sequentialMode,
 		modes:            modes,
 		ignoreRanges:     ignoreRanges,
 	}, nil
