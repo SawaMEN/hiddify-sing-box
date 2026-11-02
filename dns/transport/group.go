@@ -33,7 +33,7 @@ type GroupTransport struct {
 	ctx          context.Context
 	logger       log.ContextLogger
 	serverTags   []string
-	sequential   bool           // H
+	sequential   *groupSequential // H: timed member failover
 	modes        *groupModes    // H
 	ignoreRanges []netip.Prefix // H
 }
@@ -81,7 +81,7 @@ func newGroup(ctx context.Context, logger log.ContextLogger, transportType strin
 		ctx:              ctx,
 		logger:           logger,
 		serverTags:       options.Servers,
-		sequential:       sequential,
+		sequential:       func() *groupSequential { if sequential { return newGroupSequential(options) }; return nil }(),
 		modes:            modes,
 		ignoreRanges:     ignoreRanges,
 	}, nil
@@ -117,6 +117,9 @@ func (t *GroupTransport) Close() error {
 func (t *GroupTransport) Reset() {
 	if t.modes != nil {
 		t.modes.reset()
+	}
+	if t.sequential != nil {
+		t.sequential.reset()
 	}
 }
 
@@ -217,45 +220,11 @@ func (t *GroupTransport) ExchangeAsync(ctx context.Context, message *mDNS.Msg, c
 		go t.exchangeModes(ctx, transportManager, message, callback)
 		return
 	}
-	if t.sequential {
+	if t.sequential != nil {
 		go t.exchangeSequential(ctx, transportManager, message, callback)
 		return
 	}
 	t.exchangeParallel(ctx, transportManager, message, callback)
-}
-
-func (t *GroupTransport) exchangeSequential(ctx context.Context, transportManager adapter.DNSTransportManager, message *mDNS.Msg, callback func(response *mDNS.Msg, err error)) { // H
-	collector := groupCollector{transport: t}
-	for _, tag := range t.serverTags {
-		transport, loaded := transportManager.Transport(tag)
-		if !loaded {
-			collector.add(ctx, groupResult{nil, tag, E.New("DNS server not found: ", tag)}, false)
-			continue
-		}
-		resultCh := make(chan groupResult, 1)
-		childContext, cancel := context.WithCancel(adapter.OverrideContext(ctx))
-		transport.ExchangeAsync(childContext, message.Copy(), func(response *mDNS.Msg, err error) {
-			resultCh <- groupResult{response, tag, err}
-		})
-		var r groupResult
-		select {
-		case <-ctx.Done():
-			cancel()
-			if collector.fallback != nil {
-				callback(collector.fallback, nil)
-			} else {
-				callback(nil, ctx.Err())
-			}
-			return
-		case r = <-resultCh:
-		}
-		cancel()
-		if response, accepted := collector.add(ctx, r, false); accepted {
-			callback(response, nil)
-			return
-		}
-	}
-	callback(collector.finish())
 }
 
 func (t *GroupTransport) exchangeParallel(ctx context.Context, transportManager adapter.DNSTransportManager, message *mDNS.Msg, callback func(response *mDNS.Msg, err error)) {
