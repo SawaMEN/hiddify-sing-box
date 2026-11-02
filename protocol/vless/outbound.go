@@ -263,14 +263,19 @@ func (h *vlessDialer) DialContext(ctx context.Context, network string, destinati
 		stopHandshake()
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			closeRaw()
+			// The panel's Vision preconnect overlay may also defer a close
+			// when this function returns an error. It must not close twice.
+			conn = nil
 			return nil, E.Cause(ctxErr, "encryption handshake")
 		}
 		if handshakeErr != nil {
 			closeRaw()
+			conn = nil
 			return nil, E.Cause(handshakeErr, "encryption handshake")
 		}
 		if encryptedConn == nil {
 			closeRaw()
+			conn = nil
 			return nil, E.New("encryption handshake returned nil connection")
 		}
 		conn = encryptedConn
@@ -378,14 +383,19 @@ func (h *vlessDialer) ListenPacket(ctx context.Context, destination M.Socksaddr)
 		stopHandshake()
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			closeRaw()
+			// The panel's Vision preconnect overlay may also defer a close
+			// when this function returns an error. It must not close twice.
+			conn = nil
 			return nil, E.Cause(ctxErr, "encryption handshake")
 		}
 		if handshakeErr != nil {
 			closeRaw()
+			conn = nil
 			return nil, E.Cause(handshakeErr, "encryption handshake")
 		}
 		if encryptedConn == nil {
 			closeRaw()
+			conn = nil
 			return nil, E.New("encryption handshake returned nil connection")
 		}
 		conn = encryptedConn
