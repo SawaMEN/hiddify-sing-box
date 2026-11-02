@@ -47,6 +47,8 @@ func TestH_MonitoringIpInfoFromCacheUntilLookedUp(t *testing.T) {
 		URLs:           []string{server.URL + "/generate_204"},
 		IpInfoURL:      server.URL + "/ip",
 		URLTestTimeout: badoption.Duration(time.Second),
+		OnDemandTimeouts: badoption.Listable[badoption.Duration]{badoption.Duration(50 * time.Millisecond), badoption.Duration(100 * time.Millisecond), badoption.Duration(200 * time.Millisecond)},
+		IPv6Probe: "none",
 	}
 	cache := &fakeCache{data: map[string]*adapter.SavedBinary{}}
 	previous := newTestMonitor(t, cache, options, out)
