@@ -630,7 +630,7 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string, priority
 		return his, parent.Err()
 	default:
 	}
-	his.IPv6 = m.ipv6Of(parent, out) // H: test the IPv6 path of this outbound
+	his.IPv6 = m.ipv6Of(parent, out)                      // H: test the IPv6 path of this outbound
 	if out.history.IpInfo == nil || out.ipInfoFromCache { // H
 		ctx, cancel2 := context.WithTimeout(parent, m.urlTestTimeout)
 		defer cancel2()
