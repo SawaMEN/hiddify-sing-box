@@ -596,7 +596,6 @@ func (m *OutboundMonitoring) executeTask(task *testTask) {
 		default:
 		}
 	}
-
 }
 
 func (m *OutboundMonitoring) tester(parent context.Context, tag string, priority bool) (adapter.URLTestHistory, error) {
