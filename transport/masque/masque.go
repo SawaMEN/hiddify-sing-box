@@ -149,7 +149,7 @@ func newHTTP2Client(dialer N.Dialer, baseTLSConfig aTLS.Config, endpoint *net.TC
 				conn, err := dialTLS(ctx)
 				if _, ok := errors.AsType[*tls.ECHRejectionError](err); ok {
 					// The peer does not accept the offered ECH config (WARP does not). Drop it and
-					// retry once rather than failing the tunnel. //H
+					// retry once rather than failing the tunnel. // H
 					if capable, ok := tlsConfig.(interface{ SetECHConfigList([]byte) }); ok {
 						capable.SetECHConfigList(nil)
 					}
