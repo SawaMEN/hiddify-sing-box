@@ -203,6 +203,13 @@ do about it. Items marked **Required** break or misbehave until they are handled
   secrets. The app's "include configuration" option no longer adds the configuration. The app
   should stop showing an "encrypted" state for reports.
 
+## Scope-owned logging cleanup
+
+The box registers log cleanup when it is constructed and closes the logger through its scope
+only. This also covers closing before startup. Stopping after a successful reload no longer
+returns a spurious `file already closed`; real cleanup failures are still returned. Apps should
+keep surfacing actual stop errors and need no new setting or retry.
+
 ## Behaviour the app should know about
 
 - **URL test.** A dial that fails because the path is dead moves the group to another member
