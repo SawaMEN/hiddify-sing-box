@@ -1,0 +1,29 @@
+name: Scope logger shutdown regression
+
+on:
+  pull_request:
+    paths:
+      - 'box.go'
+      - 'h_box_close_scope_test.go'
+      - '.github/workflows/scope-close-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Vet logger ownership regression
+        run: go vet -mod=mod .
+      - name: Verify cleanup ownership and original error propagation
+        run: go test -mod=mod -race -ldflags "$(cat release/LDFLAGS)" -run '^TestH_BoxClose' -count=1 .
