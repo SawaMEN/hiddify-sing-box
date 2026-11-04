@@ -689,10 +689,8 @@ func (t *DBusResolvedResolver) createResolvedScope(serverScope *adapter.Scope, s
 		fallback:     scopeSpecification.fallback,
 	}
 	serverDialer, err := dialer.NewDefault(t.ctx, option.DialerOptions{
-		AbstractDialerOptions: option.AbstractDialerOptions{
-			BindInterface:      scopeSpecification.interfaceName,
-			UDPFragmentDefault: true,
-		},
+		BindInterface:      scopeSpecification.interfaceName,
+		UDPFragmentDefault: true,
 	})
 	if err != nil {
 		return nil, err

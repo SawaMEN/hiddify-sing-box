@@ -38,9 +38,9 @@ func TestH_TrojanOutboundTLSDisabled(t *testing.T) {
 	for _, tlsOptions := range []*option.OutboundTLSOptions{{}, {Enabled: false}} {
 		port := uint16(listener.Addr().(*net.TCPAddr).Port)
 		outbound, err := NewOutbound(context.Background(), nil, log.NewNOPFactory().Logger(), "trojan", option.TrojanOutboundOptions{
-			ServerOptions:               option.ServerOptions{Server: "127.0.0.1", ServerPort: port},
-			Password:                    "password",
-			OutboundTLSOptionsContainer: option.OutboundTLSOptionsContainer{TLS: tlsOptions},
+			Server: "127.0.0.1", ServerPort: port,
+			Password: "password",
+			TLS:      tlsOptions,
 		})
 		require.NoError(t, err)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

@@ -46,7 +46,7 @@ func TestH_ConnectWithRetry(t *testing.T) {
 // a wbstream mode that does not exist fails at load, not on every retry
 func TestH_CallModeCheckedAtLoad(t *testing.T) {
 	_, err := NewOutbound(context.Background(), nil, log.NewNOPFactory().Logger(), "call", option.CallOutboundOptions{
-		JoinLink: "x", CallCommonOptions: option.CallCommonOptions{Platform: "wbstream", Mode: "audio"},
+		JoinLink: "x", Platform: "wbstream", Mode: "audio",
 	})
 	require.ErrorContains(t, err, "unknown wbstream mode")
 }

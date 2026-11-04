@@ -1,13 +1,15 @@
-# Hiddify v5 synchronization — 2026-11-04
+# Hiddify v5 synchronization — 2026-11-05
 
 ## Source
 
-- Upstream: `hiddify/hiddify-sing-box:v5`, `f5614e84a4fb39fbcc423835bdcd113142bd470f`.
+- Upstream: `hiddify/hiddify-sing-box:v5`, `1614c5edb52dd44a4cc079201ba1e790fdfad8a0`.
 - Previous synchronized upstream: `004371d6be2395ee4379054a8cf113f339dbe231`.
 - Fork baseline: `9df34013f49cf301a42e0254c2df8fc6cbe746e8` (`main`).
-- All 36 new upstream commits are included. The fork delta was rebased locally onto the new upstream tip. The integrated tree is published as a compatibility commit on the existing fork history; this source SHA is the baseline for the next synchronization.
+- All 37 new upstream commits are included. The fork delta was rebased locally onto the new upstream tip. The integrated tree is published as a compatibility commit on the existing fork history; this source SHA is the baseline for the next synchronization.
 
 ## Changes
+
+- Mirage TLS record splitting from the latest upstream commit, using the pinned MIT-licensed library, is included.
 
 - Soar DNS tunnel and shared discovery/refilling for DNS pools.
 - Monitoring joins simultaneous tests, records failure reasons and stabilizes lowest-delay selection; balancer selection rules are exported.
@@ -28,10 +30,12 @@ WARP/MASQUE now uses the latest upstream device-pool, refusal recovery and scope
 
 ## Integration regressions
 
+- Successful sub-millisecond URL tests are recorded as 1 ms; zero remains reserved for an unmeasured result, preventing unnecessary staged retries.
+
 - Monitoring publishes completion before its result, so a subsequent URL stage starts a fresh test instead of joining a settled test; completion signals belong to their execution.
 - MASQUE unwraps mapped IPv4 destinations and uses its IPv6 local address for IPv6 UDP. The fork's gVisor forwarder Start/Close ownership is retained.
 - DNS auto-resolver tests cover both bundled and dynamically discovered candidates.
 
 ## Validation
 
-The pull request runs the standard platform Test and Lint workflows plus production-tag vet, race regressions and the full production-tag suite in `Upstream compatibility`. The exact-head CI results are attached to PR #17. Local regression checks cover monitoring, balancer, WARP/MASQUE, DNSTT/MasterDNS, Soar, IP lookup, schema and options. Schema and module metadata are generated from the integrated source, rather than copied over the fork's options.
+The pull request runs the standard platform Test and Lint workflows plus production-tag vet, race regressions and the full production-tag suite in `Upstream compatibility`. The original synchronization was superseded by PR #18 and retained in main. Finishing changes update the source baseline and repair the remaining CI regressions; exact-head results are in GitHub Actions. Local regression checks cover monitoring, balancer, WARP/MASQUE, DNSTT/MasterDNS, Soar, IP lookup, schema and options. Schema and module metadata are generated from the integrated source, rather than copied over the fork's options.

@@ -86,7 +86,7 @@ func (v6TestDialer) ListenPacket(context.Context, M.Socksaddr) (net.PacketConn, 
 func startV6TestInbound(t *testing.T, mode string) (M.Socksaddr, *v6EchoRouter) {
 	t.Helper()
 	router := &v6EchoRouter{}
-	inbound, err := NewInbound(context.Background(), router, log.NewNOPFactory().Logger(), "snell-test", option.SnellInboundOptions{Version: 6, AbstractSnellInboundOptions: option.AbstractSnellInboundOptions{PSK: v6TestPSK, Users: []option.SnellUser{{Name: "alice", UserKey: "alice-key"}, {Name: "bob", UserKey: "bob-key"}}}, V6Options: option.SnellV6Options{Mode: mode}})
+	inbound, err := NewInbound(context.Background(), router, log.NewNOPFactory().Logger(), "snell-test", option.SnellInboundOptions{Version: 6, PSK: v6TestPSK, Users: []option.SnellUser{{Name: "alice", UserKey: "alice-key"}, {Name: "bob", UserKey: "bob-key"}}, V6Options: option.SnellV6Options{Mode: mode}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +277,7 @@ func TestSnellV6OutboundTCPAndUDP(t *testing.T) {
 	for _, mode := range []string{"default", "unshaped"} {
 		t.Run(mode, func(t *testing.T) {
 			server, _ := startV6TestInbound(t, mode)
-			out, err := NewOutbound(context.Background(), nil, log.NewNOPFactory().Logger(), "snell-out", option.SnellOutboundOptions{Version: 6, AbstractSnellOutboundOptions: option.AbstractSnellOutboundOptions{ServerOptions: option.ServerOptions{Server: server.AddrString(), ServerPort: server.Port}, PSK: v6TestPSK, UserKey: "alice-key"}, V6Options: option.SnellV6Options{Mode: mode}})
+			out, err := NewOutbound(context.Background(), nil, log.NewNOPFactory().Logger(), "snell-out", option.SnellOutboundOptions{Version: 6, Server: server.AddrString(), ServerPort: server.Port, PSK: v6TestPSK, UserKey: "alice-key", V6Options: option.SnellV6Options{Mode: mode}})
 			if err != nil {
 				t.Fatal(err)
 			}

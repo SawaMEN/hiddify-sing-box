@@ -87,10 +87,8 @@ func TestSudokuTunnel_StandardDialer(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	dialer := &StandardDialer{
-		BaseDialer: BaseDialer{
-			Config: cfg,
-			Tables: []*sudoku.Table{table},
-		},
+		Config: cfg,
+		Tables: []*sudoku.Table{table},
 	}
 
 	conn, err := dialer.Dial("example.com:80")
@@ -185,10 +183,10 @@ func TestSudokuTunnel_MuxDialerRawTCP(t *testing.T) {
 		})
 	}()
 
-	dialer := &MuxDialer{BaseDialer: BaseDialer{
+	dialer := &MuxDialer{
 		Config: &clientCfg,
 		Tables: []*sudoku.Table{table},
-	}}
+	}
 	warmCtx, warmCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer warmCancel()
 	if err := dialer.Warm(warmCtx); err != nil {
@@ -316,10 +314,10 @@ func TestMuxDialer_MaintainReconnectsClosedSession(t *testing.T) {
 		}
 	}()
 
-	dialer := &MuxDialer{BaseDialer: BaseDialer{
+	dialer := &MuxDialer{
 		Config: &clientCfg,
 		Tables: []*sudoku.Table{table},
-	}}
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	maintainDone := make(chan struct{})
@@ -408,10 +406,10 @@ func TestMuxDialer_CloseCancelsSessionCreation(t *testing.T) {
 	}()
 
 	table := sudoku.NewTable(baseCfg.Key, baseCfg.ASCII)
-	dialer := &MuxDialer{BaseDialer: BaseDialer{
+	dialer := &MuxDialer{
 		Config: &clientCfg,
 		Tables: []*sudoku.Table{table},
-	}}
+	}
 	warmDone := make(chan error, 1)
 	go func() {
 		warmDone <- dialer.Warm(context.Background())

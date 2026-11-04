@@ -31,9 +31,9 @@ type V2RayXDriveOptions struct {
 	// streamSettings "address" and "port").
 	FrontingAddress string        `json:"fronting_address,omitempty"`
 	FrontingPort    uint16        `json:"fronting_port,omitempty"`
-	FrontAddress    string        `json:"front_address,omitempty"`  //H: legacy alias
-	FrontPort       uint16        `json:"front_port,omitempty"`     //H: legacy alias
-	StorageDialer   DialerOptions `json:"storage_dialer,omitempty"` //H: legacy storage routing
+	FrontAddress    string        `json:"front_address,omitempty"`  // H: legacy alias
+	FrontPort       uint16        `json:"front_port,omitempty"`     // H: legacy alias
+	StorageDialer   DialerOptions `json:"storage_dialer,omitempty"` // H: legacy storage routing
 }
 
 type V2RayXDriveS3Options struct {

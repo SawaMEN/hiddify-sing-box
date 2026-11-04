@@ -117,12 +117,10 @@ func TestSudokuTunnel_Standard(t *testing.T) {
 
 	// 3. Client Logic (Dialer)
 	dialer := &StandardDialer{
-		BaseDialer: BaseDialer{
-			Config: cfg,
-			Tables: []*sudoku.Table{table},
-			// The official client sends sha256(privateKey)[:8] in the handshake nonce for multi-user ID.
-			PrivateKey: privateKey,
-		},
+		Config: cfg,
+		Tables: []*sudoku.Table{table},
+		// The official client sends sha256(privateKey)[:8] in the handshake nonce for multi-user ID.
+		PrivateKey: privateKey,
 	}
 
 	// Wait for server to be ready

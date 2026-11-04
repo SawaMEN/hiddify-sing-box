@@ -13,7 +13,7 @@ type IpWhoIsProvider struct {
 
 func NewIpWhoIsProvider() *IpWhoIsProvider {
 	return &IpWhoIsProvider{
-		BaseProvider: BaseProvider{URL: "http://ipwho.is/"},
+		URL: "http://ipwho.is/",
 	}
 }
 

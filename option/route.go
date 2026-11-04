@@ -24,7 +24,7 @@ type RouteOptions struct {
 	// H: a TCP connection to an IPv6 address that the outbound's exit cannot reach is carried over
 	// IPv4 instead (the sniffed domain, for the proxy to resolve), and teaches the outbound's IPv6
 	// capability (dns rule ipv6_by_outbound, rule ipv6_unavailable_via). See h_ipv6_fallback.go.
-	IPv6Fallback bool `json:"ipv6_fallback,omitempty"` //H
+	IPv6Fallback bool `json:"ipv6_fallback,omitempty"` // H
 }
 
 type GeoIPOptions struct {

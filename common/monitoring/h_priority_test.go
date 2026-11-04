@@ -41,9 +41,9 @@ func TestH_MonitoringPriorityTestOfConnectingOutbound(t *testing.T) {
 	}))
 	defer server.Close()
 	var dialer net.Dialer
-	hop := &hReadyOutbound{fakeOutbound: fakeOutbound{tag: "hop", dial: func(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
+	hop := &hReadyOutbound{tag: "hop", dial: func(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
 		return dialer.DialContext(ctx, network, destination.String())
-	}}}
+	}}
 	m := newTestMonitor(t, nil, option.MonitoringOptions{
 		Interval:       badoption.Duration(time.Hour),
 		Workers:        1,

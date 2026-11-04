@@ -493,11 +493,9 @@ func (t *DNSTransport) exchangeOnce(ctx context.Context, message *mDNS.Msg, allo
 	}
 	if routeSuffix != "" {
 		callback(&mDNS.Msg{
-			MsgHdr: mDNS.MsgHdr{
-				Id:       message.Id,
-				Rcode:    mDNS.RcodeNameError,
-				Response: true,
-			},
+			Id:       message.Id,
+			Rcode:    mDNS.RcodeNameError,
+			Response: true,
 			Question: []mDNS.Question{question},
 		}, nil)
 		return

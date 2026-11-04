@@ -268,55 +268,6 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 	return nil
 }
 
-type WaitReadCloser struct {
-	ctx  context.Context
-	Wait chan struct{}
-	io.ReadCloser
-}
-
-func (w *WaitReadCloser) Set(rc io.ReadCloser) {
-	w.ReadCloser = rc
-	defer func() {
-		if recover() != nil {
-			rc.Close()
-		}
-	}()
-	close(w.Wait)
-}
-
-func (w *WaitReadCloser) Read(b []byte) (int, error) {
-	select {
-	case <-w.ctx.Done():
-		return 0, w.ctx.Err()
-	default:
-	}
-
-	if w.ReadCloser == nil {
-		select {
-		case <-w.ctx.Done():
-			return 0, w.ctx.Err()
-		case <-w.Wait:
-		}
-		if w.ReadCloser == nil {
-			return 0, io.ErrClosedPipe
-		}
-	}
-	return w.ReadCloser.Read(b)
-}
-
-func (w *WaitReadCloser) Close() error {
-	if w.ReadCloser != nil {
-		return w.ReadCloser.Close()
-	}
-	defer func() {
-		if recover() != nil && w.ReadCloser != nil {
-			w.ReadCloser.Close()
-		}
-	}()
-	close(w.Wait)
-	return nil
-}
-
 func ApplyMetaToRequest(options *option.V2RayXHTTPBaseOptions, req *http.Request, sessionId string, seqStr string) {
 	sessionPlacement := options.GetNormalizedSessionPlacement()
 	seqPlacement := options.GetNormalizedSeqPlacement()

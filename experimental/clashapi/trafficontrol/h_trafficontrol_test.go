@@ -173,7 +173,7 @@ func TestH_TrafficManagerStatistics(t *testing.T) {
 
 func TestH_TrafficTCPTracker(t *testing.T) {
 	leaf := &fakeOutbound{tag: "leaf", typ: C.TypeDirect}
-	group := &fakeGroup{fakeOutbound: fakeOutbound{tag: "proxy", typ: C.TypeSelector}, selected: leaf}
+	group := &fakeGroup{tag: "proxy", typ: C.TypeSelector, selected: leaf}
 	outbounds := &fakeOutboundManager{list: []adapter.Outbound{group, leaf}}
 	m := NewManager()
 

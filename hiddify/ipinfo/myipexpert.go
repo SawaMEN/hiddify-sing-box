@@ -18,7 +18,7 @@ type MyIPExpertProvider struct {
 // NewMyIPExpertProvider initializes a new MyIPExpertProvider.
 func NewMyIPExpertProvider() *MyIPExpertProvider {
 	return &MyIPExpertProvider{
-		BaseProvider: BaseProvider{URL: "https://myip.expert/api/"},
+		URL: "https://myip.expert/api/",
 	}
 }
 

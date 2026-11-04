@@ -46,7 +46,7 @@ func TestH_MonitoringDetourTestedFirst(t *testing.T) {
 		}
 		return dialer.DialContext(ctx, network, destination.String())
 	}}
-	sel := &fakeGroup{fakeOutbound: fakeOutbound{tag: "select", deps: []string{"p2"}}, all: []string{"p2"}}
+	sel := &fakeGroup{tag: "select", deps: []string{"p2"}, all: []string{"p2"}}
 	sel.selected = p2
 	m = newTestMonitor(t, nil, option.MonitoringOptions{
 		Interval:       badoption.Duration(time.Hour),

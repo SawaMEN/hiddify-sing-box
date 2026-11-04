@@ -14,7 +14,7 @@ type CountryIsProvider struct {
 // NewCountryIsProvider initializes a new CountryIsProvider.
 func NewCountryIsProvider() *CountryIsProvider {
 	return &CountryIsProvider{
-		BaseProvider: BaseProvider{URL: "https://api.country.is/"},
+		URL: "https://api.country.is/",
 	}
 }
 

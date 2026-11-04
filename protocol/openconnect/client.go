@@ -117,9 +117,9 @@ func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextL
 		onDemand:      options.OnDemand,
 	}
 	openConnectEndpoint.endpointBase = endpointBase{
-			Adapter: endpoint.NewAdapterWithDialerOptions(C.TypeOpenConnect, tag, []string{N.NetworkTCP, N.NetworkUDP, N.NetworkICMP}, options.DialerOptions),
-			router:  router,
-			logger:  logger,
+		Adapter: endpoint.NewAdapterWithDialerOptions(C.TypeOpenConnect, tag, []string{N.NetworkTCP, N.NetworkUDP, N.NetworkICMP}, options.DialerOptions),
+		router:  router,
+		logger:  logger,
 	}
 	openConnectEndpoint.state.Store(new(clientState))
 	success := false

@@ -974,10 +974,8 @@ func TestDNSMatchResponseMissingResponseUsesBooleanSemantics(t *testing.T) {
 		nestedRule.matchResponse = true
 
 		logicalRule := &LogicalDNSRule{
-			abstractLogicalRule: abstractLogicalRule{
-				rules: []adapter.HeadlessRule{nestedRule},
-				mode:  C.LogicalTypeAnd,
-			},
+			rules: []adapter.HeadlessRule{nestedRule},
+			mode:  C.LogicalTypeAnd,
 		}
 
 		metadata := testMetadata("lookup.example")
@@ -1124,10 +1122,8 @@ func TestDNSLegacyLogicalAddressLimitPreLookupDefersNestedRules(t *testing.T) {
 		addDestinationIPIsPrivateItem(rule)
 	})
 	logicalRule := &LogicalDNSRule{
-		abstractLogicalRule: abstractLogicalRule{
-			rules: []adapter.HeadlessRule{nestedRule},
-			mode:  C.LogicalTypeAnd,
-		},
+		rules: []adapter.HeadlessRule{nestedRule},
+		mode:  C.LogicalTypeAnd,
 	}
 
 	preLookupMetadata := testMetadata("lookup.example")
@@ -1204,15 +1200,13 @@ func TestDNSLegacyInvertLogicalAddressLimitPreLookupRegression(t *testing.T) {
 		t.Parallel()
 
 		logicalRule := &LogicalDNSRule{
-			abstractLogicalRule: abstractLogicalRule{
-				rules: []adapter.HeadlessRule{
-					dnsRuleForTest(func(rule *abstractDefaultRule) {
-						rule.invert = true
-						addDestinationIPIsPrivateItem(rule)
-					}),
-				},
-				mode: C.LogicalTypeAnd,
+			rules: []adapter.HeadlessRule{
+				dnsRuleForTest(func(rule *abstractDefaultRule) {
+					rule.invert = true
+					addDestinationIPIsPrivateItem(rule)
+				}),
 			},
+			mode: C.LogicalTypeAnd,
 		}
 
 		preLookupMetadata := testMetadata("lookup.example")
@@ -1341,11 +1335,9 @@ func headlessDefaultRule(t *testing.T, build func(*abstractDefaultRule)) *Defaul
 
 func headlessLogicalRule(mode string, invert bool, rules ...adapter.HeadlessRule) *LogicalHeadlessRule {
 	return &LogicalHeadlessRule{
-		abstractLogicalRule: abstractLogicalRule{
-			rules:  rules,
-			mode:   mode,
-			invert: invert,
-		},
+		rules:  rules,
+		mode:   mode,
+		invert: invert,
 	}
 }
 
@@ -1389,10 +1381,8 @@ func testMetadata(domain string) adapter.InboundContext {
 
 func dnsResponseForTest(addresses ...netip.Addr) *mDNS.Msg {
 	response := &mDNS.Msg{
-		MsgHdr: mDNS.MsgHdr{
-			Response: true,
-			Rcode:    mDNS.RcodeSuccess,
-		},
+		Response: true,
+		Rcode:    mDNS.RcodeSuccess,
 	}
 	for _, address := range addresses {
 		if address.Is4() {

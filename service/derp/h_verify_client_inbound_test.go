@@ -52,9 +52,9 @@ func TestH_DERPStartFailsWithVerifyClientInboundWithoutTailcat(t *testing.T) {
 	t.Parallel()
 	cert, key := selfSignedPEM(t)
 	svc, err := NewService(context.Background(), log.NewNOPFactory().Logger(), "derp", option.DERPServiceOptions{
-		InboundTLSOptionsContainer: option.InboundTLSOptionsContainer{TLS: &option.InboundTLSOptions{
+		TLS: &option.InboundTLSOptions{
 			Enabled: true, Certificate: []string{cert}, Key: []string{key},
-		}},
+		},
 		ConfigPath:          filepath.Join(t.TempDir(), "derp.json"),
 		VerifyClientInbound: []string{"tailcat-in"},
 	})

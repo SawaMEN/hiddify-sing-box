@@ -33,7 +33,7 @@ func (hNoEndpoints) Endpoints() []adapter.Endpoint { return nil }
 func TestH_URLTestSignalsItsMove(t *testing.T) {
 	server := hProbeServer(t)
 	fast, slow := hProbe(t, server, "fast", 5*time.Millisecond), hProbe(t, server, "slow", 60*time.Millisecond)
-	manager := &hListedOutboundManager{hOutboundManager: hOutboundManager{outbounds: map[string]adapter.Outbound{"fast": fast, "slow": slow}}}
+	manager := &hListedOutboundManager{outbounds: map[string]adapter.Outbound{"fast": fast, "slow": slow}}
 	ctx := service.ContextWithDefaultRegistry(context.Background())
 	ctx = pause.WithDefaultManager(ctx)
 	ctx = service.ContextWithPtr(ctx, urltest.NewHistoryStorage())

@@ -138,7 +138,7 @@ func startInbound(t *testing.T, mutate func(*option.SSHInboundOptions)) *sshFixt
 	f := &sshFixture{router: newTestRouter(), hostKey: newKeyPair(t), userKey: newKeyPair(t), port: freeTCPPort(t)}
 	listen := badoption.Addr(netip.MustParseAddr("127.0.0.1"))
 	f.inOption = option.SSHInboundOptions{
-		ListenOptions: option.ListenOptions{Listen: &listen, ListenPort: f.port},
+		Listen: &listen, ListenPort: f.port,
 		Users: []option.SSHUser{
 			{User: "alice", Password: "wonderland"},
 			{User: "bob", PublicKey: f.userKey.authorizedKey},
@@ -293,10 +293,10 @@ func TestH_SSHInboundServerVersion(t *testing.T) {
 
 func newTestOutbound(t *testing.T, f *sshFixture, mutate func(*option.SSHOutboundOptions)) *Outbound {
 	options := option.SSHOutboundOptions{
-		ServerOptions: option.ServerOptions{Server: "127.0.0.1", ServerPort: f.port},
-		User:          "alice",
-		Password:      "wonderland",
-		HostKey:       []string{f.hostKey.authorizedKey},
+		Server: "127.0.0.1", ServerPort: f.port,
+		User:     "alice",
+		Password: "wonderland",
+		HostKey:  []string{f.hostKey.authorizedKey},
 	}
 	if mutate != nil {
 		mutate(&options)

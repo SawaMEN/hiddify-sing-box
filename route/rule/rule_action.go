@@ -605,18 +605,16 @@ func (r *RuleActionPredefined) String() string {
 
 func (r *RuleActionPredefined) Response(request *dns.Msg) *dns.Msg {
 	return &dns.Msg{
-		MsgHdr: dns.MsgHdr{
-			Id:                 request.Id,
-			Response:           true,
-			Authoritative:      true,
-			RecursionDesired:   true,
-			RecursionAvailable: true,
-			Rcode:              r.Rcode,
-		},
-		Question: request.Question,
-		Answer:   rewriteRecords(r.Answer, request.Question[0]),
-		Ns:       rewriteRecords(r.Ns, request.Question[0]),
-		Extra:    rewriteRecords(r.Extra, request.Question[0]),
+		Id:                 request.Id,
+		Response:           true,
+		Authoritative:      true,
+		RecursionDesired:   true,
+		RecursionAvailable: true,
+		Rcode:              r.Rcode,
+		Question:           request.Question,
+		Answer:             rewriteRecords(r.Answer, request.Question[0]),
+		Ns:                 rewriteRecords(r.Ns, request.Question[0]),
+		Extra:              rewriteRecords(r.Extra, request.Question[0]),
 	}
 }
 

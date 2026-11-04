@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -117,18 +116,9 @@ func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	}
 	ApplyXPaddingToHeader(writer.Header(), config)
 	validRange := s.options.GetNormalizedXPaddingBytes()
-	paddingLength := 0
-	referrer := request.Header.Get("Referer")
-	if referrer != "" {
-		if referrerURL, err := url.Parse(referrer); err == nil {
-			// Browser dialer cannot control the host part of referrer header, so only check the query
-			paddingLength = len(referrerURL.Query().Get("x_padding"))
-		}
-	} else {
-		paddingLength = len(request.URL.Query().Get("x_padding"))
-	}
-	if int32(paddingLength) < validRange.From || int32(paddingLength) > validRange.To {
-		s.logger.ErrorContext(request.Context(), "invalid x_padding length:", int32(paddingLength))
+	paddingValue, placement := ExtractXPaddingFromRequest(&s.options.V2RayXHTTPBaseOptions, request, s.options.XPaddingObfsMode)                  // H
+	if !IsPaddingValid(&s.options.V2RayXHTTPBaseOptions, paddingValue, validRange.From, validRange.To, PaddingMethod(s.options.XPaddingMethod)) { // H
+		s.logger.ErrorContext(request.Context(), "invalid x_padding at ", placement, ": ", len(paddingValue)) // H
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}

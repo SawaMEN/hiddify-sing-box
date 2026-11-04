@@ -92,10 +92,10 @@ func TestH_MieruValidateTransport(t *testing.T) {
 
 func validMieruOutboundOptions() option.MieruOutboundOptions {
 	return option.MieruOutboundOptions{
-		ServerOptions: option.ServerOptions{Server: "127.0.0.1"},
-		PortBindings:  []option.MieruPortBinding{{Protocol: "TCP", Port: 8964}},
-		UserName:      "user",
-		Password:      "pass",
+		Server:       "127.0.0.1",
+		PortBindings: []option.MieruPortBinding{{Protocol: "TCP", Port: 8964}},
+		UserName:     "user",
+		Password:     "pass",
 	}
 }
 
@@ -360,10 +360,10 @@ func TestH_MieruLoopbackRoundTrip(t *testing.T) {
 	defer htest.Close(in)
 
 	out, err := NewOutbound(ctx, router, logger, "mieru-out", option.MieruOutboundOptions{
-		ServerOptions: option.ServerOptions{Server: "127.0.0.1"},
-		PortBindings:  []option.MieruPortBinding{{Protocol: "TCP", Port: port}},
-		UserName:      "alice",
-		Password:      "secret",
+		Server:       "127.0.0.1",
+		PortBindings: []option.MieruPortBinding{{Protocol: "TCP", Port: port}},
+		UserName:     "alice",
+		Password:     "secret",
 	})
 	require.NoError(t, err)
 	defer out.(*Outbound).Close()

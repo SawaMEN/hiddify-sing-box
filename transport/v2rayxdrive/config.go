@@ -139,7 +139,7 @@ func xrayFingerprintName(client, version string) string {
 
 func frontingDestination(options option.V2RayXDriveOptions) *xnet.Destination {
 	if options.FrontingAddress == "" {
-		options.FrontingAddress, options.FrontingPort = options.FrontAddress, options.FrontPort //H: legacy fronting names
+		options.FrontingAddress, options.FrontingPort = options.FrontAddress, options.FrontPort // H: legacy fronting names
 	}
 	if options.FrontingAddress == "" {
 		return nil

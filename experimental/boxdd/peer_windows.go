@@ -250,8 +250,8 @@ func (c *windowsTransportCredentials) serverHandshake(rawConnection net.Conn) (n
 	keepParentProcessImage = true
 	c.daemon.registerPeerConnection(connection)
 	authenticationInformation := &peerAuthInfo{
-		CommonAuthInfo: credentials.CommonAuthInfo{SecurityLevel: credentials.PrivacyAndIntegrity},
-		identity:       parentIdentity,
+		SecurityLevel: credentials.PrivacyAndIntegrity, // H: Go 1.27 promoted field
+		identity:      parentIdentity,
 	}
 	return connection, authenticationInformation, nil
 }

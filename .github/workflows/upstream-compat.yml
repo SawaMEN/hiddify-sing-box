@@ -25,7 +25,7 @@ jobs:
       - name: Vet production build
         run: go vet -mod=mod -tags "$BUILD_TAGS" ./...
       - name: Race regressions
-        run: go test -mod=mod -race -tags "$BUILD_TAGS" -ldflags "$LDFLAGS_SHARED" ./common/monitoring ./common/dnspool ./common/tls ./common/urltest ./dns ./route/... ./hiddify/finalmask ./hiddify/ipinfo ./schema ./protocol/hiddify/dnstt ./protocol/hiddify/masterdns ./protocol/hiddify/soar ./protocol/warp ./protocol/masque ./transport/masque ./common/cloudflare ./protocol/group/balancer ./service/smart_dns_pool ./transport/v2rayxdrive ./option -timeout 15m
+        run: go test -mod=mod -race -tags "$BUILD_TAGS" -ldflags "$LDFLAGS_SHARED" ./common/monitoring ./common/dnspool ./common/tls ./common/urltest ./dns ./route/... ./hiddify/finalmask ./hiddify/ipinfo ./schema ./protocol/hiddify/dnstt ./protocol/hiddify/masterdns ./protocol/hiddify/soar ./protocol/warp ./protocol/masque ./transport/masque ./common/cloudflare ./protocol/group/balancer ./service/smart_dns_pool ./transport/v2rayxdrive ./transport/v2rayxhttp ./option -timeout 15m
       - name: Full production test suite
         run: go test -mod=mod -tags "$BUILD_TAGS" -ldflags "$LDFLAGS_SHARED" -exec sudo ./... -timeout 15m
       - name: Fetch Xray interoperability binaries

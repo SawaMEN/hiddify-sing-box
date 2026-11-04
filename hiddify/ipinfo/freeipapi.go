@@ -14,7 +14,7 @@ type FreeIpApiProvider struct {
 // NewFreeIpApiProvider initializes a new FreeIpApiProvider.
 func NewFreeIpApiProvider() *FreeIpApiProvider {
 	return &FreeIpApiProvider{
-		BaseProvider: BaseProvider{URL: "https://free.freeipapi.com/api/json/"},
+		URL: "https://free.freeipapi.com/api/json/",
 	}
 }
 

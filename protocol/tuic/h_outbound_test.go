@@ -12,10 +12,10 @@ import (
 
 func hTUICOptions(mode string) option.TUICOutboundOptions {
 	return option.TUICOutboundOptions{
-		ServerOptions:               option.ServerOptions{Server: "127.0.0.1", ServerPort: 443},
-		UUID:                        "b831381d-6324-4d53-ad4f-8cda48b30811",
-		UDPRelayMode:                mode,
-		OutboundTLSOptionsContainer: option.OutboundTLSOptionsContainer{TLS: &option.OutboundTLSOptions{Enabled: true, ServerName: "example.com"}},
+		Server: "127.0.0.1", ServerPort: 443,
+		UUID:         "b831381d-6324-4d53-ad4f-8cda48b30811",
+		UDPRelayMode: mode,
+		TLS:          &option.OutboundTLSOptions{Enabled: true, ServerName: "example.com"},
 	}
 }
 

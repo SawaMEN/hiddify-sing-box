@@ -14,7 +14,7 @@ type MyIPioProvider struct {
 // NewMyIPioProvider initializes a new MyIPioProvider.
 func NewMyIPioProvider() *MyIPioProvider {
 	return &MyIPioProvider{
-		BaseProvider: BaseProvider{URL: "https://api.my-ip.io/v2/ip.json"},
+		URL: "https://api.my-ip.io/v2/ip.json",
 	}
 }
 

@@ -485,16 +485,14 @@ func TestPollConn_CloseWrite_NoPanic(t *testing.T) {
 
 	const n = 1000
 	c := &pollConn{
-		ctx:    ctx,
-		cancel: cancel,
-		queuedConn: queuedConn{
-			rxc:         make(chan []byte, 1),
-			closed:      make(chan struct{}),
-			writeCh:     make(chan []byte, n),
-			writeClosed: make(chan struct{}),
-			localAddr:   &net.TCPAddr{},
-			remoteAddr:  &net.TCPAddr{},
-		},
+		ctx:         ctx,
+		cancel:      cancel,
+		rxc:         make(chan []byte, 1),
+		closed:      make(chan struct{}),
+		writeCh:     make(chan []byte, n),
+		writeClosed: make(chan struct{}),
+		localAddr:   &net.TCPAddr{},
+		remoteAddr:  &net.TCPAddr{},
 	}
 
 	var wg sync.WaitGroup

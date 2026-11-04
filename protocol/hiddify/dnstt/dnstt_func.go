@@ -63,6 +63,7 @@ func (h *Outbound) openStreamImp(ctx context.Context) (net.Conn, error) {
 		return newtunnel.OpenStream()
 	}
 }
+
 func (h *Outbound) OpenStream(ctx context.Context) (net.Conn, error) {
 	var err error
 	var conn net.Conn
@@ -74,6 +75,7 @@ func (h *Outbound) OpenStream(ctx context.Context) (net.Conn, error) {
 	}
 	return nil, err
 }
+
 func (h *Outbound) OpenStreamSingleResolver(ctx context.Context) (net.Conn, error) {
 	// dnsttConfig := streamSettings.ProtocolSettings.(*Config)
 	h.mu.Lock()
@@ -108,6 +110,7 @@ func (h *Outbound) OpenStreamSingleResolver(ctx context.Context) (net.Conn, erro
 	}
 	return nil, lasterr
 }
+
 func (h *Outbound) createDnsttTunnel(ctx context.Context, resolver []dnstt.Resolver) (*dnstt.Tunnel, error) {
 	tServer, err := newTunnelServer(h.options)
 	if err != nil {

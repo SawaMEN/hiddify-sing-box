@@ -39,7 +39,7 @@ func (c *Client) acquireHTTP2(ctx context.Context) (*http2ClientConn, net.Conn, 
 		conn.Close()
 		return nil, nil, E.Cause(err, "create HTTP/2 connection")
 	}
-	clientConn.reserveNewRequest() //H: both Go 1.27 and legacy HTTP/2 wrappers
+	clientConn.reserveNewRequest() // H: both Go 1.27 and legacy HTTP/2 wrappers
 	c.http2Conns = append(c.http2Conns, clientConn)
 	return clientConn, nil, nil
 }
