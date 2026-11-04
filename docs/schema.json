@@ -417,6 +417,30 @@
       },
       "additionalProperties": false
     },
+    "BondOutbound": {
+      "type": "object",
+      "properties": {
+        "outbound": {
+          "$ref": "#/$defs/Outbound"
+        },
+        "download_ratio": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "upload_ratio": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        }
+      },
+      "additionalProperties": false
+    },
     "BrutalOptions": {
       "type": "object",
       "properties": {
@@ -14093,6 +14117,27 @@
             },
             "tag": {
               "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "bond"
+            },
+            "tag": {
+              "type": "string"
+            },
+            "outbounds": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/BondOutbound"
+              }
             }
           },
           "required": [

@@ -48,6 +48,7 @@ func NewClient(ctx context.Context, dialer N.Dialer, serverAddr M.Socksaddr, opt
 	if options.Mode == "" {
 		return nil, E.New("mode is not set")
 	}
+	options.Mode = hClientMode(options.Mode, tls.IsReality(tlsConfig), options.Download != nil) // H
 	dest := serverAddr
 	baseRequestURL, err := getBaseRequestURL(&options.V2RayXHTTPBaseOptions, dest, tlsConfig)
 	if err != nil {
