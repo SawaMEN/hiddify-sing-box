@@ -114,6 +114,7 @@ func OutboundRegistry() *outbound.Registry {
 
 	group.RegisterSelector(registry)
 	group.RegisterURLTest(registry)
+	registerBondOutbound(registry) // H
 
 	socks.RegisterOutbound(registry)
 	http.RegisterOutbound(registry)
