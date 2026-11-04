@@ -1,6 +1,6 @@
 module github.com/sagernet/sing-box
 
-go 1.26.10
+go 1.27.3
 
 require (
 	filippo.io/edwards25519 v1.2.0
@@ -92,7 +92,7 @@ require (
 	github.com/tidwall/gjson v1.18.0
 	github.com/vishvananda/netns v0.0.5
 	github.com/xchacha20-poly1305/sing-trusttunnel v0.3.2
-	github.com/xtls/xray-core v1.260327.1-0.20260728075948-5ca6f4b7d4dc
+	github.com/xtls/xray-core v1.260327.1-0.20261031132019-a4a3dff5b20c
 	github.com/yosida95/uritemplate/v3 v3.0.2
 	go.uber.org/zap v1.28.0
 	go4.org/mem v0.0.0-20240501181205-ae6ca9944745
