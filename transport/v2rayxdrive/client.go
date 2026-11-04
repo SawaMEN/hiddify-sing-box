@@ -17,12 +17,19 @@ import (
 func newServiceClient(connCtx context.Context, _ *sync.Map, options *streamOptions, stall time.Duration, maxConns int) *http.Client {
 	dial := func(ctx context.Context, network, addr string) (net.Conn, error) {
 		target := M.ParseSocksaddr(addr)
-		if config, ok := options.ProtocolSettings.(*Config); ok && config.FrontAddress != "" {
+		if config, ok := options.ProtocolSettings.(*Config); ok && (config.FrontingAddress != "" || config.FrontAddress != "") {
 			port := target.Port
 			if config.FrontPort > 0 {
 				port = config.FrontPort
 			}
-			target = M.ParseSocksaddrHostPort(config.FrontAddress, port)
+			if config.FrontingPort > 0 {
+				port = config.FrontingPort
+			}
+			address := config.FrontAddress
+			if config.FrontingAddress != "" {
+				address = config.FrontingAddress
+			}
+			target = M.ParseSocksaddrHostPort(address, port)
 		}
 		conn, err := options.dialer.DialContext(ctx, N.NetworkTCP, target)
 		if err != nil {

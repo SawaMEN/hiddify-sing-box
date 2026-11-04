@@ -45,5 +45,5 @@ type DnsttOptions struct {
 	// addResolver flow through an internal hmrd_multi_resolver_dns pool
 	// (deadline-aware failover, AIMD throttling, recovery probing) instead
 	// of using each resolver as its own tunnel.
-	SmartPool bool `json:"smart_pool,omitempty"`
+	SmartPool *SmartPoolOptions `json:"smart_pool,omitempty"`
 }

@@ -63,7 +63,7 @@ func validate(options Config) error {
 			}
 		}
 	case "template":
-		if strings.TrimSpace(options.Template) == "" {
+		if len(options.Template) == 0 {
 			return fmt.Errorf("XDrive storage template is required")
 		}
 		var template storageTemplate
