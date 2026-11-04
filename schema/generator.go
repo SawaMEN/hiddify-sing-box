@@ -106,20 +106,20 @@ func (g *generator) Describe(valueType reflect.Type) (*Node, error) {
 	case rawMessageType: // H
 		return &Node{}, nil // H
 	}
-	if valueType.Name() == "SmartPoolOptions" && strings.HasSuffix(valueType.PkgPath(), "sing-box/option") { //H: a bare true or the settings object (option imports this package, so by name)
-		return g.Define("SmartPool", func() (*Node, error) { //H
-			node := StrictObject()                                   //H
-			if err := g.FlattenStruct(node, valueType); err != nil { //H
-				return nil, err //H
-			} //H
-			return AnyOf(BooleanNode(), node), nil //H
-		}) //H
-	} //H
-	if slices.Contains(rangeTypes, valueType) { //H
-		return g.Define("Range", func() (*Node, error) { //H
-			return AnyOf(IntegerNode(), StringNode(), &Node{Type: "object"}), nil //H
-		}) //H
-	} //H
+	if valueType.Name() == "SmartPoolOptions" && strings.HasSuffix(valueType.PkgPath(), "sing-box/option") { // H: a bare true or the settings object (option imports this package, so by name)
+		return g.Define("SmartPool", func() (*Node, error) { // H
+			node := StrictObject()                                   // H
+			if err := g.FlattenStruct(node, valueType); err != nil { // H
+				return nil, err // H
+			} // H
+			return AnyOf(BooleanNode(), node), nil // H
+		}) // H
+	} // H
+	if slices.Contains(rangeTypes, valueType) { // H
+		return g.Define("Range", func() (*Node, error) { // H
+			return AnyOf(IntegerNode(), StringNode(), &Node{Type: "object"}), nil // H
+		}) // H
+	} // H
 	if isListable(valueType) {
 		elementNode, err := g.Describe(valueType.Elem())
 		if err != nil {
@@ -215,11 +215,11 @@ func (g *generator) defNameFor(fieldType reflect.Type) string {
 }
 
 func pathBase(packagePath string) string {
-	index := strings.LastIndexByte(packagePath, '/')
-	if index < 0 {
+	_, after, ok := strings.CutLast(packagePath, "/")
+	if !ok {
 		return packagePath
 	}
-	return packagePath[index+1:]
+	return after
 }
 
 // FlattenStruct merges the JSON fields of structType into node, following the
@@ -267,7 +267,7 @@ func (g *generator) FlattenStruct(node *Node, structType reflect.Type) error {
 		g.path = append(g.path, structType.Name()+"."+tagName)
 		var fieldNode *Node
 		var err error
-		if schemaTag == "prefixable" { //H: fork CIDR options retain string storage
+		if schemaTag == "prefixable" { // H: fork CIDR options retain string storage
 			fieldNode, err = g.hPrefixableField(fieldType)
 		} else if enumTag != "" || examplesTag != "" || referenceTag != "" {
 			fieldNode, err = g.taggedFieldNode(fieldType, enumTag, examplesTag, referenceTag)

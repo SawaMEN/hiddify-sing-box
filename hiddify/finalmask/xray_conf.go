@@ -226,8 +226,8 @@ type FragmentMask struct {
 	Packets  string       `json:"packets"`
 	Length   Int32Range   `json:"length"`
 	Delay    Int32Range   `json:"delay"`
-	Lengths  hInt32Ranges `json:"lengths"` //H: accept old compact ranges
-	Delays   hInt32Ranges `json:"delays"`  //H: accept old compact ranges
+	Lengths  hInt32Ranges `json:"lengths"` // H: accept old compact ranges
+	Delays   hInt32Ranges `json:"delays"`  // H: accept old compact ranges
 	MaxSplit Int32Range   `json:"maxSplit"`
 }
 
@@ -1088,7 +1088,7 @@ type UDPHop struct {
 
 func (c *UDPHop) Build() (proto.Message, error) {
 	var local, remote, remoteOnce bool
-	for _, mode := range strings.Split(c.Mode, ",") {
+	for mode := range strings.SplitSeq(c.Mode, ",") {
 		switch strings.ToLower(mode) {
 		case "intervallocal":
 			local = true

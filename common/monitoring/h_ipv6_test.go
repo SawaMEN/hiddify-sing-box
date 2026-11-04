@@ -38,7 +38,7 @@ func (d *hFakeDNS) Lookup(ctx context.Context, domain string, options adapter.DN
 // adapter.IPv6Capability in the context.
 func TestH_MonitoringLearnsIPv6(t *testing.T) {
 	a, b := &fakeOutbound{tag: "a"}, &fakeOutbound{tag: "b"}
-	grp := &fakeGroup{fakeOutbound: fakeOutbound{tag: "grp"}, all: []string{"a", "b"}, selected: a}
+	grp := &fakeGroup{tag: "grp", all: []string{"a", "b"}, selected: a}
 	m := newTestMonitor(t, nil, option.MonitoringOptions{Interval: badoption.Duration(time.Hour)}, a, b, grp)
 	require.NoError(t, htest.Start(m, adapter.StartStateInitialize))
 
@@ -92,7 +92,7 @@ func TestH_MonitoringLearnsIPv6(t *testing.T) {
 // A group with no single selection carries IPv6 only when every live member is known to.
 func TestH_MonitoringIPv6OfSpreadingGroup(t *testing.T) {
 	a, b := &fakeOutbound{tag: "a"}, &fakeOutbound{tag: "b"}
-	grp := &fakeGroup{fakeOutbound: fakeOutbound{tag: "grp"}, all: []string{"a", "b"}}
+	grp := &fakeGroup{tag: "grp", all: []string{"a", "b"}}
 	m := newTestMonitor(t, nil, option.MonitoringOptions{Interval: badoption.Duration(time.Hour)}, a, b, grp)
 	require.NoError(t, htest.Start(m, adapter.StartStateInitialize))
 	setHistory(m, "a", 50, false, nil)

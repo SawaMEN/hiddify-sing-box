@@ -3,13 +3,12 @@ package dnstt
 import (
 	"context"
 	"fmt"
-	"github.com/sagernet/sing-box/common/dialer"
 	"net"
 	"sync"
 
-	dnstt "github.com/net2share/vaydns/client"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
+	"github.com/sagernet/sing-box/common/dialer"
 	"github.com/sagernet/sing-box/common/dnspool"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
@@ -20,6 +19,8 @@ import (
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/common/uot"
 	"github.com/sagernet/sing/service"
+
+	dnstt "github.com/net2share/vaydns/client"
 )
 
 func RegisterOutbound(registry *outbound.Registry) {
@@ -41,7 +42,6 @@ type Outbound struct {
 	cache              adapter.CacheFile
 	uotClient          *uot.Client
 	started            int
-	tunnel_index       int
 
 	pool *dnspool.Pool // the outbound's own resolver pool, set when options.SmartPool is enabled
 
@@ -59,7 +59,6 @@ func (h *Outbound) PostStart() error {
 }
 
 func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.DnsttOptions) (adapter.Outbound, error) {
-
 	// if options.TunnelPerResolver <= 0 {
 	// 	options.TunnelPerResolver = 4
 	// }
@@ -136,7 +135,6 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 	}
 
 	return out, nil
-
 }
 
 func (h *Outbound) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
@@ -148,6 +146,7 @@ func (h *Outbound) DialContext(ctx context.Context, network string, destination 
 	}
 	return h.OpenStream(ctx)
 }
+
 func (h *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
 	if !h.isReady() {
 		return nil, E.New("outbound is not started")
@@ -176,8 +175,9 @@ func (h *Outbound) Status() adapter.Status {
 	}
 	return adapter.StatusConnecting
 }
+
 func (h *Outbound) DisplayType() string {
-	str := C.ProxyDisplayName(h.Type()) //H: adapter.DisplayType adds the status mark
+	str := C.ProxyDisplayName(h.Type()) // H: adapter.DisplayType adds the status mark
 	if h.started > 0 {
 		str += fmt.Sprint(" ✔️ ", len(h.resolvers), " resolvers")
 	}

@@ -13,26 +13,26 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/urltest"
+	"github.com/sagernet/sing-box/hiddify/ipinfo"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	tun "github.com/sagernet/sing-tun"
-	E "github.com/sagernet/sing/common/exceptions"
-	"github.com/sagernet/sing/service"
-
-	"github.com/sagernet/sing-box/hiddify/ipinfo"
-	"github.com/sagernet/sing/common/x/list"
-
 	"github.com/sagernet/sing/common"
+	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/json/badoption"
 	N "github.com/sagernet/sing/common/network"
+	"github.com/sagernet/sing/common/x/list"
+	"github.com/sagernet/sing/service"
 	"github.com/sagernet/sing/service/pause"
 )
 
 const TimeoutDelay uint16 = 65535
 
-var _ adapter.ConnectionTracker = (*OutboundMonitoring)(nil)
-var _ adapter.LifecycleService = (*OutboundMonitoring)(nil)
-var _ adapter.InterfaceUpdateListener = (*OutboundMonitoring)(nil)
+var (
+	_ adapter.ConnectionTracker       = (*OutboundMonitoring)(nil)
+	_ adapter.LifecycleService        = (*OutboundMonitoring)(nil)
+	_ adapter.InterfaceUpdateListener = (*OutboundMonitoring)(nil)
+)
 
 const (
 	defaultWorkerCount    = 10
@@ -107,7 +107,7 @@ type OutboundMonitoring struct {
 
 	cycleSeq     atomic.Uint64 // H: a typed atomic, 8-byte aligned also on 32-bit ARM, where a bare uint64 used with atomic.AddUint64 panics
 	cycleRunning atomic.Bool
-	networkSeq   atomic.Uint64 //H: counts network resets, see executeTask
+	networkSeq   atomic.Uint64 // H: counts network resets, see executeTask
 
 	networkRetest *time.Timer // H: the pending retest after a network change, guarded by access
 	cycleAgain    atomic.Bool // H: a cycle that ran during a network change runs once more
@@ -167,7 +167,6 @@ func (m *OutboundMonitoring) Name() string {
 }
 
 func (m *OutboundMonitoring) OutboundsHistory(groupTag string) map[string]*adapter.URLTestHistory {
-
 	histories := make(map[string]*adapter.URLTestHistory)
 
 	registry := m.reg()
@@ -180,9 +179,8 @@ func (m *OutboundMonitoring) OutboundsHistory(groupTag string) map[string]*adapt
 	}
 	//m.logger.Debug("collecting history for group ", groupTag, " with ", len(grp.outbounds), " outbounds")
 	for outboundTag := range grp.outbounds {
-		histories[outboundTag] = m.confirmed(groupTag, outboundTag, m.getUrlTest(outboundTag)) //H
+		histories[outboundTag] = m.confirmed(groupTag, outboundTag, m.getUrlTest(outboundTag)) // H
 		// m.logger.Error("checking history for outbound ", outboundTag)
-
 	}
 	return histories
 }
@@ -208,7 +206,6 @@ func (m *OutboundMonitoring) getUrlTest(outboundTag string) *adapter.URLTestHist
 	his.IsFromCache = state.from_cache
 	state.mu.Unlock()
 	return &his
-
 }
 
 func (m *OutboundMonitoring) getMinGroupOutboundHistory(groupTag string) *adapter.URLTestHistory {
@@ -228,18 +225,18 @@ func (m *OutboundMonitoring) getMinGroupOutboundHistory(groupTag string) *adapte
 				minHis = his
 			} else if his.Delay < minHis.Delay {
 				minHis.Delay = his.Delay
-				minHis.IpInfo, minHis.IpInfoFromCache = his.IpInfo, his.IpInfoFromCache //H
+				minHis.IpInfo, minHis.IpInfoFromCache = his.IpInfo, his.IpInfoFromCache // H
 			} else if minHis.IpInfo == nil {
-				minHis.IpInfo, minHis.IpInfoFromCache = his.IpInfo, his.IpInfoFromCache //H
+				minHis.IpInfo, minHis.IpInfoFromCache = his.IpInfo, his.IpInfoFromCache // H
 			}
 		} else {
 			if minHisFromCache == nil {
 				minHisFromCache = his
 			} else if his.Delay < minHisFromCache.Delay {
 				minHisFromCache.Delay = his.Delay
-				minHisFromCache.IpInfo, minHisFromCache.IpInfoFromCache = his.IpInfo, his.IpInfoFromCache //H
+				minHisFromCache.IpInfo, minHisFromCache.IpInfoFromCache = his.IpInfo, his.IpInfoFromCache // H
 			} else if minHisFromCache.IpInfo == nil {
-				minHisFromCache.IpInfo, minHisFromCache.IpInfoFromCache = his.IpInfo, his.IpInfoFromCache //H
+				minHisFromCache.IpInfo, minHisFromCache.IpInfoFromCache = his.IpInfo, his.IpInfoFromCache // H
 			}
 		}
 	}
@@ -248,17 +245,17 @@ func (m *OutboundMonitoring) getMinGroupOutboundHistory(groupTag string) *adapte
 	if minHis == nil || minHis.Delay >= TimeoutDelay {
 		final = minHisFromCache
 	} else if minHisFromCache != nil && minHis.IpInfo == nil {
-		final.IpInfo, final.IpInfoFromCache = minHisFromCache.IpInfo, minHisFromCache.IpInfoFromCache //H
+		final.IpInfo, final.IpInfoFromCache = minHisFromCache.IpInfo, minHisFromCache.IpInfoFromCache // H
 	}
 
 	return final
-
 }
 
 func (m *OutboundMonitoring) RoutedConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, matchedRule adapter.Rule, matchOutbound adapter.Outbound) net.Conn {
 	m.Touch()
 	return conn
 }
+
 func (m *OutboundMonitoring) RoutedPacketConnection(ctx context.Context, conn N.PacketConn, metadata adapter.InboundContext, matchedRule adapter.Rule, matchOutbound adapter.Outbound) N.PacketConn {
 	m.Touch()
 	return conn
@@ -294,7 +291,7 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 	if options.DebounceWindow <= 0 {
 		options.DebounceWindow = badoption.Duration(defaultDebounceWindow)
 	}
-	onDemand := onDemandTimeouts(options.OnDemandTimeouts) //H
+	onDemand := onDemandTimeouts(options.OnDemandTimeouts) // H
 
 	cloned := append([]string(nil), options.URLs...)
 	if len(cloned) == 0 {
@@ -316,9 +313,9 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 		cancel:          cancel,
 		urls:            cloned,
 		ipInfoURL:       options.IpInfoURL,
-		ipv6:            make(map[string]*ipv6Knowledge), //H
-		verifyIPv6:      options.VerifyIPv6,              //H
-		ipv6Declared:    options.IPv6Declared,            //H
+		ipv6:            make(map[string]*ipv6Knowledge), // H
+		verifyIPv6:      options.VerifyIPv6,              // H
+		ipv6Declared:    options.IPv6Declared,            // H
 		pause:           service.FromContext[pause.Manager](ctx),
 		logger:          logger,
 		outboundManager: service.FromContext[adapter.OutboundManager](ctx),
@@ -331,14 +328,14 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 		workersCount:   options.Workers,
 		urlTestTimeout: options.URLTestTimeout.Build(),
 		debounceWindow: options.DebounceWindow.Build(),
-		onDemand:       onDemand, //H
+		onDemand:       onDemand, // H
 
 		normalQueue: make(chan *testTask, 10000),
 	}
 	m.registry.Store(newMonitoringRegistry())
-	if service.FromContext[adapter.IPv6Capability](ctx) == nil { //H: what the DNS router and the route ask
-		service.MustRegister[adapter.IPv6Capability](ctx, m) //H
-	} //H
+	if service.FromContext[adapter.IPv6Capability](ctx) == nil { // H: what the DNS router and the route ask
+		service.MustRegister[adapter.IPv6Capability](ctx, m) // H
+	} // H
 
 	return m, nil
 }
@@ -359,7 +356,7 @@ func (m *OutboundMonitoring) Start(stage adapter.StartStage, scope *adapter.Scop
 		m.logger.Info("registered ", len(registry.outbounds), " outbounds for monitoring")
 		m.logger.Info("registered ", len(registry.groups), " outbound groups for monitoring")
 		m.loadHistory()
-		m.seedIPv6Knowledge() //H: what the cache and the links' declarations say
+		m.seedIPv6Knowledge() // H: what the cache and the links' declarations say
 	case adapter.StartStatePostStart:
 		for i := 0; i < m.workersCount; i++ {
 			m.workerWG.Add(1)
@@ -389,6 +386,7 @@ func (m *OutboundMonitoring) startTimerWorkers() {
 	m.schedulerWG.Add(1)
 	go m.scheduleLoop(m.mainTicker) // H: the field is cleared by stopTimerWorkers
 }
+
 func (m *OutboundMonitoring) stopTimerWorkers() {
 	m.access.Lock() // H: mainTicker is also read by Touch
 	defer m.access.Unlock()
@@ -463,10 +461,12 @@ func (m *OutboundMonitoring) signalChange(outboundTag string, visited map[string
 		m.signalChange(dependent, visited)
 	}
 }
+
 func (m *OutboundMonitoring) TestNow(outboundTag string) error {
 	m.testParents(outboundTag, true)
 	return m.testNow(outboundTag, true)
 }
+
 func (m *OutboundMonitoring) testNow(outboundTag string, priority bool) error {
 	m.logger.Info("testing outbound ", outboundTag, " with priority: ", priority)
 	if grp, ok := m.reg().groups[outboundTag]; ok {
@@ -483,7 +483,7 @@ func (m *OutboundMonitoring) testNow(outboundTag string, priority bool) error {
 			outboundTag: outboundTag,
 			cycleID:     m.cycleSeq.Load(),
 			priority:    priority,
-			staged:      priority, //H
+			staged:      priority, // H
 		}
 
 		m.enqueueTask(task)
@@ -526,7 +526,6 @@ func (m *OutboundMonitoring) InvalidateTest(outboundTag string) error {
 }
 
 func (m *OutboundMonitoring) SubscribeGroup(groupTag string) (observer <-chan GroupEvent, err error) {
-
 	if g, ok := m.reg().groups[groupTag]; ok {
 		// Buffer a few events so a selection flush is not dropped while the subscriber
 		// is coalescing the previous URL-test update.
@@ -534,6 +533,7 @@ func (m *OutboundMonitoring) SubscribeGroup(groupTag string) (observer <-chan Gr
 	}
 	return nil, E.New("group not found ", groupTag)
 }
+
 func (m *OutboundMonitoring) UnsubscribeGroup(groupTag string, observer <-chan GroupEvent) (err error) {
 	if g, ok := m.reg().groups[groupTag]; ok {
 		g.observer.Unsubscribe(observer)
@@ -544,8 +544,8 @@ func (m *OutboundMonitoring) UnsubscribeGroup(groupTag string, observer <-chan G
 
 func (m *OutboundMonitoring) Close() error {
 	m.closerOnce.Do(func() {
-		m.started.Store(false) //H: stop concurrent Touch calls
-		m.cancel()             //H: release active dialers before waiting for workers
+		m.started.Store(false) // H: stop concurrent Touch calls
+		m.cancel()             // H: release active dialers before waiting for workers
 		m.stopTimerWorkers()
 		m.access.Lock()
 		if m.networkRetest != nil {
@@ -564,7 +564,6 @@ func (m *OutboundMonitoring) Close() error {
 		m.cancel()
 		m.workerWG.Wait()
 		m.schedulerWG.Wait()
-
 	})
 	return nil
 }
@@ -622,7 +621,7 @@ func (m *OutboundMonitoring) executeTask(task *testTask) {
 		state.testing = false
 		state.mu.Unlock()
 	}()
-	if task.waits < dependencyWaits && (!adapter.IsReady(state.outbound) || !m.dependenciesReady(state)) { //H
+	if task.waits < dependencyWaits && (!adapter.IsReady(state.outbound) || !m.dependenciesReady(state)) { // H
 		reason := "not ready"
 		if adapter.IsReady(state.outbound) {
 			reason = "detour not ready"
@@ -632,10 +631,10 @@ func (m *OutboundMonitoring) executeTask(task *testTask) {
 			select {
 			case <-m.ctx.Done():
 				return
-			case <-time.After(dependencyWait): //H
+			case <-time.After(dependencyWait): // H
 			}
 			state.mu.Lock()
-			task.waits++ //H
+			task.waits++ // H
 			task.cycleID++
 			state.priorityQueued = false // H: the retry queues it again; left set, every URL test of it was dropped
 			state.mu.Unlock()
@@ -647,12 +646,12 @@ func (m *OutboundMonitoring) executeTask(task *testTask) {
 	go func() {
 		defer close(done)
 		state.mu.Lock()
-		worked := !state.from_cache && state.history.Delay != 0 && state.history.Delay < TimeoutDelay //H
+		worked := !state.from_cache && state.history.Delay != 0 && state.history.Delay < TimeoutDelay // H
 		state.mu.Unlock()
-		interim := func(history adapter.URLTestHistory, tentative bool) { m.applyInterim(task, state, history, tentative) } //H
+		interim := func(history adapter.URLTestHistory, tentative bool) { m.applyInterim(task, state, history, tentative) } // H
 		networkSeq := m.networkSeq.Load()
 		delay, err := m.tester(m.ctx, task.outboundTag, interim, task.staged)
-		for err != nil && m.networkSeq.Load() != networkSeq { //H: a network reset broke the test
+		for err != nil && m.networkSeq.Load() != networkSeq { // H: a network reset broke the test
 			m.logger.Info("outbound ", task.outboundTag, " test broken by a network reset, testing again")
 			networkSeq = m.networkSeq.Load()
 			select {
@@ -662,16 +661,15 @@ func (m *OutboundMonitoring) executeTask(task *testTask) {
 			}
 			delay, err = m.tester(m.ctx, task.outboundTag, interim, task.staged)
 		}
-		m.settle(task, state, delay, err, worked) //H
+		m.settle(task, state, delay, err, worked) // H
 	}()
 	select {
 	case <-m.ctx.Done():
 		return
 	case <-done:
-	case <-time.After(m.testHardLimit(task)): //H: the outbound ignored its deadline; see settleLate
+	case <-time.After(m.testHardLimit(task)): // H: the outbound ignored its deadline; see settleLate
 		m.settleLate(task, state)
 	}
-
 }
 
 // tester runs the URL test and, when it answers, the IP lookup. The delay goes to interim as
@@ -688,11 +686,11 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string, interim 
 
 	idx := m.currentLinkIndex.Load()
 
-	var ( //H
+	var ( // H
 		delay uint16
 		err   error
 	)
-	if staged { //H
+	if staged { // H
 		delay, err = m.stagedURLTest(parent, m.urls[idx], out.outbound, interim)
 	} else {
 		ctx, cancel := context.WithTimeout(parent, m.urlTestTimeout)
@@ -714,25 +712,25 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string, interim 
 		return his, parent.Err()
 	default:
 	}
-	if interim != nil { //H
+	if interim != nil { // H
 		interim(his, false)
 	}
-	if m.verifyIPv6 && (previous.IPv6 == nil || previous.IPv6FromCache) { //H: once per run, like the IP lookup
-		his.IPv6 = m.verifyIPv6Of(parent, out, m.urls[idx]) //H
-	} //H
-	if previous.IpInfo == nil || previous.IpInfoFromCache { //H: until looked up in this run
+	if m.verifyIPv6 && (previous.IPv6 == nil || previous.IPv6FromCache) { // H: once per run, like the IP lookup
+		his.IPv6 = m.verifyIPv6Of(parent, out, m.urls[idx]) // H
+	} // H
+	if previous.IpInfo == nil || previous.IpInfoFromCache { // H: until looked up in this run
 
 		ctx, cancel2 := context.WithTimeout(parent, m.urlTestTimeout)
 		defer cancel2()
 
-		var newip *ipinfo.IpInfo //H: keep the fork's provider API
-		var t uint16             //H
-		var err error            //H
-		if m.ipInfoURL != "" {   //H
-			newip, t, err = ipinfo.GetIpInfoFromURL(ctx, out.outbound, m.ipInfoURL) //H
-		} else { //H
-			newip, t, err = ipinfo.GetIpInfo(m.logger, ctx, out.outbound) //H
-		} //H
+		var newip *ipinfo.IpInfo // H: keep the fork's provider API
+		var t uint16             // H
+		var err error            // H
+		if m.ipInfoURL != "" {   // H
+			newip, t, err = ipinfo.GetIpInfoFromURL(ctx, out.outbound, m.ipInfoURL) // H
+		} else { // H
+			newip, t, err = ipinfo.GetIpInfo(m.logger, ctx, out.outbound) // H
+		} // H
 		if err == nil {
 			his.IpInfo = mergeIpInfo(previous.IpInfo, newip)
 			if t < his.Delay {
@@ -777,7 +775,7 @@ func (m *OutboundMonitoring) runCycle() {
 		}
 	}()
 
-	for idx, _ := range m.urls {
+	for idx := range m.urls {
 		outcomes := m.runStage(cycleID, tags)
 		success := 0
 		for _, result := range outcomes {
@@ -830,7 +828,6 @@ func (m *OutboundMonitoring) runStage(cycleID uint64, tags []string) []testOutco
 }
 
 func (m *OutboundMonitoring) enqueueTask(task *testTask) bool {
-
 	select {
 	case <-m.ctx.Done():
 		return false
@@ -842,7 +839,7 @@ func (m *OutboundMonitoring) enqueueTask(task *testTask) bool {
 	}
 	state.mu.Lock()
 	defer state.mu.Unlock()
-	previousCycle, previousQueued := state.enqueuedCycle, state.queued //H: preserve pending work on overflow
+	previousCycle, previousQueued := state.enqueuedCycle, state.queued // H: preserve pending work on overflow
 
 	if task.priority {
 		if state.priorityQueued {
@@ -866,7 +863,7 @@ func (m *OutboundMonitoring) enqueueTask(task *testTask) bool {
 	case m.normalQueue <- task:
 		return true
 	default:
-		state.enqueuedCycle, state.queued = previousCycle, previousQueued //H
+		state.enqueuedCycle, state.queued = previousCycle, previousQueued // H
 		return false
 	}
 }
@@ -895,22 +892,22 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 	state.history.Delay = outcome.history.Delay
 	state.history.Time = outcome.history.Time
 	state.from_cache = false
-	state.tentative = false //H
+	state.tentative = false // H
 	if outcome.history.IpInfo != nil {
 		state.history.IpInfo = outcome.history.IpInfo
-		state.history.IpInfoFromCache = false //H
+		state.history.IpInfoFromCache = false // H
 	}
-	if outcome.history.IPv6 != nil { //H: verified at this test
-		state.history.IPv6 = outcome.history.IPv6                //H
-		state.history.IPv6FromCache = false                      //H
-		m.cacheDirty.Store(true)                                 //H
-		m.recordIPv6(outcome.outboundTag, *outcome.history.IPv6) //H
-	} //H
-	snapshot := state.history                                     //H: readers own an immutable snapshot
-	m.history.StoreURLTestHistory(outcome.outboundTag, &snapshot) //H
+	if outcome.history.IPv6 != nil { // H: verified at this test
+		state.history.IPv6 = outcome.history.IPv6                // H
+		state.history.IPv6FromCache = false                      // H
+		m.cacheDirty.Store(true)                                 // H
+		m.recordIPv6(outcome.outboundTag, *outcome.history.IPv6) // H
+	} // H
+	snapshot := state.history                                     // H: readers own an immutable snapshot
+	m.history.StoreURLTestHistory(outcome.outboundTag, &snapshot) // H
 
 	m.emitGroupEvent(state.groupTags)
-	return &snapshot //H
+	return &snapshot // H
 }
 
 func mergeIpInfo(old, new *ipinfo.IpInfo) *ipinfo.IpInfo {
@@ -931,7 +928,6 @@ func mergeIpInfo(old, new *ipinfo.IpInfo) *ipinfo.IpInfo {
 }
 
 func (m *OutboundMonitoring) collectCycleTargets() []string {
-
 	tags := make([]string, 0, len(m.reg().outbounds))
 
 	delays := make(map[string]uint16, len(tags))
@@ -969,13 +965,12 @@ func (m *OutboundMonitoring) Touch() {
 	defer m.access.Unlock()
 	if !m.started.Load() || m.ctx.Err() != nil {
 		return
-	} //H: Close may have won the lock
+	} // H: Close may have won the lock
 	if m.mainTicker != nil {
 		m.lastActive.Store(time.Now())
 		return
 	}
 	m.startTimerWorkers()
-
 }
 
 func (m *OutboundMonitoring) emitGroupEvent(groupTags []string) {
@@ -1125,7 +1120,6 @@ func RealTag(detour adapter.Outbound) string {
 }
 
 func (m *OutboundMonitoring) groupNotifierLoop(grp *groupState) {
-
 	defer m.schedulerWG.Done()
 
 	var (
@@ -1255,6 +1249,7 @@ func (m *OutboundMonitoring) saveHistory() error {
 	})
 	return nil
 }
+
 func (m *OutboundMonitoring) loadHistory() *History {
 	history := &History{}
 	if m.cache == nil {
@@ -1279,8 +1274,8 @@ func (m *OutboundMonitoring) loadHistory() *History {
 			}
 			state.mu.Lock()
 			state.history = *his
-			state.history.IpInfoFromCache = his.IpInfo != nil //H
-			state.history.IPv6FromCache = his.IPv6 != nil     //H
+			state.history.IpInfoFromCache = his.IpInfo != nil // H
+			state.history.IPv6FromCache = his.IPv6 != nil     // H
 			state.from_cache = true
 			state.mu.Unlock()
 		}

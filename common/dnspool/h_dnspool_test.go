@@ -8,12 +8,13 @@ import (
 	"testing"
 	"time"
 
-	multidns "github.com/hiddify/hmrd_multi_resolver_dns"
-	"github.com/miekg/dns"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/json/badoption"
+
+	multidns "github.com/hiddify/hmrd_multi_resolver_dns"
+	"github.com/miekg/dns"
 	"github.com/stretchr/testify/require"
 )
 

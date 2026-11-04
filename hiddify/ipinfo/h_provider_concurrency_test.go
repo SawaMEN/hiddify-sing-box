@@ -1,12 +1,14 @@
 package ipinfo
 
 import (
-	C "github.com/sagernet/sing-box/constant"
-	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
+
+	C "github.com/sagernet/sing-box/constant"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestH_ConcurrentProviderDefaultUserAgent(t *testing.T) {

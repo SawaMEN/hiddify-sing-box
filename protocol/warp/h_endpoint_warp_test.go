@@ -178,8 +178,10 @@ func hNewWARP(t *testing.T, ctx context.Context, options option.WARPEndpointOpti
 }
 
 func TestH_NewWARPEndpointMetadata(t *testing.T) {
-	options := option.WARPEndpointOptions{Profile: option.WARPProfile{Detour: "profile-out"}}
-	options.Detour = "wg-out"
+	options := option.WARPEndpointOptions{
+		Profile: option.WARPProfile{Detour: "profile-out"},
+		Detour:  "wg-out",
+	}
 	ep := hNewWARP(t, hTestContext(t), options)
 	require.Equal(t, C.TypeWARP, ep.Type())
 	require.Equal(t, "warp-tag", ep.Tag())
@@ -191,8 +193,10 @@ func TestH_NewWARPEndpointMetadata(t *testing.T) {
 }
 
 func TestH_WARPStartFailureLeavesEndpointUninitialized(t *testing.T) {
-	options := option.WARPEndpointOptions{WARPConfig: hWARPConfig(t, hWARPConfigJSON)}
-	options.Detour = "missing-detour"
+	options := option.WARPEndpointOptions{
+		WARPConfig: hWARPConfig(t, hWARPConfigJSON),
+		Detour:     "missing-detour",
+	}
 	ep := hNewWARP(t, hTestContext(t), options)
 	ep.startHandler()
 
@@ -206,8 +210,10 @@ func TestH_WARPStartFailureLeavesEndpointUninitialized(t *testing.T) {
 }
 
 func TestH_WARPStartPostStartRunsHandler(t *testing.T) {
-	options := option.WARPEndpointOptions{WARPConfig: hWARPConfig(t, hWARPConfigJSON), AWG: &option.AwgOptions{Jc: 3}}
-	options.Detour = "missing-detour"
+	options := option.WARPEndpointOptions{
+		WARPConfig: hWARPConfig(t, hWARPConfigJSON), AWG: &option.AwgOptions{Jc: 3},
+		Detour: "missing-detour",
+	}
 	ep := hNewWARP(t, hTestContext(t), options)
 	require.NoError(t, htest.Start(ep, adapter.StartStatePostStart))
 	done := make(chan bool, 1)
@@ -225,16 +231,20 @@ func TestH_WARPUsesCachedConfig(t *testing.T) {
 	require.NoError(t, err)
 	cache := &hFakeCacheFile{store: map[string]*adapter.SavedBinary{"unique": {Content: cached}}}
 	ctx := service.ContextWith[adapter.CacheFile](hTestContext(t), cache)
-	options := option.WARPEndpointOptions{UniqueIdentifier: "unique"}
-	options.Detour = "missing-detour"
+	options := option.WARPEndpointOptions{
+		UniqueIdentifier: "unique",
+		Detour:           "missing-detour",
+	}
 	hNewWARP(t, ctx, options).startHandler()
 	require.Equal(t, []string{"unique"}, cache.loads)
 	require.Empty(t, cache.saves)
 
 	cache = &hFakeCacheFile{store: map[string]*adapter.SavedBinary{"warp-tag": {Content: cached}}}
 	ctx = service.ContextWith[adapter.CacheFile](hTestContext(t), cache)
-	options = option.WARPEndpointOptions{WARPConfig: hWARPConfig(t, hWARPConfigJSON), Profile: option.WARPProfile{Recreate: true}}
-	options.Detour = "missing-detour"
+	options = option.WARPEndpointOptions{
+		WARPConfig: hWARPConfig(t, hWARPConfigJSON), Profile: option.WARPProfile{Recreate: true},
+		Detour: "missing-detour",
+	}
 	hNewWARP(t, ctx, options).startHandler()
 	require.Empty(t, cache.loads, "recreate must bypass the cache")
 	require.Empty(t, cache.saves)
@@ -251,9 +261,11 @@ func TestH_WARPMalformedCachedConfig(t *testing.T) {
 }
 
 func TestH_WARPConfigWithoutPortsDoesNotPanic(t *testing.T) {
-	options := option.WARPEndpointOptions{WARPConfig: hWARPConfig(t, `{"private_key":"x","peers":[{"endpoint":{"host":"h:1"}}]}`)}
-	options.Detour = "missing-detour"
-	options.ServerPort = 2408
+	options := option.WARPEndpointOptions{
+		WARPConfig: hWARPConfig(t, `{"private_key":"x","peers":[{"endpoint":{"host":"h:1"}}]}`),
+		Detour:     "missing-detour",
+		ServerPort: 2408,
+	}
 	ep := hNewWARP(t, hTestContext(t), options)
 	require.NotPanics(t, ep.startHandler)
 }

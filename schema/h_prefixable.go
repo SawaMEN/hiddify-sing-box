@@ -1,8 +1,9 @@
 package schema
 
 import (
-	E "github.com/sagernet/sing/common/exceptions"
 	"reflect"
+
+	E "github.com/sagernet/sing/common/exceptions"
 )
 
 // hPrefixableField describes the fork's string-backed CIDR options accurately.

@@ -1,9 +1,11 @@
 package option
 
 import (
-	"github.com/sagernet/sing/common/json"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/sagernet/sing/common/json"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestH_FinalMaskAliases(t *testing.T) {

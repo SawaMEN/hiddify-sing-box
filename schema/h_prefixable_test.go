@@ -2,10 +2,12 @@ package schema
 
 import (
 	"context"
-	"github.com/sagernet/sing/common/json/badoption"
-	"github.com/stretchr/testify/require"
 	"reflect"
 	"testing"
+
+	"github.com/sagernet/sing/common/json/badoption"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestH_PrefixableSchema(t *testing.T) {

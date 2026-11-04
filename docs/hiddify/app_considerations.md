@@ -25,8 +25,8 @@ do about it. Items marked **Required** break or misbehave until they are handled
 - **XDRIVE and the default tags.** The core Makefile's default tags meant to include
   `with_sudoku`, `with_call`, `with_bond` and `with_kcp` but joined them with `/`, so none of the
   four was built; they are now separated by commas, and `with_xdrive` (the XDRIVE transport) is
-  added. hiddify-core's `PROTOCOL_TAGS` has `with_xdrive` too. A profile with
-  `"transport": {"type": "xdrive"}` fails with "XDRIVE is not included in this build" without it.
+  added. hiddify-core's `PROTOCOL_TAGS` has `with_xdrive` too. In this fork, XDrive remains registered in ordinary builds; `with_xdrive` enables additional
+  integration tests. Existing fronting and template options remain accepted.
 - **Go 1.27 required.** Xray-core v26.10.31, which finalmask and XDRIVE use, needs Go 1.27, so
   `go.mod` and `test/go.mod` now say `go 1.27`. Every CI and gomobile build must use Go 1.27.3 or
   newer. (Binaries with Psiphon crashed at start when built with Go 1.27; fixed in `bb18926a9`.)
@@ -298,6 +298,11 @@ branch before pushing hiddify-sing-box, or the submodule commits cannot be fetch
 ## Fork synchronization on 2026-11-04
 
 - Build with Go 1.27.3 or newer and initialize submodules recursively, including `replace/MasterDnsVPN`.
-- Include `with_xdrive` in custom build tags for XDrive. Its former duplicated implementation has been replaced by the canonical Xray adapter. The fork still accepts `front_address`, `front_port`, JSON-encoded template strings and inbound `storage_dialer` settings; new configurations can use `fronting_address`, `fronting_port` and template objects.
+- XDrive remains registered in ordinary fork builds; `with_xdrive` enables additional integration tests. Its former duplicated implementation has been replaced by the canonical Xray adapter. The fork still accepts `front_address`, `front_port`, JSON-encoded template strings and inbound `storage_dialer` settings; new configurations can use `fronting_address`, `fronting_port` and template objects.
 - Existing standalone `smart_dns_pool` service configurations still work. New DNS tunnels can use the per-outbound `smart_pool` boolean or settings object.
 - `ipv6_probe` is accepted for compatibility but no longer performs the old connection-only probe. Use the verified/learned capability options described above.
+
+## November 2026 fork synchronization
+
+- Keep `final_mask` in existing app configurations; upstream `finalmask` is accepted too. If both appear, `final_mask` takes precedence.
+- Use the updated `tfo-go v2.4.2` module graph for Go 1.27 builds, including Windows.
