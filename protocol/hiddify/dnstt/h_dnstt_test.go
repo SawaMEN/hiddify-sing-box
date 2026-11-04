@@ -184,7 +184,7 @@ func TestH_DnsttNotStarted(t *testing.T) {
 func TestH_DnsttSmartPool(t *testing.T) {
 	t.Parallel()
 	options := validOptions()
-	options.SmartPool = true
+	options.SmartPool = &option.SmartPoolOptions{Enabled: true}
 	out := newTestOutbound(t, options)
 	require.NotNil(t, out.mdMgr)
 	require.Len(t, out.resolvers, 1)
