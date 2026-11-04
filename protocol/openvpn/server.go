@@ -76,16 +76,16 @@ func NewServerEndpoint(ctx context.Context, router adapter.Router, logger log.Co
 	}
 	loopContext, cancelLoop := context.WithCancel(ctx)
 	serverEndpoint := &ServerEndpoint{
-		endpointBase: endpointBase{
-			Adapter: endpoint.NewAdapter(C.TypeOpenVPNServer, tag, []string{N.NetworkTCP, N.NetworkUDP, N.NetworkICMP}, nil),
-			router:  router,
-			logger:  logger,
-		},
 		ctx:            ctx,
 		cancelLoop:     cancelLoop,
 		options:        options,
 		dnsRouter:      service.FromContext[adapter.DNSRouter](ctx),
 		localAddresses: options.Address,
+	}
+	serverEndpoint.endpointBase = endpointBase{
+			Adapter: endpoint.NewAdapter(C.TypeOpenVPNServer, tag, []string{N.NetworkTCP, N.NetworkUDP, N.NetworkICMP}, nil),
+			router:  router,
+			logger:  logger,
 	}
 	serverOptions, err := buildServerOptions(options)
 	if err != nil {

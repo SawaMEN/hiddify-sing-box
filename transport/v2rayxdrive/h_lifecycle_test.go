@@ -2,9 +2,10 @@ package v2rayxdrive
 
 import (
 	"context"
-	"github.com/stretchr/testify/require"
 	"net"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestH_ClientCloseOwnsActiveConnections(t *testing.T) {

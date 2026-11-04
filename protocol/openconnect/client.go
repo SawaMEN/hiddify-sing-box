@@ -110,16 +110,16 @@ func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextL
 	options.UDPBindPort = options.DTLSLocalPort
 	loopContext, cancelLoop := context.WithCancel(ctx)
 	openConnectEndpoint := &Endpoint{
-		endpointBase: endpointBase{
-			Adapter: endpoint.NewAdapterWithDialerOptions(C.TypeOpenConnect, tag, []string{N.NetworkTCP, N.NetworkUDP, N.NetworkICMP}, options.DialerOptions),
-			router:  router,
-			logger:  logger,
-		},
 		loopContext:   loopContext,
 		cancelLoop:    cancelLoop,
 		dnsRouter:     service.FromContext[adapter.DNSRouter](ctx),
 		statusUpdated: make(chan struct{}),
 		onDemand:      options.OnDemand,
+	}
+	openConnectEndpoint.endpointBase = endpointBase{
+			Adapter: endpoint.NewAdapterWithDialerOptions(C.TypeOpenConnect, tag, []string{N.NetworkTCP, N.NetworkUDP, N.NetworkICMP}, options.DialerOptions),
+			router:  router,
+			logger:  logger,
 	}
 	openConnectEndpoint.state.Store(new(clientState))
 	success := false

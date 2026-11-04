@@ -71,7 +71,7 @@ func (s *ManagedService) TriggerDebugCrash(ctx context.Context, request *DebugCr
 	switch request.Type {
 	case DebugCrashRequest_GO:
 		time.AfterFunc(200*time.Millisecond, func() {
-			panic("debug crash requested") //H: an explicit Go crash, without an unsafe null-pointer conversion
+			panic("debug crash requested") // H: deliberate debug crash, not an unsafe null-pointer conversion
 		})
 	case DebugCrashRequest_NATIVE:
 		err := s.handler.TriggerNativeCrash()
