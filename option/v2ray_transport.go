@@ -40,8 +40,6 @@ func (o V2RayTransportOptions) MarshalJSON() ([]byte, error) {
 		v = o.WebsocketOptions
 	case C.V2RayTransportTypeQUIC:
 		v = o.QUICOptions
-	case C.V2RayTransportTypeKCP, C.V2RayTransportTypeKCPAlias:
-		v = o.KCPOptions
 	case C.V2RayTransportTypeGRPC:
 		v = o.GRPCOptions
 	case C.V2RayTransportTypeHTTPUpgrade:
@@ -76,9 +74,6 @@ func (o *V2RayTransportOptions) UnmarshalJSON(bytes []byte) error {
 		v = &o.WebsocketOptions
 	case C.V2RayTransportTypeQUIC:
 		v = &o.QUICOptions
-	case C.V2RayTransportTypeKCP, C.V2RayTransportTypeKCPAlias:
-		o.Type = C.V2RayTransportTypeKCP
-		v = &o.KCPOptions
 	case C.V2RayTransportTypeGRPC:
 		v = &o.GRPCOptions
 	case C.V2RayTransportTypeHTTPUpgrade:
