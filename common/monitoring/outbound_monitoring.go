@@ -724,7 +724,14 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string, interim 
 		ctx, cancel2 := context.WithTimeout(parent, m.urlTestTimeout)
 		defer cancel2()
 
-		newip, t, err := ipinfo.GetIpInfo(m.logger, ctx, out.outbound, m.ipInfoURL)
+		var newip *ipinfo.IpInfo //H: keep the fork's provider API
+		var t uint16             //H
+		var err error            //H
+		if m.ipInfoURL != "" {   //H
+			newip, t, err = ipinfo.GetIpInfoFromURL(ctx, out.outbound, m.ipInfoURL) //H
+		} else { //H
+			newip, t, err = ipinfo.GetIpInfo(m.logger, ctx, out.outbound) //H
+		} //H
 		if err == nil {
 			his.IpInfo = mergeIpInfo(out.history.IpInfo, newip)
 			if t < his.Delay {

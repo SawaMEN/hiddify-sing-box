@@ -5,15 +5,8 @@ go 1.27.3
 godebug multipathtcp=0
 
 require (
-	layeh.com/gopher-luar v1.0.11
-	golang.org/x/crypto/x509roots/fallback v0.0.0-20261020153306-9f2b28d4331a
-	github.com/yuin/gopher-lua v1.1.2
-	github.com/xtls/reality v0.0.0-20261014101318-83f621788ca8
-	github.com/juju/ratelimit v1.0.2
-	github.com/apernet/quic-go v0.61.1-0.20260806010916-184d081eef3e
-	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c
-	masterdnsvpn-go v0.0.0
 	filippo.io/edwards25519 v1.2.0
+	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c
 	github.com/Diniboy1123/connect-ip-go v0.0.0-20260613064811-66cba32d7d33
 	github.com/Psiphon-Labs/psiphon-tunnel-core v1.0.11-0.20260126173038-c86a1497a760
 	github.com/SawaMEN/VetroffProxy v0.1.1-0.20261030200803-b81ec45c6865
@@ -22,6 +15,7 @@ require (
 	github.com/amnezia-vpn/amneziawg-go v1.0.4
 	github.com/amnezia-vpn/amneziawg-go/v3 v3.1.20260828
 	github.com/anthropics/anthropic-sdk-go v1.26.0
+	github.com/apernet/quic-go v0.61.1-0.20260806010916-184d081eef3e
 	github.com/biter777/countries v1.7.5
 	github.com/caddyserver/certmagic v0.25.3-0.20260421143802-60d9d8b415d6
 	github.com/caddyserver/zerossl v0.1.5
@@ -32,16 +26,19 @@ require (
 	github.com/dblohm7/wingoes v0.0.0-20240119213807-a09d6be7affa
 	github.com/enfein/mieru/v3 v3.38.0
 	github.com/esrrhs/gohome v0.0.0-20260919145331-036124786531
+	github.com/flynn/noise v1.1.0
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/go-chi/render v1.0.3
 	github.com/gobwas/ws v1.4.0
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/gofrs/uuid/v5 v5.5.1
+	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
-	github.com/gorilla/websocket v1.5.3
+	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/hiddify/hmrd_multi_resolver_dns v0.0.0-20261102140835-72045bdb2631
 	github.com/insomniacslk/dhcp v0.0.0-20260220084031-5adc3eb26f91
 	github.com/jsimonetti/rtnetlink v1.4.1
+	github.com/juju/ratelimit v1.0.2
 	github.com/keybase/go-keychain v0.0.1
 	github.com/kianmhz/GooseRelayVPN v0.0.0-20260429125124-0e68c2a3ae4c
 	github.com/klauspost/compress v1.20.0
@@ -63,6 +60,9 @@ require (
 	github.com/oschwald/geoip2-golang v1.13.0
 	github.com/oschwald/maxminddb-golang v1.13.1
 	github.com/pierrec/lz4/v4 v4.1.26
+	github.com/pion/datachannel v1.6.0
+	github.com/pion/interceptor v0.1.45
+	github.com/pion/rtp v1.10.2
 	github.com/pires/go-proxyproto v0.16.0
 	github.com/pkg/sftp v1.13.10
 	github.com/sagernet/asc-go v0.0.0-20260914163356-9e3d45a797c1
@@ -102,12 +102,16 @@ require (
 	github.com/tidwall/gjson v1.18.0
 	github.com/vishvananda/netns v0.0.5
 	github.com/xchacha20-poly1305/sing-trusttunnel v0.3.2
+	github.com/xtaci/kcp-go/v5 v5.6.72
+	github.com/xtls/reality v0.0.0-20261014101318-83f621788ca8
 	github.com/xtls/xray-core v1.260327.1-0.20261031132019-a4a3dff5b20c
 	github.com/yosida95/uritemplate/v3 v3.0.2
+	github.com/yuin/gopher-lua v1.1.2
 	go.uber.org/zap v1.28.0
 	go4.org/mem v0.0.0-20240501181205-ae6ca9944745
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
 	golang.org/x/crypto v0.58.0
+	golang.org/x/crypto/x509roots/fallback v0.0.0-20261020153306-9f2b28d4331a
 	golang.org/x/exp v0.0.0-20260603202125-055de637280b
 	golang.org/x/mod v0.41.0
 	golang.org/x/net v0.61.0
@@ -119,12 +123,9 @@ require (
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
 	howett.net/plist v1.0.1
+	layeh.com/gopher-luar v1.0.11
 	lukechampine.com/blake3 v1.4.1
-)
-
-require (
-	github.com/pion/turn/v4 v4.1.4 // indirect
-	github.com/shtorm-7/rmux v1.0.1 // indirect
+	masterdnsvpn-go v0.0.0
 )
 
 require (
@@ -181,7 +182,6 @@ require (
 	github.com/dunglas/httpsfv v1.0.2 // indirect
 	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/florianl/go-nfqueue/v2 v2.1.0 // indirect
-	github.com/flynn/noise v1.1.0
 	github.com/frostbyte73/core v0.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
@@ -200,7 +200,6 @@ require (
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/cel-go v0.28.1 // indirect
 	github.com/google/certificate-transparency-go v1.3.2 // indirect
-	github.com/google/go-cmp v0.7.0
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/gopacket v1.1.19 // indirect
 	github.com/google/nftables v0.2.1-0.20240414091927-5e242ec57806 // indirect
@@ -237,18 +236,15 @@ require (
 	github.com/owenewans/owenlivekit/v2 v2.18.2 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
-	github.com/pion/datachannel v1.6.0
 	github.com/pion/dtls/v2 v2.2.7 // indirect
 	github.com/pion/dtls/v3 v3.1.5 // indirect
 	github.com/pion/ice/v2 v2.3.24 // indirect
 	github.com/pion/ice/v4 v4.2.7 // indirect
-	github.com/pion/interceptor v0.1.45
 	github.com/pion/logging v0.2.4 // indirect
 	github.com/pion/mdns v0.0.12 // indirect
 	github.com/pion/mdns/v2 v2.1.0 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
 	github.com/pion/rtcp v1.2.16 // indirect
-	github.com/pion/rtp v1.10.2
 	github.com/pion/sctp v1.10.0 // indirect
 	github.com/pion/sdp/v3 v3.0.19 // indirect
 	github.com/pion/srtp/v2 v2.0.18 // indirect
@@ -258,6 +254,7 @@ require (
 	github.com/pion/transport/v2 v2.2.4 // indirect
 	github.com/pion/transport/v4 v4.1.0 // indirect
 	github.com/pion/turn/v2 v2.1.3 // indirect
+	github.com/pion/turn/v4 v4.1.4 // indirect
 	github.com/pion/turn/v5 v5.0.9 // indirect
 	github.com/pion/webrtc/v3 v3.2.40 // indirect
 	github.com/pion/webrtc/v4 v4.2.15 // indirect
@@ -308,6 +305,7 @@ require (
 	github.com/sagernet/cronet-go/lib/windows_arm64 v0.0.0-20261023055542-d5437a0df01a // indirect
 	github.com/sergeyfrolov/bsbuffer v0.0.0-20180903213811-94e85abb8507 // indirect
 	github.com/shadowsocks/go-shadowsocks2 v0.1.5 // indirect
+	github.com/shtorm-7/rmux v1.0.1 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/smallstep/pkcs7 v0.1.1 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
@@ -332,7 +330,6 @@ require (
 	github.com/wlynxg/anet v0.0.5 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xtaci/kcp-go v5.4.20+incompatible // indirect
-	github.com/xtaci/kcp-go/v5 v5.6.72
 	github.com/xtaci/smux v1.5.57 // indirect
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	github.com/zarazaex69/gr v0.0.1 // indirect
@@ -354,7 +351,7 @@ require (
 	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb // indirect
 	golang.zx2c4.com/wireguard/windows v1.1.1 // indirect
 	google.golang.org/genproto v0.0.0-20260523011958-0a33c5d7ca68 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260706201446-f0a921348800 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260706201446-f0a921348800 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	rsc.io/qr v0.2.0 // indirect
