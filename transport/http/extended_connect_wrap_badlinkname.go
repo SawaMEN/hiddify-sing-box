@@ -7,8 +7,6 @@ import (
 	_ "unsafe"
 )
 
-const extendedConnectAvailable = true
-
 //go:linkname disableExtendedConnectProtocol net/http/internal/http2.disableExtendedConnectProtocol
 var disableExtendedConnectProtocol bool
 

@@ -191,7 +191,7 @@ func (m *ConnectionManager) hCopyBothWays(ctx context.Context, conn net.Conn, re
 
 // hStartDownload starts the copy from the destination to the app, first bytes first.
 func (m *ConnectionManager) hStartDownload(ctx context.Context, conn net.Conn, remote net.Conn, first []byte, done *atomic.Bool, onClose N.CloseHandlerFunc) {
-	var source net.Conn = remote
+	source := remote
 	if len(first) > 0 {
 		buffer := buf.NewSize(len(first))
 		common.Must1(buffer.Write(first))

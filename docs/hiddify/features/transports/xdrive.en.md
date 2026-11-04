@@ -113,7 +113,7 @@ host's own name.
 
 - Xray allows XDRIVE only for VLESS with `encryption` (run `xray vlessenc` for a key pair) and no
   `flow`. Use the same with an Xray server.
-- The transport is built with the `with_xdrive` tag, which the Makefile and hiddify-core turn on.
+- The fork registers XDrive in ordinary builds; `with_xdrive` enables additional integration tests. Legacy `front_address`, `front_port`, JSON-encoded template strings and inbound `storage_dialer` remain accepted.
 - Xray has no share link for XDRIVE. hiddify-core writes an Xray JSON outbound with XDRIVE as a
   VLESS link with `type=xdrive` and Xray's `xdriveSettings` as JSON in `xdrive=` (the stream's
   `address` and `port` included, for fronting), and ray2sing reads that link back.

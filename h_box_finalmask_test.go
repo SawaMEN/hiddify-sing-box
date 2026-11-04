@@ -82,5 +82,5 @@ func TestH_OutboundFinalMaskInvalid(t *testing.T) {
 	options, err := json.UnmarshalExtendedContext[option.Options](ctx, []byte(`{"outbounds":[{"type":"direct","tag":"d","final_mask":{"tcp":[{"type":"noise"}]}}]}`))
 	require.NoError(t, err)
 	_, err = box.New(box.Options{Context: ctx, Options: options})
-	require.ErrorContains(t, err, "final_mask.tcp[0]")
+	require.ErrorContains(t, err, "finalmask.tcp[0]")
 }

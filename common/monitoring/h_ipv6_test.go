@@ -132,7 +132,7 @@ func TestH_MonitoringVerifiesIPv6AtURLTest(t *testing.T) {
 	// the IPv6 address: with6 reaches both, without6 only the name
 	outbound := func(tag string, ipv6 bool) *fakeOutbound {
 		return &fakeOutbound{tag: tag, dial: func(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-			if destination.IsFqdn() || ipv6 {
+			if destination.IsDomain() || ipv6 {
 				return dialer.DialContext(ctx, network, serverAddr.String())
 			}
 			return nil, errors.New("no route to host")

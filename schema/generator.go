@@ -248,7 +248,7 @@ func (g *generator) FlattenStruct(node *Node, structType reflect.Type) error {
 		if schemaTag == "omit" {
 			continue
 		}
-		if schemaTag != "" {
+		if schemaTag != "" && schemaTag != "prefixable" {
 			return E.New("unknown schema tag ", schemaTag, " on ", structType.Name(), ".", field.Name)
 		}
 		if field.Anonymous && tagName == "" {
@@ -267,7 +267,9 @@ func (g *generator) FlattenStruct(node *Node, structType reflect.Type) error {
 		g.path = append(g.path, structType.Name()+"."+tagName)
 		var fieldNode *Node
 		var err error
-		if enumTag != "" || examplesTag != "" || referenceTag != "" {
+		if schemaTag == "prefixable" { //H: fork CIDR options retain string storage
+			fieldNode, err = g.hPrefixableField(fieldType)
+		} else if enumTag != "" || examplesTag != "" || referenceTag != "" {
 			fieldNode, err = g.taggedFieldNode(fieldType, enumTag, examplesTag, referenceTag)
 		} else {
 			fieldNode, err = g.Describe(fieldType)

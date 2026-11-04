@@ -113,7 +113,7 @@ XDRIVE ترنسپورت ذخیره‌سازی Xray-core است. کلاینت و 
 
 - Xray اجازهٔ XDRIVE را فقط برای VLESS با `encryption` (برای جفت کلید `xray vlessenc` را اجرا کنید) و
   بدون `flow` می‌دهد. با سرور Xray همین را به کار ببرید.
-- ترنسپورت با تگ `with_xdrive` ساخته می‌شود که Makefile و hiddify-core آن را روشن می‌کنند.
+- در این فورک، XDrive در ساخت معمولی ثبت می‌شود؛ تگ `with_xdrive` تست‌های یکپارچه‌سازی را فعال می‌کند. گزینه‌های قدیمی `front_address`، `front_port`، قالب JSON رشته‌ای و `storage_dialer` ورودی همچنان پشتیبانی می‌شوند.
 - Xray لینک اشتراک‌گذاری برای XDRIVE ندارد. hiddify-core خروجی JSON از Xray با XDRIVE را به لینک VLESS
   با `type=xdrive` می‌نویسد و `xdriveSettings` در Xray را به‌صورت JSON در `xdrive=` می‌گذارد (همراه
   `address` و `port` جریان برای fronting)، و ray2sing همان لینک را می‌خواند.

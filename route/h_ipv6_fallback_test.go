@@ -26,7 +26,7 @@ type hIPv6TestDialer struct {
 }
 
 func (d *hIPv6TestDialer) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-	if destination.IsFqdn() {
+	if destination.IsDomain() {
 		d.domains++
 		return d.domain()
 	}
@@ -77,12 +77,12 @@ func (o *hObservations) all() []bool {
 	return append([]bool(nil), o.seen...)
 }
 
-func hRunIPv6Connection(t *testing.T, dialer *hIPv6TestDialer, domain string, request string) (string, error, []bool, <-chan error) {
+func hRunIPv6Connection(t *testing.T, dialer *hIPv6TestDialer, domain string, request string) (string, []bool, <-chan error, error) {
 	t.Helper()
 	return hRunIPv6ConnectionKnowing(t, dialer, domain, request, &hObservations{})
 }
 
-func hRunIPv6ConnectionKnowing(t *testing.T, dialer *hIPv6TestDialer, domain string, request string, observations *hObservations) (string, error, []bool, <-chan error) {
+func hRunIPv6ConnectionKnowing(t *testing.T, dialer *hIPv6TestDialer, domain string, request string, observations *hObservations) (string, []bool, <-chan error, error) {
 	t.Helper()
 	ctx := service.ContextWithDefaultRegistry(context.Background())
 	manager := NewConnectionManager(ctx, log.NewNOPFactory().NewLogger("connection"))
@@ -102,7 +102,7 @@ func hRunIPv6ConnectionKnowing(t *testing.T, dialer *hIPv6TestDialer, domain str
 	answer := make([]byte, 64)
 	n, err := app.Read(answer)
 	app.Close()
-	return string(answer[:n]), err, observations.all(), closed
+	return string(answer[:n]), observations.all(), closed, err
 }
 
 // The exit has no IPv6: the proxy closes the IPv6 stream with nothing, the same proxy is dialed
@@ -110,7 +110,7 @@ func hRunIPv6ConnectionKnowing(t *testing.T, dialer *hIPv6TestDialer, domain str
 // happened. The outbound is observed not carrying IPv6.
 func TestH_IPv6FallbackCarriesOverDomain(t *testing.T) {
 	dialer := &hIPv6TestDialer{v6: hPeer("hello", ""), domain: hPeer("hello", "world")}
-	answer, err, observed, closed := hRunIPv6Connection(t, dialer, "example.com", "hello")
+	answer, observed, closed, err := hRunIPv6Connection(t, dialer, "example.com", "hello")
 	require.NoError(t, err)
 	require.Equal(t, "world", answer)
 	require.Equal(t, 1, dialer.domains)
@@ -126,7 +126,7 @@ func TestH_IPv6FallbackCarriesOverDomain(t *testing.T) {
 // outbound is observed carrying IPv6.
 func TestH_IPv6FallbackNotNeeded(t *testing.T) {
 	dialer := &hIPv6TestDialer{v6: hPeer("hello", "world"), domain: hPeer("hello", "wrong")}
-	answer, err, observed, _ := hRunIPv6Connection(t, dialer, "example.com", "hello")
+	answer, observed, _, err := hRunIPv6Connection(t, dialer, "example.com", "hello")
 	require.NoError(t, err)
 	require.Equal(t, "world", answer)
 	require.Equal(t, 0, dialer.domains)
@@ -137,7 +137,7 @@ func TestH_IPv6FallbackNotNeeded(t *testing.T) {
 // and nothing is learned, since the failure may be the destination's.
 func TestH_IPv6FallbackNeedsADomain(t *testing.T) {
 	dialer := &hIPv6TestDialer{v6: hPeer("hello", ""), domain: hPeer("hello", "world")}
-	answer, err, observed, _ := hRunIPv6Connection(t, dialer, "", "hello")
+	answer, observed, _, err := hRunIPv6Connection(t, dialer, "", "hello")
 	require.Error(t, err)
 	require.Equal(t, "", answer)
 	require.Equal(t, 0, dialer.domains)
@@ -148,7 +148,7 @@ func TestH_IPv6FallbackNeedsADomain(t *testing.T) {
 // outbound is not blamed.
 func TestH_IPv6FallbackDeadDestination(t *testing.T) {
 	dialer := &hIPv6TestDialer{v6: hPeer("hello", ""), domain: hPeer("hello", "")}
-	answer, err, observed, closed := hRunIPv6Connection(t, dialer, "example.com", "hello")
+	answer, observed, closed, err := hRunIPv6Connection(t, dialer, "example.com", "hello")
 	require.Error(t, err)
 	require.Equal(t, "", answer)
 	require.Equal(t, 1, dialer.domains)
@@ -166,7 +166,7 @@ func TestH_IPv6FallbackAfterDialError(t *testing.T) {
 		v6:     func() (net.Conn, error) { return nil, errors.New("socks5: network unreachable") },
 		domain: hPeer("hello", "world"),
 	}
-	answer, err, observed, _ := hRunIPv6Connection(t, dialer, "example.com", "hello")
+	answer, observed, _, err := hRunIPv6Connection(t, dialer, "example.com", "hello")
 	require.NoError(t, err)
 	require.Equal(t, "world", answer)
 	require.Equal(t, []bool{false}, observed)
@@ -186,20 +186,20 @@ func TestH_IPv6FallbackApplies(t *testing.T) {
 // of its exit is noticed.
 func TestH_IPv6FallbackKnownOutbound(t *testing.T) {
 	dialer := &hIPv6TestDialer{v6: hPeer("hello", "six"), domain: hPeer("hello", "four")}
-	answer, err, observed, _ := hRunIPv6ConnectionKnowing(t, dialer, "example.com", "hello", &hObservations{supported: true, known: true})
+	answer, observed, _, err := hRunIPv6ConnectionKnowing(t, dialer, "example.com", "hello", &hObservations{supported: true, known: true})
 	require.NoError(t, err)
 	require.Equal(t, "six", answer)
 	require.Equal(t, []bool{true}, observed, "still watched: its exit may lose IPv6")
 	require.Equal(t, 0, dialer.domains)
 
 	dialer = &hIPv6TestDialer{v6: hPeer("hello", ""), domain: hPeer("hello", "four")}
-	answer, err, observed, _ = hRunIPv6ConnectionKnowing(t, dialer, "example.com", "hello", &hObservations{supported: true, known: true})
+	answer, observed, _, err = hRunIPv6ConnectionKnowing(t, dialer, "example.com", "hello", &hObservations{supported: true, known: true})
 	require.NoError(t, err)
 	require.Equal(t, "four", answer, "an exit that lost IPv6: carried over, and noticed")
 	require.Equal(t, []bool{false}, observed)
 
 	dialer = &hIPv6TestDialer{v6: hPeer("hello", "six"), domain: hPeer("hello", "four")}
-	answer, err, observed, _ = hRunIPv6ConnectionKnowing(t, dialer, "example.com", "hello", &hObservations{supported: false, known: true})
+	answer, observed, _, err = hRunIPv6ConnectionKnowing(t, dialer, "example.com", "hello", &hObservations{supported: false, known: true})
 	require.NoError(t, err)
 	require.Equal(t, "four", answer, "known without IPv6: the domain at once, no IPv6 attempt")
 	require.Empty(t, observed)

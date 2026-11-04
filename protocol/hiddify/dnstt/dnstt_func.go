@@ -12,28 +12,28 @@ import (
 	"github.com/sagernet/sing-box/common/monitoring"
 )
 
-func (c *Outbound) addResolver(resolver dnstt.Resolver) {
-	c.mu.Lock()
-	if c.pool != nil {
+func (h *Outbound) addResolver(resolver dnstt.Resolver) {
+	h.mu.Lock()
+	if h.pool != nil {
 		// Smart pool mode: register the resolver as a pool upstream.
-		// c.resolvers stays at the single virtual resolver set up in
+		// h.resolvers stays at the single virtual resolver set up in
 		// NewOutbound, so the existing tunnel keeps running — the pool
 		// rotates upstreams behind it. No need to invalidate
-		// c.mutlitunnel here (unlike the legacy path, which has to
+		// h.mutlitunnel here (unlike the legacy path, which has to
 		// rebuild the tunnel when its resolver list changes).
-		_ = c.pool.Add(resolverURL(resolver))
+		_ = h.pool.Add(resolverURL(resolver))
 	} else {
-		// for i := 0; i < c.options.TunnelPerResolver; i++ {
-		c.resolvers = append(c.resolvers, resolver)
-		c.tunnels = append(c.tunnels, nil)
+		// for i := 0; i < h.options.TunnelPerResolver; i++ {
+		h.resolvers = append(h.resolvers, resolver)
+		h.tunnels = append(h.tunnels, nil)
 		// }
-		c.mutlitunnel = nil
+		h.mutlitunnel = nil
 	}
-	c.mu.Unlock()
-	if !c.isReady() {
-		c.started = 1
-		c.logger.InfoContext(c.ctx, "initial resolver ", resolver.ResolverAddr)
-		monitoring.Get(c.ctx).TestNow(c.Tag())
+	h.mu.Unlock()
+	if !h.isReady() {
+		h.started = 1
+		h.logger.InfoContext(h.ctx, "initial resolver ", resolver.ResolverAddr)
+		monitoring.Get(h.ctx).TestNow(h.Tag())
 	}
 }
 
@@ -49,48 +49,48 @@ func resolverURL(r dnstt.Resolver) string {
 	}
 }
 
-func (c *Outbound) openStreamImp(ctx context.Context) (net.Conn, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if t := c.mutlitunnel; t != nil {
+func (h *Outbound) openStreamImp(ctx context.Context) (net.Conn, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if t := h.mutlitunnel; t != nil {
 		return t.OpenStream()
 	}
 
-	if newtunnel, err := c.createDnsttTunnel(ctx, c.resolvers); err != nil {
+	if newtunnel, err := h.createDnsttTunnel(ctx, h.resolvers); err != nil {
 		return nil, err
 	} else {
-		c.mutlitunnel = newtunnel
+		h.mutlitunnel = newtunnel
 		return newtunnel.OpenStream()
 	}
 }
-func (c *Outbound) OpenStream(ctx context.Context) (net.Conn, error) {
+func (h *Outbound) OpenStream(ctx context.Context) (net.Conn, error) {
 	var err error
 	var conn net.Conn
 	for range 3 {
-		conn, err = c.openStreamImp(ctx)
+		conn, err = h.openStreamImp(ctx)
 		if err == nil {
 			return conn, nil
 		}
 	}
 	return nil, err
 }
-func (c *Outbound) OpenStreamSingleResolver(ctx context.Context) (net.Conn, error) {
+func (h *Outbound) OpenStreamSingleResolver(ctx context.Context) (net.Conn, error) {
 	// dnsttConfig := streamSettings.ProtocolSettings.(*Config)
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	// c.tunnel_index = (c.tunnel_index + 1) % len(c.tunnels)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	// h.tunnel_index = (h.tunnel_index + 1) % len(h.tunnels)
 	var lasterr error
-	for i := 0; i < max(5, len(c.tunnels)); i++ {
-		tunnel_index := rand.Intn(len(c.resolvers)) // 0 <= x < n
-		tunnel := c.tunnels[tunnel_index]
+	for i := 0; i < max(5, len(h.tunnels)); i++ {
+		tunnel_index := rand.Intn(len(h.resolvers)) // 0 <= x < n
+		tunnel := h.tunnels[tunnel_index]
 		if tunnel == nil {
-			if newtunnel, err := c.createDnsttTunnel(ctx, []dnstt.Resolver{c.resolvers[tunnel_index]}); err != nil {
+			if newtunnel, err := h.createDnsttTunnel(ctx, []dnstt.Resolver{h.resolvers[tunnel_index]}); err != nil {
 				lasterr = err
-				c.logger.DebugContext(ctx, "tunnel [", tunnel_index, "]  failed resolver ", c.resolvers[tunnel_index].ResolverAddr)
+				h.logger.DebugContext(ctx, "tunnel [", tunnel_index, "]  failed resolver ", h.resolvers[tunnel_index].ResolverAddr)
 			} else {
-				c.tunnels[tunnel_index] = newtunnel
+				h.tunnels[tunnel_index] = newtunnel
 				tunnel = newtunnel
-				c.logger.InfoContext(ctx, "tunnel [", tunnel_index, "] resolver ", c.resolvers[tunnel_index].ResolverAddr)
+				h.logger.InfoContext(ctx, "tunnel [", tunnel_index, "] resolver ", h.resolvers[tunnel_index].ResolverAddr)
 
 				// return tunnel, nil
 			}
@@ -103,13 +103,13 @@ func (c *Outbound) OpenStreamSingleResolver(ctx context.Context) (net.Conn, erro
 				lasterr = err
 			}
 			tunnel.Close()
-			c.tunnels[tunnel_index] = nil
+			h.tunnels[tunnel_index] = nil
 		}
 	}
 	return nil, lasterr
 }
-func (c *Outbound) createDnsttTunnel(ctx context.Context, resolver []dnstt.Resolver) (*dnstt.Tunnel, error) {
-	tServer, err := newTunnelServer(c.options)
+func (h *Outbound) createDnsttTunnel(ctx context.Context, resolver []dnstt.Resolver) (*dnstt.Tunnel, error) {
+	tServer, err := newTunnelServer(h.options)
 	if err != nil {
 		return nil, err
 	}
@@ -118,29 +118,29 @@ func (c *Outbound) createDnsttTunnel(ctx context.Context, resolver []dnstt.Resol
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tunnel: %w", err)
 	}
-	if c.options.OpenStreamTimeout != nil {
-		tunnel.OpenStreamTimeout = c.options.OpenStreamTimeout.Build()
+	if h.options.OpenStreamTimeout != nil {
+		tunnel.OpenStreamTimeout = h.options.OpenStreamTimeout.Build()
 	}
-	if c.options.MaxStreams != nil {
-		tunnel.MaxStreams = *c.options.MaxStreams
+	if h.options.MaxStreams != nil {
+		tunnel.MaxStreams = *h.options.MaxStreams
 	}
-	if c.options.ReconnectMinDelay != nil {
-		tunnel.ReconnectMinDelay = c.options.ReconnectMinDelay.Build()
+	if h.options.ReconnectMinDelay != nil {
+		tunnel.ReconnectMinDelay = h.options.ReconnectMinDelay.Build()
 	}
-	if c.options.ReconnectMaxDelay != nil {
-		tunnel.ReconnectMaxDelay = c.options.ReconnectMaxDelay.Build()
+	if h.options.ReconnectMaxDelay != nil {
+		tunnel.ReconnectMaxDelay = h.options.ReconnectMaxDelay.Build()
 	}
-	if c.options.SessionCheckInterval != nil {
-		tunnel.SessionCheckInterval = c.options.SessionCheckInterval.Build()
+	if h.options.SessionCheckInterval != nil {
+		tunnel.SessionCheckInterval = h.options.SessionCheckInterval.Build()
 	}
-	if c.options.IdleTimeout != nil {
-		tunnel.IdleTimeout = c.options.IdleTimeout.Build()
+	if h.options.IdleTimeout != nil {
+		tunnel.IdleTimeout = h.options.IdleTimeout.Build()
 	}
-	if c.options.KeepAlive != nil {
-		tunnel.KeepAlive = c.options.KeepAlive.Build()
+	if h.options.KeepAlive != nil {
+		tunnel.KeepAlive = h.options.KeepAlive.Build()
 	}
-	if c.options.HandshakeTimeout != nil {
-		tunnel.HandshakeTimeout = c.options.HandshakeTimeout.Build()
+	if h.options.HandshakeTimeout != nil {
+		tunnel.HandshakeTimeout = h.options.HandshakeTimeout.Build()
 	}
 
 	if err := tunnel.InitiateResolverConnection(); err != nil {
@@ -151,24 +151,24 @@ func (c *Outbound) createDnsttTunnel(ctx context.Context, resolver []dnstt.Resol
 		return nil, fmt.Errorf("failed to initiate DNS packet connection: %w", err)
 	}
 
-	// c.logger.DebugContext(c.ctx, "effective MTU %d", tServer.MTU)
+	// h.logger.DebugContext(h.ctx, "effective MTU %d", tServer.MTU)
 
 	if err := tunnel.InitiateKCPConn(tServer.MTU); err != nil {
 		return nil, fmt.Errorf("failed to initiate KCP connection: %w", err)
 	}
 
-	// c.logger.DebugContext(c.ctx, "established KCP conn")
+	// h.logger.DebugContext(h.ctx, "established KCP conn")
 	if err := tunnel.InitiateNoiseChannel(); err != nil {
-		// c.logger.WarnContext(c.ctx, "failed to establish Noise channel: %v", err)
+		// h.logger.WarnContext(h.ctx, "failed to establish Noise channel: %v", err)
 		return nil, fmt.Errorf("failed to initiate noise channel: %w", err)
 	}
 
-	// c.logger.DebugContext(c.ctx, "established Noise channel")
+	// h.logger.DebugContext(h.ctx, "established Noise channel")
 
 	if err := tunnel.InitiateSmuxSession(); err != nil {
 		return nil, fmt.Errorf("failed to initiate smux session: %w", err)
 	}
-	// c.logger.DebugContext(c.ctx, "established smux session")
+	// h.logger.DebugContext(h.ctx, "established smux session")
 	return tunnel, nil
 }
 

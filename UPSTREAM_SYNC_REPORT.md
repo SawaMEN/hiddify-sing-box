@@ -18,7 +18,7 @@
 
 ## Fork compatibility
 
-VetrOFFProxy, OpenFlux, OLCRTC, FPTN, PingTunnel, custom Sudoku, Snell and the existing WARP scanner remain in the fork. Existing `smart_dns_pool` service configurations remain accepted while DNS tunnels can use the new per-outbound pool. XDrive is included with `with_xdrive`; the Makefile default includes it. Consumers using their own tags must add that tag when using XDrive.
+VetrOFFProxy, OpenFlux, OLCRTC, FPTN, PingTunnel, custom Sudoku, Snell and the existing WARP scanner remain in the fork. Existing `smart_dns_pool` service configurations remain accepted while DNS tunnels can use the new per-outbound pool. XDrive remains registered in ordinary fork builds; `with_xdrive` also enables its upstream integration tests. Both `final_mask` and upstream `finalmask` configuration spellings are supported, with the legacy key taking precedence.
 
 The earlier fork adaptations to the WARP/MASQUE device lifecycle remain; this delta does not replace that subsystem. Live WARP/Psiphon checks require network access and their documented opt-in environment variables.
 

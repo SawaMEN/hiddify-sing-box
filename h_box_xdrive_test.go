@@ -23,6 +23,7 @@ import (
 // A VLESS client and server over the xdrive transport meet only in a shared folder (XDRIVE's
 // "local" service): the client announces a session there and the server picks it up.
 func TestH_XDriveLocalRoundTrip(t *testing.T) {
+	decryption, encryption := hVLESSEncryptionPair(t, "native")
 	echo := startEchoServer(t)
 	folder := t.TempDir()
 	transport := `{"type": "xdrive", "service": "local", "remote_folder": "` + folder + `", "poll_interval_ms": 20, "flush_interval_ms": 5}`
@@ -31,6 +32,7 @@ func TestH_XDriveLocalRoundTrip(t *testing.T) {
 		"inbounds": [{
 			"type": "vless", "tag": "in", "listen": "127.0.0.1", "listen_port": 0,
 			"users": [{"uuid": "b831381d-6324-4d53-ad4f-8cda48b30811"}],
+ "decryption": "` + decryption + `",
 			"transport": ` + transport + `
 		}],
 		"outbounds": [
@@ -38,6 +40,7 @@ func TestH_XDriveLocalRoundTrip(t *testing.T) {
 			{
 				"type": "vless", "tag": "xdrive", "server": "127.0.0.1", "server_port": 1,
 				"uuid": "b831381d-6324-4d53-ad4f-8cda48b30811",
+ "encryption": "` + encryption + `",
 				"transport": ` + transport + `
 			}
 		]
@@ -70,6 +73,7 @@ func TestH_XDriveLocalRoundTrip(t *testing.T) {
 }
 
 func TestH_XDriveOptions(t *testing.T) {
+	_, encryption := hVLESSEncryptionPair(t, "native")
 	ctx := include.Context(context.Background())
 	for _, test := range []struct {
 		transport string
@@ -82,7 +86,7 @@ func TestH_XDriveOptions(t *testing.T) {
 		{`{"type": "xdrive", "service": "dropbox"}`, "unknown"},
 		{`{"type": "xdrive"}`, "missing"},
 	} {
-		config := `{"log": {"disabled": true}, "outbounds": [{"type": "vless", "tag": "x", "server": "127.0.0.1", "server_port": 1, "uuid": "b831381d-6324-4d53-ad4f-8cda48b30811", "transport": ` + test.transport + `}]}`
+		config := `{"log": {"disabled": true}, "outbounds": [{"type": "vless", "tag": "x", "server": "127.0.0.1", "server_port": 1, "uuid": "b831381d-6324-4d53-ad4f-8cda48b30811", "encryption": "` + encryption + `", "transport": ` + test.transport + `}]}`
 		options, err := json.UnmarshalExtendedContext[option.Options](ctx, []byte(config))
 		require.NoError(t, err, test.transport)
 		instance, err := box.New(box.Options{Context: ctx, Options: options})

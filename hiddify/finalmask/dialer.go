@@ -134,7 +134,7 @@ func dialUDPFunc(dial DialFunc, listen ListenPacketFunc) func(context.Context, x
 func xrayDestination(network xnet.Network, destination M.Socksaddr) xnet.Destination {
 	dest := xnet.Destination{Network: network, Port: xnet.Port(destination.Port)}
 	switch {
-	case destination.IsFqdn():
+	case destination.IsDomain():
 		dest.Address = xnet.DomainAddress(destination.Fqdn)
 	case destination.IsIP():
 		dest.Address = xnet.IPAddress(destination.Addr.Unmap().AsSlice())

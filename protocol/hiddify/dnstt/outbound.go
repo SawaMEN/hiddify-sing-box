@@ -6,7 +6,6 @@ import (
 	"github.com/sagernet/sing-box/common/dialer"
 	"net"
 	"sync"
-	"time"
 
 	dnstt "github.com/net2share/vaydns/client"
 	"github.com/sagernet/sing-box/adapter"
@@ -16,7 +15,6 @@ import (
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
-	"github.com/sagernet/sing/common/json/badoption"
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
@@ -32,9 +30,8 @@ var _ adapter.Outbound = (*Outbound)(nil)
 
 type Outbound struct {
 	outbound.Adapter
-	dnsRouter adapter.DNSRouter
-	logger    logger.ContextLogger
-	ctx       context.Context
+	logger logger.ContextLogger
+	ctx    context.Context
 
 	candidateResolvers []ResolverS
 	resolvers          []dnstt.Resolver
@@ -44,7 +41,6 @@ type Outbound struct {
 	cache              adapter.CacheFile
 	uotClient          *uot.Client
 	started            int
-	resolve            bool
 	tunnel_index       int
 
 	pool *dnspool.Pool // the outbound's own resolver pool, set when options.SmartPool is enabled
@@ -52,22 +48,14 @@ type Outbound struct {
 	options option.DnsttOptions
 }
 
-func (c *Outbound) PreStart() error {
-	c.cache = service.FromContext[adapter.CacheFile](c.ctx)
+func (h *Outbound) PreStart() error {
+	h.cache = service.FromContext[adapter.CacheFile](h.ctx)
 	return nil
 }
 
 func (h *Outbound) PostStart() error {
 	go h.startTestResolver()
 	return nil
-}
-
-func initDuration(d *badoption.Duration, defultDuration time.Duration) time.Duration {
-	b := d.Build()
-	if b <= 0 {
-		return defultDuration
-	}
-	return b
 }
 
 func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.DnsttOptions) (adapter.Outbound, error) {
@@ -174,36 +162,36 @@ func (h *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (n
 	return nil, E.New("UoT is not enabled for this outbound")
 }
 
-func (c *Outbound) isReady() bool {
-	return c.started > 0
+func (h *Outbound) isReady() bool {
+	return h.started > 0
 }
 
 // Status is failed once every resolver failed its test. //H
-func (c *Outbound) Status() adapter.Status {
+func (h *Outbound) Status() adapter.Status {
 	switch {
-	case c.started > 0:
+	case h.started > 0:
 		return adapter.StatusReady
-	case c.started < 0:
+	case h.started < 0:
 		return adapter.StatusFailed
 	}
 	return adapter.StatusConnecting
 }
-func (w *Outbound) DisplayType() string {
-	str := C.ProxyDisplayName(w.Type()) //H: adapter.DisplayType adds the status mark
-	if w.started > 0 {
-		str += fmt.Sprint(" ✔️ ", len(w.resolvers), " resolvers")
+func (h *Outbound) DisplayType() string {
+	str := C.ProxyDisplayName(h.Type()) //H: adapter.DisplayType adds the status mark
+	if h.started > 0 {
+		str += fmt.Sprint(" ✔️ ", len(h.resolvers), " resolvers")
 	}
 	return str
 }
 
-func (c *Outbound) Close() error {
-	for _, t := range c.tunnels {
+func (h *Outbound) Close() error {
+	for _, t := range h.tunnels {
 		if t != nil {
 			t.Close()
 		}
 	}
-	if c.pool != nil {
-		_ = c.pool.Close()
+	if h.pool != nil {
+		_ = h.pool.Close()
 	}
 	return nil
 }

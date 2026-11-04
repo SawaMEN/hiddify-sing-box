@@ -74,7 +74,6 @@ type OutboundMonitoring struct {
 	cache            adapter.CacheFile
 	ctx              context.Context
 	cancel           context.CancelFunc
-	tag              string
 	pause            pause.Manager
 	pauseCallback    *list.Element[pause.Callback]
 	started          atomic.Bool
@@ -487,9 +486,7 @@ func (m *OutboundMonitoring) testNow(outboundTag string, priority bool) error {
 			staged:      priority, //H
 		}
 
-		if !m.enqueueTask(task) {
-			// return errors.New("test already queued")
-		}
+		m.enqueueTask(task)
 	}
 	return nil
 }
@@ -685,6 +682,10 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string, interim 
 		return adapter.URLTestHistory{Delay: 0}, errors.New("outbound not registered")
 	}
 
+	out.mu.Lock()
+	previous := out.history
+	out.mu.Unlock()
+
 	idx := m.currentLinkIndex.Load()
 
 	var ( //H
@@ -716,10 +717,10 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string, interim 
 	if interim != nil { //H
 		interim(his, false)
 	}
-	if m.verifyIPv6 && (out.history.IPv6 == nil || out.history.IPv6FromCache) { //H: once per run, like the IP lookup
+	if m.verifyIPv6 && (previous.IPv6 == nil || previous.IPv6FromCache) { //H: once per run, like the IP lookup
 		his.IPv6 = m.verifyIPv6Of(parent, out, m.urls[idx]) //H
 	} //H
-	if out.history.IpInfo == nil || out.history.IpInfoFromCache { //H: until looked up in this run
+	if previous.IpInfo == nil || previous.IpInfoFromCache { //H: until looked up in this run
 
 		ctx, cancel2 := context.WithTimeout(parent, m.urlTestTimeout)
 		defer cancel2()
@@ -733,7 +734,7 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string, interim 
 			newip, t, err = ipinfo.GetIpInfo(m.logger, ctx, out.outbound) //H
 		} //H
 		if err == nil {
-			his.IpInfo = mergeIpInfo(out.history.IpInfo, newip)
+			his.IpInfo = mergeIpInfo(previous.IpInfo, newip)
 			if t < his.Delay {
 				his.Delay = t
 			}

@@ -87,7 +87,8 @@ func (m *OutboundMonitoring) applyInterim(task *testTask, state *outboundState, 
 	state.from_cache = false
 	state.tentative = tentative
 	if !tentative {
-		m.history.StoreURLTestHistory(task.outboundTag, &state.history)
+		snapshot := state.history //H: storage readers own an immutable snapshot
+		m.history.StoreURLTestHistory(task.outboundTag, &snapshot)
 	}
 	groupTags := state.groupTags
 	state.mu.Unlock()
