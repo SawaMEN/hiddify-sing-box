@@ -1,217 +1,151 @@
-package xdrive
+package v2rayxdrive
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"net"
-	"net/http"
-	"os"
-	"regexp"
-	"strings"
+	"slices"
 	"sync"
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/dialer"
 	"github.com/sagernet/sing-box/common/tls"
-	"github.com/sagernet/sing-box/log"
+	"github.com/sagernet/sing-box/hiddify/finalmask"
 	"github.com/sagernet/sing-box/option"
+	"github.com/sagernet/sing-box/transport/v2ray"
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+
+	xnet "github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/stat"
+	"github.com/xtls/xray-core/transport/internet/xdrive"
 )
 
-type Config = option.V2RayXDriveOptions
-
-type streamOptions struct {
-	ProtocolSettings any
-	ctx              context.Context
-	storageOnce      sync.Once
-	storage          Storage
-	storageErr       error
-	dialer           N.Dialer
-	mu               sync.Mutex
-	clients          map[*http.Transport]struct{}
+func init() {
+	v2ray.RegisterXDriveConstructor(NewServer, NewClient)
 }
 
-func (s *streamOptions) close() {
-	s.storageOnce.Do(func() { s.storageErr = context.Canceled })
-	if s.storage != nil {
-		s.storage.Close()
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for c := range s.clients {
-		c.CloseIdleConnections()
-	}
-	s.clients = nil
-}
+const protocolName = "xdrive"
 
-func validate(options Config) error {
-	if strings.TrimSpace(options.RemoteFolder) == "" {
-		return fmt.Errorf("XDrive remote_folder is required")
-	}
-	switch options.Service {
-	case "local":
-	case "google-drive", "Google Drive":
-		if len(options.Secrets) != 3 {
-			return fmt.Errorf("XDrive Google Drive requires client ID, client secret and refresh token")
-		}
-		for _, secret := range options.Secrets {
-			if strings.TrimSpace(secret) == "" {
-				return fmt.Errorf("XDrive Google Drive secrets must not be empty")
-			}
-		}
-	case "template":
-		if strings.TrimSpace(options.Template) == "" {
-			return fmt.Errorf("XDrive storage template is required")
-		}
-		var template storageTemplate
-		if err := json.Unmarshal([]byte(options.Template), &template); err != nil {
-			return fmt.Errorf("invalid XDrive template: %w", err)
-		}
-		if template.Put.URL == "" || template.Get.URL == "" || template.List.URL == "" || template.Delete.URL == "" {
-			return fmt.Errorf("XDrive template needs put, get, list and delete operations")
-		}
-		names, err := regexp.Compile(template.List.NamesRegex)
-		if err != nil || names.NumSubexp() < 1 {
-			return fmt.Errorf("XDrive template namesRegex needs a capture group")
-		}
-
-	case "s3":
-		if options.S3 == nil || len(options.Secrets) < 2 || len(options.Secrets) > 3 {
-			return fmt.Errorf("XDrive S3 requires endpoint, bucket and two or three secrets")
-		}
-	default:
-		return fmt.Errorf("unsupported XDrive service %q", options.Service)
-	}
-	if options.SegmentBytes > maxSegmentBytes || options.Concurrency > maxConcurrency {
-		return fmt.Errorf("XDrive segment_bytes must be <= 16777216 and concurrency <= 64")
-	}
-	return nil
-}
-
-type Server struct {
-	ctx      context.Context
-	cancel   context.CancelFunc
-	options  *streamOptions
-	handler  adapter.V2RayServerTransportHandler
-	listener *Listener
-}
-
-var _ adapter.V2RayServerTransport = (*Server)(nil)
-
-func NewServer(ctx context.Context, _ logger.ContextLogger, options Config, tlsConfig tls.ServerConfig, handler adapter.V2RayServerTransportHandler) (*Server, error) {
-	if tlsConfig != nil {
-		return nil, fmt.Errorf("XDrive uses HTTPS storage and VLESS encryption; tunnel TLS must be disabled")
-	}
-	if err := validate(options); err != nil {
+// streamSettings is the Xray stream of XDRIVE; every socket it opens to the storage service goes
+// through dialer.
+func streamSettings(options option.V2RayXDriveOptions, tlsConfig tls.Config, serverAddr M.Socksaddr, dialer N.Dialer) (*internet.MemoryStreamConfig, error) {
+	securitySettings := xrayTLSConfig(tlsConfig, serverAddr)
+	config, err := buildConfig(options, slices.Equal(securitySettings.NextProtocol, []string{"h3"}))
+	if err != nil {
 		return nil, err
 	}
-	var nativeDialer N.Dialer
-	if options.Service != "local" {
-		var err error
-		nativeDialer, err = dialer.New(ctx, options.StorageDialer, true)
-		if err != nil {
-			return nil, err
-		}
-	}
-	ctx, cancel := context.WithCancel(ctx)
-	return &Server{ctx: ctx, cancel: cancel, options: &streamOptions{ProtocolSettings: &options, ctx: ctx, dialer: nativeDialer}, handler: handler}, nil
-}
-
-func (s *Server) Start() error {
-	listener, err := listenSessions(s.ctx, s.options, func(conn net.Conn) {
-		go s.handler.NewConnectionEx(log.ContextWithNewID(s.ctx), conn, M.Socksaddr{}, M.Socksaddr{}, nil)
-	})
-	s.listener = listener
-	return err
-}
-func (s *Server) Network() []string                { return nil }
-func (s *Server) Serve(net.Listener) error         { return os.ErrInvalid }
-func (s *Server) ServePacket(net.PacketConn) error { return os.ErrInvalid }
-func (s *Server) Close() error {
-	s.cancel()
-	s.options.close()
-	if s.listener != nil {
-		return s.listener.Close()
-	}
-	return nil
-}
-
-type Client struct {
-	ctx         context.Context
-	cancel      context.CancelFunc
-	options     *streamOptions
-	mu          sync.Mutex
-	connections map[*trackedConn]struct{}
+	return &internet.MemoryStreamConfig{
+		ProtocolName:     protocolName,
+		ProtocolSettings: config,
+		SecurityType:     "tls",
+		SecuritySettings: securitySettings,
+		Destination:      frontingDestination(options),
+		FinalMask:        (*finalmask.Masks)(nil).XrayFinalMask(dialer.DialContext, dialer.ListenPacket),
+	}, nil
 }
 
 var _ adapter.V2RayClientTransport = (*Client)(nil)
 
-func NewClient(ctx context.Context, nativeDialer N.Dialer, _ M.Socksaddr, options Config, tlsConfig tls.Config) (*Client, error) {
-	if tlsConfig != nil {
-		return nil, fmt.Errorf("XDrive uses HTTPS storage and VLESS encryption; tunnel TLS must be disabled")
-	}
-	if err := validate(options); err != nil {
-		return nil, err
-	}
-	ctx, cancel := context.WithCancel(ctx)
-	return &Client{ctx: ctx, cancel: cancel, options: &streamOptions{ProtocolSettings: &options, ctx: ctx, dialer: nativeDialer}}, nil
+// Client opens one XDRIVE session per connection. Xray's XDRIVE expects VLESS with Mux.Cool on
+// top, so that a session carries many connections.
+type Client struct {
+	streamSettings *internet.MemoryStreamConfig
 }
 
-func (c *Client) DialContext(ctx context.Context) (net.Conn, error) {
-	if err := c.ctx.Err(); err != nil {
-		return nil, err
-	}
-	// A request can be cancelled independently of the transport, including while
-	// the storage announce request waits for a response.
-	ctx, cancel := context.WithCancel(ctx)
-	stop := context.AfterFunc(c.ctx, cancel)
-	defer stop()
-	defer cancel()
-	conn, err := dialSession(ctx, c.options)
+func NewClient(ctx context.Context, dialer N.Dialer, serverAddr M.Socksaddr, options option.V2RayXDriveOptions, tlsConfig tls.Config) (adapter.V2RayClientTransport, error) {
+	settings, err := streamSettings(options, tlsConfig, serverAddr, dialer)
 	if err != nil {
 		return nil, err
 	}
-	c.mu.Lock()
-	if err = c.ctx.Err(); err != nil {
-		c.mu.Unlock()
-		conn.Close()
-		return nil, err
-	}
-	tracked := &trackedConn{Conn: conn, owner: c}
-	if c.connections == nil {
-		c.connections = map[*trackedConn]struct{}{}
-	}
-	c.connections[tracked] = struct{}{}
-	c.mu.Unlock()
-	return tracked, nil
+	return &Client{streamSettings: settings}, nil
+}
+
+func (c *Client) DialContext(ctx context.Context) (net.Conn, error) {
+	// the session has no address: the server finds it in the storage
+	return xdrive.Dial(ctx, xnet.Destination{Network: xnet.Network_TCP, Address: xnet.AnyIP}, c.streamSettings)
 }
 
 func (c *Client) Close() error {
-	c.cancel()
-	c.mu.Lock()
-	connections := make([]*trackedConn, 0, len(c.connections))
-	for conn := range c.connections {
-		connections = append(connections, conn)
-	}
-	c.mu.Unlock()
-	for _, conn := range connections {
-		conn.Close()
-	}
-	c.options.close()
 	return nil
 }
 
-type trackedConn struct {
-	net.Conn
-	owner *Client
-	once  sync.Once
-	err   error
+var _ adapter.V2RayServerTransport = (*Server)(nil)
+
+// Server accepts the sessions that clients announce in the storage. It listens on no socket: the
+// inbound's TCP listener is closed as soon as it is handed over.
+type Server struct {
+	ctx            context.Context
+	logger         logger.ContextLogger
+	handler        adapter.V2RayServerTransportHandler
+	streamSettings *internet.MemoryStreamConfig
+
+	access   sync.Mutex
+	listener internet.Listener
+	done     chan struct{}
+	closed   bool
 }
 
-func (c *trackedConn) Close() error {
-	c.once.Do(func() { c.err = c.Conn.Close(); c.owner.mu.Lock(); delete(c.owner.connections, c); c.owner.mu.Unlock() })
-	return c.err
+func NewServer(ctx context.Context, logger logger.ContextLogger, options option.V2RayXDriveOptions, tlsConfig tls.ServerConfig, handler adapter.V2RayServerTransportHandler) (adapter.V2RayServerTransport, error) {
+	// the server is a client of the storage service too; its requests go out the default outbound
+	outbound, err := dialer.New(ctx, options.StorageDialer, true) //H: preserve storage routing
+	if err != nil {
+		return nil, err
+	}
+	settings, err := streamSettings(options, nil, M.Socksaddr{}, outbound)
+	if err != nil {
+		return nil, err
+	}
+	return &Server{
+		ctx:            ctx,
+		logger:         logger,
+		handler:        handler,
+		streamSettings: settings,
+		done:           make(chan struct{}),
+	}, nil
+}
+
+func (s *Server) Network() []string {
+	return []string{N.NetworkTCP}
+}
+
+func (s *Server) Serve(listener net.Listener) error {
+	listener.Close()
+	s.access.Lock()
+	if s.closed {
+		s.access.Unlock()
+		return net.ErrClosed
+	}
+	xlistener, err := xdrive.Serve(s.ctx, xnet.AnyIP, 0, s.streamSettings, s.newConnection)
+	if err != nil {
+		s.access.Unlock()
+		return err
+	}
+	s.listener = xlistener
+	s.access.Unlock()
+	<-s.done
+	return net.ErrClosed
+}
+
+func (s *Server) newConnection(conn stat.Connection) {
+	s.handler.NewConnectionEx(s.ctx, conn, M.Socksaddr{}, M.Socksaddr{}, nil)
+}
+
+func (s *Server) ServePacket(listener net.PacketConn) error {
+	return nil
+}
+
+func (s *Server) Close() error {
+	s.access.Lock()
+	defer s.access.Unlock()
+	if s.closed {
+		return nil
+	}
+	s.closed = true
+	close(s.done)
+	if s.listener != nil {
+		return s.listener.Close()
+	}
+	return nil
 }

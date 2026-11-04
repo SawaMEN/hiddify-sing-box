@@ -3,36 +3,38 @@ package dnstt
 import (
 	"context"
 	"fmt"
+	"github.com/sagernet/sing-box/common/dialer"
 	"net"
 	"sync"
+	"time"
 
+	dnstt "github.com/net2share/vaydns/client"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
+	"github.com/sagernet/sing-box/common/dnspool"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
+	"github.com/sagernet/sing/common/json/badoption"
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/common/uot"
 	"github.com/sagernet/sing/service"
-
-	multidns "github.com/hiddify/hmrd_multi_resolver_dns"
-	dnstt "github.com/net2share/vaydns/client"
 )
 
 func RegisterOutbound(registry *outbound.Registry) {
 	outbound.Register[option.DnsttOptions](registry, C.TypeDNSTT, NewOutbound)
-	loadResolvers()
 }
 
 var _ adapter.Outbound = (*Outbound)(nil)
 
 type Outbound struct {
 	outbound.Adapter
-	logger logger.ContextLogger
-	ctx    context.Context
+	dnsRouter adapter.DNSRouter
+	logger    logger.ContextLogger
+	ctx       context.Context
 
 	candidateResolvers []ResolverS
 	resolvers          []dnstt.Resolver
@@ -42,23 +44,34 @@ type Outbound struct {
 	cache              adapter.CacheFile
 	uotClient          *uot.Client
 	started            int
+	resolve            bool
+	tunnel_index       int
 
-	mdMgr *multidns.Manager // smart pool, set when options.SmartPool
+	pool *dnspool.Pool // the outbound's own resolver pool, set when options.SmartPool is enabled
 
 	options option.DnsttOptions
 }
 
-func (receiver *Outbound) PreStart() error {
-	receiver.cache = service.FromContext[adapter.CacheFile](receiver.ctx)
+func (c *Outbound) PreStart() error {
+	c.cache = service.FromContext[adapter.CacheFile](c.ctx)
 	return nil
 }
 
-func (receiver *Outbound) PostStart() error {
-	go receiver.startTestResolver()
+func (h *Outbound) PostStart() error {
+	go h.startTestResolver()
 	return nil
+}
+
+func initDuration(d *badoption.Duration, defultDuration time.Duration) time.Duration {
+	b := d.Build()
+	if b <= 0 {
+		return defultDuration
+	}
+	return b
 }
 
 func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.DnsttOptions) (adapter.Outbound, error) {
+
 	// if options.TunnelPerResolver <= 0 {
 	// 	options.TunnelPerResolver = 4
 	// }
@@ -70,6 +83,20 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 
 	if len(resolvers) == 0 {
 		return nil, E.New("at least one resolver is required")
+	}
+	// the resolver sockets are opened by the DNSTT client, not through a sing-box dialer: give
+	// them the socket control of one (bind_interface, routing_mark, the platform's protect), or
+	// on a VPN their queries loop back into the tunnel
+	defaultDialer, err := dialer.NewDefault(ctx, options.DialerOptions)
+	if err != nil {
+		return nil, err
+	}
+	dialerControl, _ := defaultDialer.UDPListenerControl()
+	for i := range resolvers {
+		resolvers[i].Resolver.DialerControl = dialerControl
+	}
+	if options.Detour != "" {
+		logger.Warn("dnstt: detour is not supported, the DNS queries go out directly")
 	}
 	if options.RecordType == "" {
 		options.RecordType = "txt"
@@ -100,68 +127,83 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 		options: options,
 	}
 
-	if options.SmartPool {
-		mgr, addr, err := multidns.StartLocal(multidns.Options{})
+	if options.SmartPool.IsEnabled() {
+		dial, err := dnspool.DialFunc(ctx, options.DialerOptions)
 		if err != nil {
 			return nil, err
 		}
-		out.mdMgr = mgr
-		out.resolvers = []dnstt.Resolver{{ResolverType: dnstt.ResolverTypeUDP, ResolverAddr: addr}}
+		poolOptions := dnspool.PoolOptionsFrom(options.SmartPool)
+		// DNSTT's KCP times its retransmissions by the round trip and loses more from a query
+		// held for capacity than from one failed at once: measured on one resolver limited to 30
+		// queries a second, 82 kbps held against 173 failing fast
+		poolOptions.FailFast = true
+		pool, err := dnspool.StartPool(logger, tag, poolOptions, dial)
+		if err != nil {
+			return nil, err
+		}
+		out.pool = pool
+		out.resolvers = []dnstt.Resolver{{ResolverType: dnstt.ResolverTypeUDP, ResolverAddr: pool.Addr()}}
 		out.tunnels = []*dnstt.Tunnel{nil}
-		logger.InfoContext(ctx, "dnstt smart_pool listening on ", addr)
+		logger.InfoContext(ctx, "dnstt smart_pool listening on ", pool.Addr())
 	}
 
 	return out, nil
+
 }
 
-func (receiver *Outbound) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-	if !receiver.IsReady() {
+func (h *Outbound) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
+	if !h.isReady() {
 		return nil, E.New("outbound is not started")
 	}
-	if receiver.options.SingleResolver {
-		return receiver.OpenStreamSingleResolver(ctx)
+	if h.options.SingleResolver {
+		return h.OpenStreamSingleResolver(ctx)
 	}
-	return receiver.OpenStream(ctx)
+	return h.OpenStream(ctx)
 }
-
-func (receiver *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
-	if !receiver.IsReady() {
+func (h *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
+	if !h.isReady() {
 		return nil, E.New("outbound is not started")
 	}
 	ctx, metadata := adapter.ExtendContext(ctx)
-	metadata.Outbound = receiver.Tag()
+	metadata.Outbound = h.Tag()
 	metadata.Destination = destination
-	if receiver.uotClient != nil {
-		receiver.logger.InfoContext(ctx, "outbound UoT packet connection to ", destination)
-		return receiver.uotClient.ListenPacket(ctx, destination)
+	if h.uotClient != nil {
+		h.logger.InfoContext(ctx, "outbound UoT packet connection to ", destination)
+		return h.uotClient.ListenPacket(ctx, destination)
 	}
 	return nil, E.New("UoT is not enabled for this outbound")
 }
 
-func (receiver *Outbound) IsReady() bool {
-	return receiver.started > 0
+func (c *Outbound) isReady() bool {
+	return c.started > 0
 }
 
-func (receiver *Outbound) DisplayType() string {
-	str := C.ProxyDisplayName(receiver.Type())
-	if receiver.started == 0 {
-		str += " ⚠️ Connecting..."
-	} else if receiver.started < 0 {
-		str += " ❌ Failed!"
-	} else {
-		str += fmt.Sprint(" ✔️ ", len(receiver.resolvers), " resolvers")
+// Status is failed once every resolver failed its test. //H
+func (c *Outbound) Status() adapter.Status {
+	switch {
+	case c.started > 0:
+		return adapter.StatusReady
+	case c.started < 0:
+		return adapter.StatusFailed
+	}
+	return adapter.StatusConnecting
+}
+func (w *Outbound) DisplayType() string {
+	str := C.ProxyDisplayName(w.Type()) //H: adapter.DisplayType adds the status mark
+	if w.started > 0 {
+		str += fmt.Sprint(" ✔️ ", len(w.resolvers), " resolvers")
 	}
 	return str
 }
 
-func (receiver *Outbound) Close() error {
-	for _, t := range receiver.tunnels {
+func (c *Outbound) Close() error {
+	for _, t := range c.tunnels {
 		if t != nil {
 			t.Close()
 		}
 	}
-	if receiver.mdMgr != nil {
-		_ = receiver.mdMgr.Close()
+	if c.pool != nil {
+		_ = c.pool.Close()
 	}
 	return nil
 }

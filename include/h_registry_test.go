@@ -45,7 +45,7 @@ func TestH_OutboundRegistryHiddifyTypes(t *testing.T) {
 		C.TypeXray:            &option.XrayOutboundOptions{},
 		C.TypeDNSTT:           &option.DnsttOptions{},
 		C.TypeGooseRelay:      &option.GooseRelayOptions{},
-		C.TypeOlcRTC:          &option.OlcRTCOutboundOptions{},
+		C.TypeMasterDNS:       &option.MasterDNSOptions{},
 		C.TypeBalancer:        &option.BalancerOutboundOptions{},
 		C.TypeMASQUE:          &option.MASQUEOutboundOptions{},
 		C.TypeLegacyWireGuard: &option.LegacyWireGuardOutboundOptions{},
@@ -70,12 +70,6 @@ func TestH_DNSTransportRegistryHiddifyTypes(t *testing.T) {
 	hRequireRegistered(t, DNSTransportRegistry(), map[string]any{
 		C.DNSTypeSDNS:  &option.SDNSDNSServerOptions{},
 		C.DNSTypeMulti: &option.MultiDNSServerOptions{},
-	})
-}
-
-func TestH_ServiceRegistryHiddifyTypes(t *testing.T) {
-	hRequireRegistered(t, ServiceRegistry(), map[string]any{
-		C.TypeSmartDNSPool: &option.SmartDNSPoolServiceOptions{},
 	})
 }
 
@@ -118,7 +112,6 @@ func TestH_TunnelEndpointInvalidUUID(t *testing.T) {
 }
 
 func TestH_OutboundRegistryConcurrent(t *testing.T) {
-	t.Skip("BUG: dnstt.RegisterOutbound calls loadResolvers which writes package-global maps unsynchronized (protocol/hiddify/dnstt/tools.go:21-29); concurrent OutboundRegistry() crashes with 'concurrent map writes'")
 	var wg sync.WaitGroup
 	for range 8 {
 		wg.Go(func() {

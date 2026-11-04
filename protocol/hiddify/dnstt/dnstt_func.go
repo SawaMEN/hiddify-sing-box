@@ -2,41 +2,42 @@ package dnstt
 
 import (
 	"context"
-	"fmt"
+	"github.com/sagernet/sing-box/option"
 	"math/rand"
 	"net"
 
-	"github.com/sagernet/sing-box/common/monitoring"
+	"fmt"
 
 	dnstt "github.com/net2share/vaydns/client"
+	"github.com/sagernet/sing-box/common/monitoring"
 )
 
-func (receiver *Outbound) addResolver(resolver dnstt.Resolver) {
-	receiver.mu.Lock()
-	if receiver.mdMgr != nil {
-		// Smart pool mode: register the resolver as a multidns upstream.
+func (c *Outbound) addResolver(resolver dnstt.Resolver) {
+	c.mu.Lock()
+	if c.pool != nil {
+		// Smart pool mode: register the resolver as a pool upstream.
 		// c.resolvers stays at the single virtual resolver set up in
 		// NewOutbound, so the existing tunnel keeps running — the pool
 		// rotates upstreams behind it. No need to invalidate
 		// c.mutlitunnel here (unlike the legacy path, which has to
 		// rebuild the tunnel when its resolver list changes).
-		_, _ = receiver.mdMgr.AddResolverURL(resolverURL(resolver))
+		_ = c.pool.Add(resolverURL(resolver))
 	} else {
 		// for i := 0; i < c.options.TunnelPerResolver; i++ {
-		receiver.resolvers = append(receiver.resolvers, resolver)
-		receiver.tunnels = append(receiver.tunnels, nil)
+		c.resolvers = append(c.resolvers, resolver)
+		c.tunnels = append(c.tunnels, nil)
 		// }
-		receiver.mutlitunnel = nil
+		c.mutlitunnel = nil
 	}
-	receiver.mu.Unlock()
-	if !receiver.IsReady() {
-		receiver.started = 1
-		receiver.logger.InfoContext(receiver.ctx, "initial resolver ", resolver.ResolverAddr)
-		monitoring.Get(receiver.ctx).TestNow(receiver.Tag())
+	c.mu.Unlock()
+	if !c.isReady() {
+		c.started = 1
+		c.logger.InfoContext(c.ctx, "initial resolver ", resolver.ResolverAddr)
+		monitoring.Get(c.ctx).TestNow(c.Tag())
 	}
 }
 
-// resolverURL renders a dnstt.Resolver as the URL form multidns parses.
+// resolverURL renders a dnstt.Resolver as the URL form the pool parses.
 // UDP resolvers are bare host:port (multidns defaults to UDP/53); DoT gets
 // the "dot://" prefix; DoH is already a full https:// URL.
 func resolverURL(r dnstt.Resolver) string {
@@ -48,50 +49,48 @@ func resolverURL(r dnstt.Resolver) string {
 	}
 }
 
-func (receiver *Outbound) openStreamImp(ctx context.Context) (net.Conn, error) {
-	receiver.mu.Lock()
-	defer receiver.mu.Unlock()
-	if t := receiver.mutlitunnel; t != nil {
+func (c *Outbound) openStreamImp(ctx context.Context) (net.Conn, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if t := c.mutlitunnel; t != nil {
 		return t.OpenStream()
 	}
 
-	if newtunnel, err := receiver.createDnsttTunnel(ctx, receiver.resolvers); err != nil {
+	if newtunnel, err := c.createDnsttTunnel(ctx, c.resolvers); err != nil {
 		return nil, err
 	} else {
-		receiver.mutlitunnel = newtunnel
+		c.mutlitunnel = newtunnel
 		return newtunnel.OpenStream()
 	}
 }
-
-func (receiver *Outbound) OpenStream(ctx context.Context) (net.Conn, error) {
+func (c *Outbound) OpenStream(ctx context.Context) (net.Conn, error) {
 	var err error
 	var conn net.Conn
 	for range 3 {
-		conn, err = receiver.openStreamImp(ctx)
+		conn, err = c.openStreamImp(ctx)
 		if err == nil {
 			return conn, nil
 		}
 	}
 	return nil, err
 }
-
-func (receiver *Outbound) OpenStreamSingleResolver(ctx context.Context) (net.Conn, error) {
+func (c *Outbound) OpenStreamSingleResolver(ctx context.Context) (net.Conn, error) {
 	// dnsttConfig := streamSettings.ProtocolSettings.(*Config)
-	receiver.mu.Lock()
-	defer receiver.mu.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	// c.tunnel_index = (c.tunnel_index + 1) % len(c.tunnels)
 	var lasterr error
-	for i := 0; i < max(5, len(receiver.tunnels)); i++ {
-		tunnel_index := rand.Intn(len(receiver.resolvers)) // 0 <= x < n
-		tunnel := receiver.tunnels[tunnel_index]
+	for i := 0; i < max(5, len(c.tunnels)); i++ {
+		tunnel_index := rand.Intn(len(c.resolvers)) // 0 <= x < n
+		tunnel := c.tunnels[tunnel_index]
 		if tunnel == nil {
-			if newtunnel, err := receiver.createDnsttTunnel(ctx, []dnstt.Resolver{receiver.resolvers[tunnel_index]}); err != nil {
+			if newtunnel, err := c.createDnsttTunnel(ctx, []dnstt.Resolver{c.resolvers[tunnel_index]}); err != nil {
 				lasterr = err
-				receiver.logger.DebugContext(ctx, "tunnel [", tunnel_index, "]  failed resolver ", receiver.resolvers[tunnel_index].ResolverAddr)
+				c.logger.DebugContext(ctx, "tunnel [", tunnel_index, "]  failed resolver ", c.resolvers[tunnel_index].ResolverAddr)
 			} else {
-				receiver.tunnels[tunnel_index] = newtunnel
+				c.tunnels[tunnel_index] = newtunnel
 				tunnel = newtunnel
-				receiver.logger.InfoContext(ctx, "tunnel [", tunnel_index, "] resolver ", receiver.resolvers[tunnel_index].ResolverAddr)
+				c.logger.InfoContext(ctx, "tunnel [", tunnel_index, "] resolver ", c.resolvers[tunnel_index].ResolverAddr)
 
 				// return tunnel, nil
 			}
@@ -104,65 +103,44 @@ func (receiver *Outbound) OpenStreamSingleResolver(ctx context.Context) (net.Con
 				lasterr = err
 			}
 			tunnel.Close()
-			receiver.tunnels[tunnel_index] = nil
+			c.tunnels[tunnel_index] = nil
 		}
 	}
 	return nil, lasterr
 }
-
-func (receiver *Outbound) createDnsttTunnel(ctx context.Context, resolver []dnstt.Resolver) (*dnstt.Tunnel, error) {
-	tServer, err := dnstt.NewTunnelServer(receiver.options.Domain, receiver.options.PublicKey)
+func (c *Outbound) createDnsttTunnel(ctx context.Context, resolver []dnstt.Resolver) (*dnstt.Tunnel, error) {
+	tServer, err := newTunnelServer(c.options)
 	if err != nil {
-		return nil, fmt.Errorf("invalid tunnel server: %w", err)
-	}
-
-	if receiver.options.MTU != nil {
-		tServer.MTU = *receiver.options.MTU
-	}
-
-	tServer.DnsttCompat = receiver.options.DnsttCompat
-
-	if receiver.options.ClientIDSize != nil {
-		tServer.ClientIDSize = *receiver.options.ClientIDSize
-	}
-
-	if receiver.options.MaxNumLabels != nil {
-		tServer.MaxNumLabels = *receiver.options.MaxNumLabels
-	}
-	if receiver.options.RPS != nil {
-		tServer.RPS = *receiver.options.RPS
-	}
-	if receiver.options.MaxQnameLen != nil {
-		tServer.MaxQnameLen = *receiver.options.MaxQnameLen
+		return nil, err
 	}
 
 	tunnel, err := dnstt.NewTunnel(resolver, tServer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tunnel: %w", err)
 	}
-	if receiver.options.OpenStreamTimeout != nil {
-		tunnel.OpenStreamTimeout = receiver.options.OpenStreamTimeout.Build()
+	if c.options.OpenStreamTimeout != nil {
+		tunnel.OpenStreamTimeout = c.options.OpenStreamTimeout.Build()
 	}
-	if receiver.options.MaxStreams != nil {
-		tunnel.MaxStreams = *receiver.options.MaxStreams
+	if c.options.MaxStreams != nil {
+		tunnel.MaxStreams = *c.options.MaxStreams
 	}
-	if receiver.options.ReconnectMinDelay != nil {
-		tunnel.ReconnectMinDelay = receiver.options.ReconnectMinDelay.Build()
+	if c.options.ReconnectMinDelay != nil {
+		tunnel.ReconnectMinDelay = c.options.ReconnectMinDelay.Build()
 	}
-	if receiver.options.ReconnectMaxDelay != nil {
-		tunnel.ReconnectMaxDelay = receiver.options.ReconnectMaxDelay.Build()
+	if c.options.ReconnectMaxDelay != nil {
+		tunnel.ReconnectMaxDelay = c.options.ReconnectMaxDelay.Build()
 	}
-	if receiver.options.SessionCheckInterval != nil {
-		tunnel.SessionCheckInterval = receiver.options.SessionCheckInterval.Build()
+	if c.options.SessionCheckInterval != nil {
+		tunnel.SessionCheckInterval = c.options.SessionCheckInterval.Build()
 	}
-	if receiver.options.IdleTimeout != nil {
-		tunnel.IdleTimeout = receiver.options.IdleTimeout.Build()
+	if c.options.IdleTimeout != nil {
+		tunnel.IdleTimeout = c.options.IdleTimeout.Build()
 	}
-	if receiver.options.KeepAlive != nil {
-		tunnel.KeepAlive = receiver.options.KeepAlive.Build()
+	if c.options.KeepAlive != nil {
+		tunnel.KeepAlive = c.options.KeepAlive.Build()
 	}
-	if receiver.options.HandshakeTimeout != nil {
-		tunnel.HandshakeTimeout = receiver.options.HandshakeTimeout.Build()
+	if c.options.HandshakeTimeout != nil {
+		tunnel.HandshakeTimeout = c.options.HandshakeTimeout.Build()
 	}
 
 	if err := tunnel.InitiateResolverConnection(); err != nil {
@@ -192,4 +170,30 @@ func (receiver *Outbound) createDnsttTunnel(ctx context.Context, resolver []dnst
 	}
 	// c.logger.DebugContext(c.ctx, "established smux session")
 	return tunnel, nil
+}
+
+// newTunnelServer builds the tunnel server settings from the options.
+func newTunnelServer(options option.DnsttOptions) (dnstt.TunnelServer, error) {
+	tServer, err := dnstt.NewTunnelServer(options.Domain, options.PublicKey)
+	if err != nil {
+		return tServer, fmt.Errorf("invalid tunnel server: %w", err)
+	}
+	if options.MTU != nil {
+		tServer.MTU = *options.MTU
+	}
+	tServer.DnsttCompat = options.DnsttCompat
+	if options.ClientIDSize != nil {
+		tServer.ClientIDSize = *options.ClientIDSize
+	}
+	if options.MaxNumLabels != nil {
+		tServer.MaxNumLabels = *options.MaxNumLabels
+	}
+	if options.RPS != nil {
+		tServer.RPS = *options.RPS
+	}
+	if options.MaxQnameLen != nil {
+		tServer.MaxQnameLen = *options.MaxQnameLen
+	}
+	tServer.RecordType = options.RecordType // was only used to name the saved resolver list
+	return tServer, nil
 }

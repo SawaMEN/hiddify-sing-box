@@ -15,7 +15,116 @@ Sing-box with extended features.
 
 ## Examples
 
-https://github.com/shtorm-7/sing-box-extended/tree/extended/examples
+### Protocols
+
+- [VLESS encryption](docs/hiddify/features/protocols/vless-encryption.en.md),
+  [Sudoku](docs/hiddify/features/protocols/sudoku.en.md),
+  [Mieru](docs/hiddify/features/protocols/mieru.en.md),
+  [TrustTunnel](docs/hiddify/features/protocols/trusttunnel.en.md),
+  [SSH](docs/hiddify/features/protocols/ssh.en.md),
+  [Psiphon](docs/hiddify/features/protocols/psiphon.en.md),
+  [DNSTT](docs/hiddify/features/protocols/dnstt.en.md),
+  [MasterDNS](docs/hiddify/features/protocols/masterdns.en.md),
+  [GooseRelay](docs/hiddify/features/protocols/gooserelay.en.md),
+  [Call tunnel](docs/hiddify/features/protocols/call.en.md),
+  [Tunnel](docs/hiddify/features/protocols/tunnel.en.md),
+  [Bond](docs/hiddify/features/protocols/bond.en.md).
+
+### Transports and TLS
+
+- [XHTTP](docs/hiddify/features/transports/xhttp.en.md),
+  [mKCP](docs/hiddify/features/transports/kcp.en.md),
+  [XDRIVE](docs/hiddify/features/transports/xdrive.en.md),
+  [raw](docs/hiddify/features/transports/raw.en.md),
+  [custom gRPC paths](docs/hiddify/features/transports/grpc-custom-path.en.md),
+  [finalmask](docs/hiddify/features/transports/finalmask.en.md),
+  [Shadowsocks simple-obfs server](docs/hiddify/features/transports/shadowsocks-obfs.en.md),
+  [rmux](docs/hiddify/features/transports/rmux.en.md).
+- [TLS fragment](docs/hiddify/features/tls-fragment.en.md),
+  [TLS tricks](docs/hiddify/features/tls-tricks.en.md),
+  [REALITY additions](docs/hiddify/features/reality-hiddify.en.md) (post-quantum key share,
+  `key_share`, fragmentation, Firefox 148 and Safari 26.3 fingerprints),
+  [PROXY protocol](docs/hiddify/features/proxy-protocol.en.md).
+
+### DNS
+
+- [DNS group](docs/hiddify/features/dns/dns-group.en.md),
+  [bypass_if_failed](docs/hiddify/features/dns/dns-bypass-if-failed.en.md),
+  [smart resolver pool](docs/hiddify/features/dns/smart-dns-pool.en.md),
+  [DNSCrypt (SDNS)](docs/hiddify/features/dns/sdns.en.md),
+  [sslip.io names](docs/hiddify/features/dns/sslip-hosts.en.md),
+  [IPv6 by outbound](docs/hiddify/features/dns/ipv6-by-outbound.en.md).
+
+### Groups and monitoring
+
+- [Balancer](docs/hiddify/features/groups/balancer.en.md) (round robin, lowest delay, consistent
+  hashing, sticky sessions, sticky pool),
+  [fallback](docs/hiddify/features/groups/fallback.en.md),
+  [URL test additions](docs/hiddify/features/groups/urltest.en.md) (more test URLs, failover mode,
+  dial penalties),
+  [monitoring](docs/hiddify/features/groups/monitoring.en.md) with a connection status for every
+  outbound, [unified delay](docs/hiddify/features/groups/unified-delay.en.md).
+
+### Fixes
+
+Many crash, leak and stability fixes on top of sing-box, each with its commit:
+[bug-fix log](docs/hiddify/bugfix/v5.en.md). What hiddify-app and hiddify-core need to know:
+[app considerations](docs/hiddify/app_considerations.md).
+
+## Building
+
+```bash
+git clone --recursive https://github.com/hiddify/hiddify-sing-box
+cd hiddify-sing-box
+make          # Go 1.27.3 or newer
+```
+
+The forks of dependencies live under `replace/` as git submodules, so clone with `--recursive`
+(or run `git submodule update --init --recursive`). The default build tags are in the `Makefile`,
+including the optional `with_kcp`, `with_sudoku`, `with_bond`, `with_call` and `with_xdrive`;
+`with_tailscale` adds another optional feature.
+
+## Contributing
+
+Read [AGENTS.md](AGENTS.md) first; it holds for people and AI agents alike. In short: read the
+Hiddify docs, keep changes to upstream files small (`h_*.go` files, `//H` on changed lines),
+improve an existing feature rather than add an overlapping one, test, document in English and
+Persian, list the feature here, and rebase on the latest `v5` before opening a pull request. The
+step-by-step procedure is the [hiddify-feature skill](.agents/skills/hiddify-feature/SKILL.md).
+
+## Credits
+
+Besides sing-box, this fork takes work from other forks and projects. Thank you to all of them:
+
+- [shtorm-7/sing-box-extended](https://github.com/shtorm-7/sing-box-extended): the base of this
+  fork, with AmneziaWG, WARP, tunneling, Mieru, XHTTP, SDNS, unified delay, mKCP, Sudoku, Bond, the
+  call tunnel and the fallback group, and its forks of
+  [connect-ip-go](https://github.com/shtorm-7/connect-ip-go),
+  [sing-dns](https://github.com/shtorm-7/sing-dns) and
+  [dnscrypt](https://github.com/shtorm-7/dnscrypt).
+- [Leadaxe/sing-box-lx](https://github.com/Leadaxe/sing-box-lx): many fixes and specs, the
+  AmneziaWG 3.x masquerade, the DNS group modes, URL-test penalties and failover, the sticky pool,
+  REALITY `key_share`, MASQUE `vhttp`, and [utls-lx](https://github.com/Leadaxe/utls-lx) for the
+  Firefox 148 and Safari 26.3 fingerprints.
+- [reF1nd/sing-box](https://github.com/reF1nd/sing-box): crash and stability fixes (Trojan, DNS
+  deduplication and cache, Shadowsocks 2022, the HTTP transport, FakeIP, MASQUE, resolved).
+- [kyochikuto/sing-box-plus](https://github.com/kyochikuto/sing-box-plus): the WARP endpoint
+  scanner and QUIC noise, and TLS fragmentation methods.
+- [starifly/sing-vmess](https://github.com/starifly/sing-vmess): VLESS encryption.
+- [Diniboy1123/usque](https://github.com/Diniboy1123/usque) and
+  [connect-ip-go](https://github.com/Diniboy1123/connect-ip-go): WARP over MASQUE.
+- [amnezia-vpn/amneziawg-go](https://github.com/amnezia-vpn/amneziawg-go): AmneziaWG.
+- [refraction-networking/utls](https://github.com/refraction-networking/utls) and
+  [metacubex/utls](https://github.com/metacubex/utls): TLS fingerprints.
+- [Psiphon-Labs](https://github.com/Psiphon-Labs): Psiphon.
+- [net2share/vaydns](https://github.com/net2share/vaydns): DNSTT.
+- [masterking32/MasterDnsVPN](https://github.com/masterking32/MasterDnsVPN): MasterDNS.
+- [kianmhz/GooseRelayVPN](https://github.com/kianmhz/GooseRelayVPN): GooseRelay.
+- [GFW-knocker](https://github.com/GFW-knocker): the WireGuard noise packets.
+- [XTLS/Xray-core](https://github.com/XTLS/Xray-core): XHTTP, mKCP, XDRIVE, finalmask, VLESS
+  encryption and REALITY, which the matching features here follow and are tested against.
+- [patterniha/Xray-core](https://github.com/patterniha/xray-core): the `merge` finalmask and the
+  `oob` dial mode.
 
 ## License
 

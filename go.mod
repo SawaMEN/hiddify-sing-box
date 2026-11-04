@@ -1,8 +1,18 @@
 module github.com/sagernet/sing-box
 
-go 1.26.10
+go 1.27.3
+
+godebug multipathtcp=0
 
 require (
+	layeh.com/gopher-luar v1.0.11
+	golang.org/x/crypto/x509roots/fallback v0.0.0-20261020153306-9f2b28d4331a
+	github.com/yuin/gopher-lua v1.1.2
+	github.com/xtls/reality v0.0.0-20261014101318-83f621788ca8
+	github.com/juju/ratelimit v1.0.2
+	github.com/apernet/quic-go v0.61.1-0.20260806010916-184d081eef3e
+	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c
+	masterdnsvpn-go v0.0.0
 	filippo.io/edwards25519 v1.2.0
 	github.com/Diniboy1123/connect-ip-go v0.0.0-20260613064811-66cba32d7d33
 	github.com/Psiphon-Labs/psiphon-tunnel-core v1.0.11-0.20260126173038-c86a1497a760
@@ -28,14 +38,14 @@ require (
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/gofrs/uuid/v5 v5.5.1
 	github.com/google/uuid v1.6.0
-	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
-	github.com/hiddify/hmrd_multi_resolver_dns v0.0.0-20260429114007-8d809dc33d0e
+	github.com/gorilla/websocket v1.5.3
+	github.com/hiddify/hmrd_multi_resolver_dns v0.0.0-20261102140835-72045bdb2631
 	github.com/insomniacslk/dhcp v0.0.0-20260220084031-5adc3eb26f91
 	github.com/jsimonetti/rtnetlink v1.4.1
 	github.com/keybase/go-keychain v0.0.1
 	github.com/kianmhz/GooseRelayVPN v0.0.0-20260429125124-0e68c2a3ae4c
-	github.com/klauspost/compress v1.19.1
-	github.com/klauspost/cpuid/v2 v2.4.0
+	github.com/klauspost/compress v1.20.0
+	github.com/klauspost/cpuid/v2 v2.4.1
 	github.com/kulikov0/headless-client v0.1.0
 	github.com/libdns/acmedns v0.5.0
 	github.com/libdns/alidns v1.0.6
@@ -46,14 +56,14 @@ require (
 	github.com/mdlayher/netlink v1.11.2
 	github.com/metacubex/utls v1.8.7
 	github.com/mholt/acmez/v3 v3.1.6
-	github.com/miekg/dns v1.1.72
+	github.com/miekg/dns v1.1.73
 	github.com/net2share/vaydns v0.2.8
 	github.com/openai/openai-go/v3 v3.26.0
 	github.com/openlibrecommunity/olcrtc v0.0.0-20260930093851-f3ad8fb7c0d0
 	github.com/oschwald/geoip2-golang v1.13.0
 	github.com/oschwald/maxminddb-golang v1.13.1
 	github.com/pierrec/lz4/v4 v4.1.26
-	github.com/pires/go-proxyproto v0.15.0
+	github.com/pires/go-proxyproto v0.16.0
 	github.com/pkg/sftp v1.13.10
 	github.com/sagernet/asc-go v0.0.0-20260914163356-9e3d45a797c1
 	github.com/sagernet/bbolt v0.0.0-20260915102804-500ee1e84832
@@ -92,7 +102,7 @@ require (
 	github.com/tidwall/gjson v1.18.0
 	github.com/vishvananda/netns v0.0.5
 	github.com/xchacha20-poly1305/sing-trusttunnel v0.3.2
-	github.com/xtls/xray-core v1.260327.1-0.20260728075948-5ca6f4b7d4dc
+	github.com/xtls/xray-core v1.260327.1-0.20261031132019-a4a3dff5b20c
 	github.com/yosida95/uritemplate/v3 v3.0.2
 	go.uber.org/zap v1.28.0
 	go4.org/mem v0.0.0-20240501181205-ae6ca9944745
@@ -106,7 +116,7 @@ require (
 	golang.org/x/term v0.47.0
 	golang.org/x/text v0.43.0
 	golang.zx2c4.com/wireguard/wgctrl v0.0.0-20241231184526-a9ab2273dd10
-	google.golang.org/grpc v1.82.1
+	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
 	howett.net/plist v1.0.1
 	lukechampine.com/blake3 v1.4.1
@@ -140,7 +150,7 @@ require (
 	github.com/akutz/memconn v0.1.0 // indirect
 	github.com/alexbrainman/sspi v0.0.0-20231016080023-1a75b4708caa // indirect
 	github.com/anchore/go-lzo v0.1.0 // indirect
-	github.com/andybalholm/brotli v1.2.0 // indirect
+	github.com/andybalholm/brotli v1.2.3 // indirect
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/armon/go-proxyproto v0.0.0-20180202201750-5b7edb60ff5f // indirect
@@ -244,7 +254,7 @@ require (
 	github.com/pion/srtp/v2 v2.0.18 // indirect
 	github.com/pion/srtp/v3 v3.0.11 // indirect
 	github.com/pion/stun v0.6.1 // indirect
-	github.com/pion/stun/v3 v3.1.6 // indirect
+	github.com/pion/stun/v3 v3.1.7 // indirect
 	github.com/pion/transport/v2 v2.2.4 // indirect
 	github.com/pion/transport/v4 v4.1.0 // indirect
 	github.com/pion/turn/v2 v2.1.3 // indirect
@@ -342,10 +352,10 @@ require (
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb // indirect
-	golang.zx2c4.com/wireguard/windows v1.0.1 // indirect
+	golang.zx2c4.com/wireguard/windows v1.1.1 // indirect
 	google.golang.org/genproto v0.0.0-20260523011958-0a33c5d7ca68 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260706201446-f0a921348800 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	rsc.io/qr v0.2.0 // indirect
 	tailscale.com v1.58.2 // indirect
@@ -383,3 +393,5 @@ replace github.com/sagernet/gvisor => ./replace/gvisor
 replace github.com/sagernet/sing-mux => ./replace/sing-mux
 
 replace github.com/metacubex/utls => github.com/Leadaxe/utls-lx v1.8.8-0.20261011005638-ad69b191e2f8
+
+replace masterdnsvpn-go => ./replace/MasterDnsVPN

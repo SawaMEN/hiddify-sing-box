@@ -1,76 +1,32 @@
 package dnstt
 
 import (
-	_ "embed"
-	"encoding/json"
 	"fmt"
 	"strings"
-	"sync"
-
-	"github.com/sagernet/sing-box/option"
 
 	dnstt "github.com/net2share/vaydns/client"
+	"github.com/sagernet/sing-box/common/dnspool"
+	"github.com/sagernet/sing-box/option"
 )
-
-var (
-	//go:embed resolvers_by_country.json
-	resolvers_bytes     []byte
-	countryResolvers    map[string][]string
-	resolverCountry     map[string]string
-	resolverTablesOnce  sync.Once
-	resolverTablesError error
-)
-
-func loadResolvers() {
-	resolverTablesOnce.Do(func() {
-		resolverTablesError = json.Unmarshal(resolvers_bytes, &countryResolvers)
-		resolverCountry = make(map[string]string)
-		for country, resolvers := range countryResolvers {
-			for _, resolver := range resolvers {
-				resolverCountry[resolver] = country
-			}
-		}
-	})
-}
 
 type ResolverS struct {
 	Resolver dnstt.Resolver
 	Auto     bool
 }
 
+// getConfigResolvers turns the resolver entries into VayDNS resolvers; "auto" is the built-in
+// list shared by the DNS tunnels (common/dnspool).
 func getConfigResolvers(options option.DnsttOptions) ([]ResolverS, error) {
-	loadResolvers()
-	if resolverTablesError != nil {
-		return nil, fmt.Errorf("embedded resolver table: %w", resolverTablesError)
-	}
 	resolvers := []ResolverS{}
-	for _, resolverAddr := range options.Resolvers {
-		if resolverAddr == "" || resolverAddr == "auto" {
-			for ip := range resolverCountry {
-				resolver, err := getResolver(options, fmt.Sprint(ip, ":53"))
-				if err != nil {
-					return nil, fmt.Errorf("invalid resolver address %s: %w", ip, err)
-				}
-				resolvers = append(resolvers, ResolverS{
-					Resolver: resolver,
-					Auto:     true,
-				})
-			}
-			continue
-		}
-		resolver, err := getResolver(options, resolverAddr)
+	for _, candidate := range dnspool.Expand(options.Resolvers) {
+		resolver, err := getResolver(options, candidate.Address)
 		if err != nil {
-			return nil, fmt.Errorf("invalid resolver address %s: %w", resolverAddr, err)
+			return nil, fmt.Errorf("invalid resolver address %s: %w", candidate.Address, err)
 		}
-		resolvers = append(resolvers, ResolverS{
-			Resolver: resolver,
-			Auto:     false,
-		})
-
+		resolvers = append(resolvers, ResolverS{Resolver: resolver, Auto: candidate.Auto})
 	}
 	return resolvers, nil
 }
-
 func getResolver(options option.DnsttOptions, s string) (dnstt.Resolver, error) {
 	var resolver dnstt.Resolver
 	var err error

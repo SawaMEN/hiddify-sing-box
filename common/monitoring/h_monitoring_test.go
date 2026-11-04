@@ -3,11 +3,13 @@ package monitoring
 import (
 	"context"
 	"errors"
+	"github.com/sagernet/sing-box/adapter/htest"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -34,14 +36,13 @@ func (f *fakeOutbound) Type() string           { return "fake" }
 func (f *fakeOutbound) Tag() string            { return f.tag }
 func (f *fakeOutbound) Network() []string      { return []string{N.NetworkTCP, N.NetworkUDP} }
 func (f *fakeOutbound) Dependencies() []string { return f.deps }
-func (f *fakeOutbound) IsReady() bool          { return true }
+func (f *fakeOutbound) Status() adapter.Status { return adapter.StatusReady }
 func (f *fakeOutbound) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
 	if f.dial != nil {
 		return f.dial(ctx, network, destination)
 	}
 	return nil, errors.New("fake: unreachable")
 }
-
 func (f *fakeOutbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
 	return nil, errors.New("fake: unsupported")
 }
@@ -188,7 +189,7 @@ func TestH_MonitoringGroupsAndHistory(t *testing.T) {
 	selector := &fakeGroup{fakeOutbound: fakeOutbound{tag: "select"}, all: []string{"auto", "c"}, selected: c}
 	m := newTestMonitor(t, nil, option.MonitoringOptions{}, a, b, c, urltestGroup, selector)
 	require.Equal(t, "outbound-monitoring", m.Name())
-	require.NoError(t, m.Start(adapter.StartStateInitialize, nil))
+	require.NoError(t, htest.Start(m, adapter.StartStateInitialize))
 
 	require.Len(t, m.reg().groups, 3)
 	require.Len(t, m.reg().groups[""].outbounds, 5)
@@ -236,11 +237,19 @@ func TestH_MonitoringGroupsAndHistory(t *testing.T) {
 }
 
 func TestH_MonitoringQueueAndApplyResult(t *testing.T) {
-	a := &fakeOutbound{tag: "a"}
-	b := &fakeOutbound{tag: "b"}
+	// a priority test runs at once; these dials hold it until the end, so the marks can be read
+	release := make(chan struct{})
+	releaseAll := sync.OnceFunc(func() { close(release) })
+	defer releaseAll()
+	held := func(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
+		<-release
+		return nil, errors.New("held")
+	}
+	a := &fakeOutbound{tag: "a", dial: held}
+	b := &fakeOutbound{tag: "b", dial: held}
 	grp := &fakeGroup{fakeOutbound: fakeOutbound{tag: "grp"}, all: []string{"a", "b"}}
 	m := newTestMonitor(t, nil, option.MonitoringOptions{}, a, b, grp)
-	require.NoError(t, m.Start(adapter.StartStateInitialize, nil))
+	require.NoError(t, htest.Start(m, adapter.StartStateInitialize))
 
 	targets := m.collectCycleTargets()
 	require.ElementsMatch(t, []string{"a", "b"}, targets, "groups are never tested directly")
@@ -248,7 +257,13 @@ func TestH_MonitoringQueueAndApplyResult(t *testing.T) {
 	require.True(t, m.enqueueTask(&testTask{outboundTag: "a", cycleID: 1}))
 	require.False(t, m.enqueueTask(&testTask{outboundTag: "a", cycleID: 1}), "same cycle is deduplicated")
 	require.True(t, m.enqueueTask(&testTask{outboundTag: "a", priority: true}))
-	require.False(t, m.enqueueTask(&testTask{outboundTag: "a", priority: true}))
+	require.False(t, m.enqueueTask(&testTask{outboundTag: "a", priority: true}), "one priority test at a time")
+	require.Eventually(t, func() bool {
+		state := m.reg().outbounds["a"]
+		state.mu.Lock()
+		defer state.mu.Unlock()
+		return state.testing
+	}, time.Second, time.Millisecond, "the priority test runs at once")
 	require.False(t, m.enqueueTask(&testTask{outboundTag: "unknown"}))
 	require.Equal(t, []string{"b"}, m.collectCycleTargets(), "queued outbounds are skipped")
 
@@ -270,7 +285,15 @@ func TestH_MonitoringQueueAndApplyResult(t *testing.T) {
 	require.True(t, m.reg().outbounds["b"].invalid)
 	require.True(t, m.reg().outbounds["b"].priorityQueued)
 
-	require.Contains(t, m.collectCycleTargets(), "a")
+	require.NotContains(t, m.collectCycleTargets(), "a", "a is still being tested")
+	releaseAll()
+	require.Eventually(t, func() bool {
+		state := m.reg().outbounds["a"]
+		state.mu.Lock()
+		defer state.mu.Unlock()
+		return !state.testing && !state.priorityQueued
+	}, 2*time.Second, 5*time.Millisecond)
+	require.Contains(t, m.collectCycleTargets(), "a", "free again, and its test failed: due")
 }
 
 func TestH_MonitoringSaveLoadHistory(t *testing.T) {
@@ -279,14 +302,14 @@ func TestH_MonitoringSaveLoadHistory(t *testing.T) {
 	b := &fakeOutbound{tag: "b"}
 	grp := &fakeGroup{fakeOutbound: fakeOutbound{tag: "grp"}, all: []string{"a", "b"}}
 	m := newTestMonitor(t, cache, option.MonitoringOptions{}, a, b, grp)
-	require.NoError(t, m.Start(adapter.StartStateInitialize, nil))
+	require.NoError(t, htest.Start(m, adapter.StartStateInitialize))
 	setHistory(m, "a", 77, false, &ipinfo.IpInfo{IP: "8.8.8.8", CountryCode: "US"})
 	setHistory(m, "b", TimeoutDelay, false, nil)
 	require.NoError(t, m.saveHistory())
 	require.NotNil(t, cache.LoadBinary("outbound_monitoring_history"))
 
 	m2 := newTestMonitor(t, cache, option.MonitoringOptions{}, a, b, grp)
-	require.NoError(t, m2.Start(adapter.StartStateInitialize, nil))
+	require.NoError(t, htest.Start(m2, adapter.StartStateInitialize))
 	ha := m2.getUrlTest("a")
 	require.Equal(t, uint16(77), ha.Delay)
 	require.True(t, ha.IsFromCache)
@@ -295,14 +318,14 @@ func TestH_MonitoringSaveLoadHistory(t *testing.T) {
 
 	cache.data["outbound_monitoring_history"] = &adapter.SavedBinary{Content: []byte("{garbage")}
 	m3 := newTestMonitor(t, cache, option.MonitoringOptions{}, a, b, grp)
-	require.NoError(t, m3.Start(adapter.StartStateInitialize, nil))
+	require.NoError(t, htest.Start(m3, adapter.StartStateInitialize))
 	require.Equal(t, uint16(0), m3.getUrlTest("a").Delay)
 }
 
 func TestH_MonitoringStartRejectsUnknownGroupMember(t *testing.T) {
 	grp := &fakeGroup{fakeOutbound: fakeOutbound{tag: "grp"}, all: []string{"ghost"}}
 	m := newTestMonitor(t, nil, option.MonitoringOptions{}, grp)
-	require.Error(t, m.Start(adapter.StartStateInitialize, nil))
+	require.Error(t, htest.Start(m, adapter.StartStateInitialize))
 }
 
 func TestH_MonitoringCycleEndToEnd(t *testing.T) {
@@ -329,10 +352,10 @@ func TestH_MonitoringCycleEndToEnd(t *testing.T) {
 		DebounceWindow: badoption.Duration(10 * time.Millisecond),
 		URLTestTimeout: badoption.Duration(2 * time.Second),
 	}, good, bad, grp)
-	require.NoError(t, m.Start(adapter.StartStateInitialize, nil))
+	require.NoError(t, htest.Start(m, adapter.StartStateInitialize))
 	events, err := m.SubscribeGroup("grp")
 	require.NoError(t, err)
-	require.NoError(t, m.Start(adapter.StartStatePostStart, nil))
+	require.NoError(t, htest.Start(m, adapter.StartStatePostStart))
 
 	select {
 	case <-events:
@@ -357,8 +380,10 @@ func TestH_MonitoringSignalChangePropagatesToDependents(t *testing.T) {
 	selector := &fakeGroup{fakeOutbound: fakeOutbound{tag: "select"}, all: []string{"a", "b"}, selected: a}
 	viaSelector := &fakeOutbound{tag: "c", deps: []string{"select"}}
 	outer := &fakeGroup{fakeOutbound: fakeOutbound{tag: "outer"}, all: []string{"c"}, selected: viaSelector}
-	m := newTestMonitor(t, nil, option.MonitoringOptions{}, a, b, selector, viaSelector, outer)
-	require.NoError(t, m.Start(adapter.StartStateInitialize, nil))
+	m := newTestMonitor(t, nil, option.MonitoringOptions{
+		OnDemandTimeouts: []badoption.Duration{badoption.Duration(50 * time.Millisecond), badoption.Duration(100 * time.Millisecond), badoption.Duration(200 * time.Millisecond)},
+	}, a, b, selector, viaSelector, outer)
+	require.NoError(t, htest.Start(m, adapter.StartStateInitialize))
 
 	done := make(chan error, 1)
 	go func() {
@@ -378,9 +403,109 @@ func TestH_MonitoringSignalChangePropagatesToDependents(t *testing.T) {
 	for _, groupTag := range []string{"select", "", "outer"} {
 		require.Len(t, m.reg().groups[groupTag].notifyCh, 1, "group %q not notified", groupTag)
 	}
-	require.True(t, m.reg().outbounds["c"].priorityQueued, "outbound routed through the selector is re-tested")
-	require.True(t, m.reg().outbounds["a"].priorityQueued, "selected member must be retested immediately")
-	require.False(t, m.reg().outbounds["b"].priorityQueued, "selector members did not change")
+	// a test asked for runs at once, not through a worker: these outbounds fail to dial, so it
+	// ends with a timeout
+	tested := func(tag string) func() bool {
+		return func() bool {
+			state := m.reg().outbounds[tag]
+			state.mu.Lock()
+			defer state.mu.Unlock()
+			return state.history.Delay == TimeoutDelay
+		}
+	}
+	require.Eventually(t, tested("a"), 2*time.Second, 10*time.Millisecond, "the new selection is tested at once")
+	// c waits for its detour's result (a's), then dependencyWait, before it is tested
+	require.Eventually(t, tested("c"), dependencyWait+2*time.Second, 10*time.Millisecond, "outbound routed through the selector is re-tested")
+	require.Never(t, tested("b"), 300*time.Millisecond, 10*time.Millisecond, "the other member did not change")
 
 	require.Error(t, m.SignalChange("missing"))
+}
+
+// A test broken by a network reset (it closes every connection) runs again in the same cycle
+// instead of showing a timeout until the next one; a plain failure is not run again.
+func TestH_MonitoringRetestsTestBrokenByNetworkReset(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(3 * time.Millisecond) // a 0 ms delay would read as "not measured"
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	var dialer net.Dialer
+	var m *OutboundMonitoring
+	var brokenDials, plainDials atomic.Int32
+	broken := &fakeOutbound{tag: "broken", dial: func(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
+		if brokenDials.Add(1) == 1 {
+			m.InterfaceUpdated(ctx)
+			return nil, errors.New("use of closed network connection")
+		}
+		return dialer.DialContext(ctx, network, destination.String())
+	}}
+	plain := &fakeOutbound{tag: "plain", dial: func(context.Context, string, M.Socksaddr) (net.Conn, error) {
+		plainDials.Add(1)
+		return nil, errors.New("plain: unreachable")
+	}}
+	grp := &fakeGroup{fakeOutbound: fakeOutbound{tag: "grp"}, all: []string{"broken", "plain"}}
+	m = newTestMonitor(t, nil, option.MonitoringOptions{
+		Interval:       badoption.Duration(time.Hour),
+		Workers:        1,
+		URLs:           []string{server.URL + "/generate_204"},
+		URLTestTimeout: badoption.Duration(time.Second),
+	}, broken, plain, grp)
+	require.NoError(t, htest.Start(m, adapter.StartStateInitialize))
+	start := time.Now()
+	require.NoError(t, htest.Start(m, adapter.StartStatePostStart))
+
+	require.Eventually(t, func() bool {
+		state := m.reg().outbounds["broken"]
+		state.mu.Lock()
+		defer state.mu.Unlock()
+		return !state.invalid && state.history.Delay > 0 && state.history.Delay < TimeoutDelay
+	}, 3*time.Second, 10*time.Millisecond, "the broken test runs again and passes")
+	require.GreaterOrEqual(t, time.Since(start), networkResetWait, "it runs again once the reset is over")
+	require.Eventually(t, func() bool { return !m.cycleRunning.Load() }, 3*time.Second, 10*time.Millisecond, "the cycle ends")
+	require.EqualValues(t, 1, plainDials.Load(), "a failure without a network reset is not run again")
+}
+
+// A network change tests every outbound again, once the network has settled; a burst of changes is
+// one retest, and results of the old network are not kept.
+func TestH_MonitoringRetestsEverythingAfterNetworkChange(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(3 * time.Millisecond)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	var dialer net.Dialer
+	var aDials, bDials atomic.Int32
+	a := &fakeOutbound{tag: "a", dial: func(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
+		aDials.Add(1)
+		return dialer.DialContext(ctx, network, destination.String())
+	}}
+	b := &fakeOutbound{tag: "b", dial: func(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
+		bDials.Add(1)
+		return dialer.DialContext(ctx, network, destination.String())
+	}}
+	m := newTestMonitor(t, nil, option.MonitoringOptions{
+		Interval:       badoption.Duration(time.Hour),
+		Workers:        2,
+		URLs:           []string{server.URL + "/generate_204"},
+		URLTestTimeout: badoption.Duration(time.Second),
+	}, a, b)
+	require.NoError(t, htest.Start(m, adapter.StartStateInitialize))
+	require.NoError(t, htest.Start(m, adapter.StartStatePostStart))
+	require.Eventually(t, func() bool {
+		return aDials.Load() >= 1 && bDials.Load() >= 1 && !m.cycleRunning.Load()
+	}, 3*time.Second, 10*time.Millisecond, "the first cycle ends")
+	aBefore, bBefore := aDials.Load(), bDials.Load()
+	cyclesBefore := m.cycleSeq.Load()
+
+	// the interval is an hour: only the network change can make a second test happen
+	m.NetworkChanged()
+	m.NetworkChanged()
+	m.NetworkChanged()
+	require.Never(t, func() bool { return aDials.Load() > aBefore }, networkRetestDelay-500*time.Millisecond, 20*time.Millisecond, "it waits for the network to settle")
+	require.Eventually(t, func() bool {
+		return aDials.Load() > aBefore && bDials.Load() > bBefore && !m.cycleRunning.Load()
+	}, 4*time.Second, 20*time.Millisecond, "every outbound is tested again")
+	time.Sleep(networkRetestDelay + 500*time.Millisecond)
+	// a test can dial more than once (the url test, then the IP lookup), so count cycles
+	require.EqualValues(t, cyclesBefore+1, m.cycleSeq.Load(), "a burst of changes is one retest")
 }

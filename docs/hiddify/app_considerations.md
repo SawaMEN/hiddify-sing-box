@@ -11,15 +11,25 @@ do about it. Items marked **Required** break or misbehave until they are handled
   (v5), plus the existing ones. `go.mod` and `test/go.mod` point at them with `replace`.
   **Required:** hiddify-core and every CI or gomobile build must check out submodules recursively
   (`git submodule update --init --recursive`), or the build fails on missing modules.
+- **MasterDnsVPN fork.** `replace/MasterDnsVPN` (module `masterdnsvpn-go`, fork
+  `github.com/hiddify/MasterDnsVPN`, branch `hiddify`) is the client of the `masterdns` outbound,
+  with a library API in `lib/`. **Required:** hiddify-core's `go.mod` (and ray2sing's) need
+  `replace masterdnsvpn-go => ./hiddify-sing-box/replace/MasterDnsVPN`, like the other
+  `replace/` forks. No build tag.
 - **Build tags.** `with_masque` is now in the core Makefile and in hiddify-core's Makefile
   (hiddify-core commit `6bea470`). Four new features are behind tags that are **off** by default:
   `with_kcp` (mKCP), `with_sudoku` (Sudoku), `with_bond` (Bond) and `with_call` (call tunnel). A
   config using one of them fails with "… is not included in this build" unless the tag is set.
   Decide per platform whether to ship them; `with_call` pulls in a large WebRTC stack. rmux needs
   no tag.
-- **Go 1.27.** Binaries with Psiphon crashed at start when built with Go 1.27 (psiphon-tls
-  checked the old `tls.ConnectionState` layout). Fixed in `bb18926a9`; Go 1.26.3 and 1.27.3 both
-  work.
+- **XDRIVE and the default tags.** The core Makefile's default tags meant to include
+  `with_sudoku`, `with_call`, `with_bond` and `with_kcp` but joined them with `/`, so none of the
+  four was built; they are now separated by commas, and `with_xdrive` (the XDRIVE transport) is
+  added. hiddify-core's `PROTOCOL_TAGS` has `with_xdrive` too. A profile with
+  `"transport": {"type": "xdrive"}` fails with "XDRIVE is not included in this build" without it.
+- **Go 1.27 required.** Xray-core v26.10.31, which finalmask and XDRIVE use, needs Go 1.27, so
+  `go.mod` and `test/go.mod` now say `go 1.27`. Every CI and gomobile build must use Go 1.27.3 or
+  newer. (Binaries with Psiphon crashed at start when built with Go 1.27; fixed in `bb18926a9`.)
 - **uTLS fork.** `github.com/metacubex/utls` is replaced by `github.com/Leadaxe/utls-lx` in
   `go.mod` and `test/go.mod`. The `firefox` fingerprint is now Firefox 148 and `safari` is
   Safari 26.3; `chrome` stays Chrome 133. Nothing to change in configs.
@@ -76,13 +86,35 @@ do about it. Items marked **Required** break or misbehave until they are handled
   10 s by default): the app sees the proxy as unavailable after the first mark with no answer,
   then the first answer from any attempt, however late. The delay is published before the IP
   lookup, so the IP arrives after the ping. Nothing to set; the core's defaults are these.
-- **IPv6 follows the proxy.** The monitoring probes an IPv6 address through every outbound and
-  endpoint that answered, each on its own (`experimental.monitoring.ipv6_probe`); hiddify-core sets `ipv6_by_outbound` on the
-  remote DNS rules and an `ipv6_unavailable_via` reject rule, both on the main selector. A
-  browser through a proxy without IPv6 gets IPv4 answers only, and an IPv6 connection that still
-  comes is refused so it falls back (hiddify-app #2307, #2420). Nothing to set in the app; the
-  IPv6 mode only orders the families. `URLTestHistory.IPv6` says what the probe found, for an
-  app that wants to show it.
+- **IPv6 for the apps is off by default, and verified per proxy when on.** hiddify-core answers
+  the apps with `ipv4_only` DNS rules and rejects every IPv6 destination before the sniff rule
+  (so before the handshake) unless the IPv6 mode turns IPv6 on; the app's routing page says why
+  (most exits have no IPv6, and a connection the proxy cannot carry dies after it opened, which
+  browsers never retry). When on, the core sets `verify_ipv6` (each proxy's URL test is followed
+  once per run by the same URL over IPv6, cached per proxy), `route.ipv6_fallback` (an IPv6
+  connection through a proxy not known yet is carried over IPv4 inside the connection and
+  teaches the proxy's IPv6), `ipv6_by_outbound` on the DNS rules answering the apps and an
+  `ipv6_unavailable_via` reject rule on the main selector, both fail-open. A subscription turns
+  IPv6 on for its profile with an `ipv6-mode: prefer_ipv4` header (the app's override list), and
+  a share link declares its proxy with `ipv6=1` or `ipv6=0` (ray2sing, `ipv6_declared`). No
+  probe of a public address is made (`ipv6_probe` is retired): the verification uses the user's
+  own test URL. See [IPv6 by outbound](features/dns/ipv6-by-outbound.en.md).
+- **MasterDNS outbound.** `"type": "masterdns"` (display name `MasterDNS`) is a new outbound
+  type for MasterDnsVPN servers: `domains`, `resolvers`, `encryption`, `key`, `mode` and tuning
+  fields, see [MasterDNS](features/protocols/masterdns.en.md). TCP only; in `socks5` mode it needs
+  no outbound behind it, in `tcp` mode the app chains a `socks` or `ssh` outbound with `detour`
+  as for DNSTT. Its status is CONNECTING until the resolvers are tested and the session is open,
+  which can take several seconds; the app should show that rather than an error. ray2sing reads
+  `masterdns://` links, `slipnet://` links (SlipNet profiles for DNSTT, NoizDNS and VayDNS) as
+  `dnstt` outbounds with a `socks` or `ssh` outbound in front, and `dnst://` links (the dnst URL
+  spec, github.com/net2share/dnst-url-spec) for the dnstt, vaydns and masterdns transports.
+- **Smart resolver pool, per outbound.** `dnstt` and `masterdns` take `smart_pool`, `true` or an
+  object (`load_balance`, `deadline`, `per_attempt`, `probe_interval`, `down_after`); the
+  resolver list, scores, probe and pool of every DNS tunnel are one shared package,
+  `common/dnspool`, and each outbound runs its own pool. With it, `auto`, DoT and DoH resolvers
+  work for both tunnels. See [Smart resolver pool](features/dns/smart-dns-pool.en.md).
+  **Required:** the `smart_dns_pool` service is removed; a config with it fails to load. Set
+  `smart_pool` on the outbound instead.
 - **New options worth exposing:**
   - DNS group: `mode` `stable` and `fastest`, `error_ttl`, `win_ttl`.
   - URL test: `urls` (more test URLs) and `mode: "failover"`.
@@ -204,6 +236,18 @@ do about it. Items marked **Required** break or misbehave until they are handled
   should stop showing an "encrypted" state for reports.
 
 ## Behaviour the app should know about
+
+- **finalmask follows Xray v26.10.** `xdns` takes `domains` as `{"names": [...]}` and
+  `resolvers` as `{"addrs": [...]}`, with DoH resolvers (`https://…` plus `tlsConfig`); the older
+  string forms still load. New masks: `udphop`, noise `type: "exp"` and `script`. Masks are now
+  dialed through: `xdns` and `udphop` open their own sockets with the outbound's dialer. Links
+  carry finalmask as JSON (`fm=`), which ray2sing passes through unchanged, so nothing to change
+  in link parsing for the new masks.
+- **XDRIVE.** The `xdrive` transport needs VLESS with `encryption` for an Xray server. The
+  outbound's `server` and `server_port` are required but unused; the app may show them as
+  meaningless for such a profile. Each proxy connection is its own storage session, since the
+  client has no Mux.Cool: a profile on Google Drive is slow and spends API quota, so a URL test
+  every few minutes costs a session each time.
 
 - **URL test.** A dial that fails because the path is dead moves the group to another member
   immediately, without closing live connections, so the selected member can change between tests.

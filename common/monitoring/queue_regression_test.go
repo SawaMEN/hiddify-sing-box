@@ -6,25 +6,19 @@ import (
 )
 
 func TestFullQueueDoesNotSuppressFutureTests(t *testing.T) {
-	for _, priority := range []bool{false, true} {
-		state := &outboundState{}
-		monitor := &OutboundMonitoring{ctx: context.Background(), priorityQueue: make(chan *testTask, 1), normalQueue: make(chan *testTask, 1)}
-		registry := newMonitoringRegistry()
-		registry.outbounds["server"] = state
-		monitor.registry.Store(registry)
-		queue := monitor.normalQueue
-		if priority {
-			queue = monitor.priorityQueue
-		}
-		queue <- &testTask{}
-		task := &testTask{outboundTag: "server", priority: priority, cycleID: 1}
-		if monitor.enqueueTask(task) {
-			t.Fatal("full queue accepted task")
-		}
-		<-queue
-		if !monitor.enqueueTask(task) {
-			t.Fatalf("priority=%v: dropped task permanently marked queued", priority)
-		}
+	state := &outboundState{}
+	monitor := &OutboundMonitoring{ctx: context.Background(), normalQueue: make(chan *testTask, 1)}
+	registry := newMonitoringRegistry()
+	registry.outbounds["server"] = state
+	monitor.registry.Store(registry)
+	monitor.normalQueue <- &testTask{}
+	task := &testTask{outboundTag: "server", cycleID: 1}
+	if monitor.enqueueTask(task) {
+		t.Fatal("full queue accepted task")
+	}
+	<-monitor.normalQueue
+	if !monitor.enqueueTask(task) {
+		t.Fatal("dropped task permanently marked queued")
 	}
 }
 
