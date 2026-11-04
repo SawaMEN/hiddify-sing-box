@@ -68,7 +68,12 @@ func TestH_MonitoringGivesUpOnATestThatNeverReturns(t *testing.T) {
 		"a test asked for runs at once, beside the stuck one, not behind it")
 	require.Eventually(t, func() bool { return delay("stuck") == TimeoutDelay }, limit+2*time.Second, 10*time.Millisecond,
 		"the test that never returns counts as failed after %s", limit)
-	require.Eventually(t, func() bool { return !m.reg().outbounds["stuck"].testing }, time.Second, 10*time.Millisecond,
+	require.Eventually(t, func() bool {
+		state := m.reg().outbounds["stuck"]
+		state.mu.Lock()
+		defer state.mu.Unlock()
+		return !state.testing
+	}, time.Second, 10*time.Millisecond,
 		"the outbound is free to be tested again")
 }
 
