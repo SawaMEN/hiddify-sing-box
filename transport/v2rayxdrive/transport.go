@@ -52,6 +52,11 @@ var _ adapter.V2RayClientTransport = (*Client)(nil)
 // top, so that a session carries many connections.
 type Client struct {
 	streamSettings *internet.MemoryStreamConfig
+	ctx            context.Context            //H
+	cancel         context.CancelFunc         //H
+	access         sync.Mutex                 //H
+	closed         bool                       //H
+	connections    map[*hTrackedConn]struct{} //H
 }
 
 func NewClient(ctx context.Context, dialer N.Dialer, serverAddr M.Socksaddr, options option.V2RayXDriveOptions, tlsConfig tls.Config) (adapter.V2RayClientTransport, error) {
@@ -59,16 +64,25 @@ func NewClient(ctx context.Context, dialer N.Dialer, serverAddr M.Socksaddr, opt
 	if err != nil {
 		return nil, err
 	}
-	return &Client{streamSettings: settings}, nil
+	ctx, cancel := context.WithCancel(ctx)                                                                                 //H
+	return &Client{streamSettings: settings, ctx: ctx, cancel: cancel, connections: make(map[*hTrackedConn]struct{})}, nil //H
 }
 
 func (c *Client) DialContext(ctx context.Context) (net.Conn, error) {
 	// the session has no address: the server finds it in the storage
-	return xdrive.Dial(ctx, xnet.Destination{Network: xnet.Network_TCP, Address: xnet.AnyIP}, c.streamSettings)
+	dialCtx, cancel := context.WithCancel(ctx)                                                                            //H
+	stop := context.AfterFunc(c.ctx, cancel)                                                                              //H
+	defer stop()                                                                                                          //H
+	defer cancel()                                                                                                        //H
+	conn, err := xdrive.Dial(dialCtx, xnet.Destination{Network: xnet.Network_TCP, Address: xnet.AnyIP}, c.streamSettings) //H
+	if err != nil {
+		return nil, err
+	} //H
+	return c.track(conn) //H
 }
 
 func (c *Client) Close() error {
-	return nil
+	return c.closeConnections() //H
 }
 
 var _ adapter.V2RayServerTransport = (*Server)(nil)
@@ -84,6 +98,7 @@ type Server struct {
 	access   sync.Mutex
 	listener internet.Listener
 	done     chan struct{}
+	cancel   context.CancelFunc //H
 	closed   bool
 }
 
@@ -97,7 +112,9 @@ func NewServer(ctx context.Context, logger logger.ContextLogger, options option.
 	if err != nil {
 		return nil, err
 	}
+	ctx, cancel := context.WithCancel(ctx) //H
 	return &Server{
+		cancel:         cancel, //H
 		ctx:            ctx,
 		logger:         logger,
 		handler:        handler,
@@ -143,6 +160,7 @@ func (s *Server) Close() error {
 		return nil
 	}
 	s.closed = true
+	s.cancel() //H
 	close(s.done)
 	if s.listener != nil {
 		return s.listener.Close()

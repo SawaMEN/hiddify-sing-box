@@ -294,3 +294,10 @@ do about it. Items marked **Required** break or misbehave until they are handled
 All forks have GitHub repos under `github.com/hiddify/` (`sing-tun`, `gvisor`, `wireguard-go`,
 `amneziawg-go`, `sing-mux`, and the older ones). Nothing has been pushed yet: push each fork's
 branch before pushing hiddify-sing-box, or the submodule commits cannot be fetched.
+
+## Fork synchronization on 2026-11-04
+
+- Build with Go 1.27.3 or newer and initialize submodules recursively, including `replace/MasterDnsVPN`.
+- Include `with_xdrive` in custom build tags for XDrive. Its former duplicated implementation has been replaced by the canonical Xray adapter. The fork still accepts `front_address`, `front_port`, JSON-encoded template strings and inbound `storage_dialer` settings; new configurations can use `fronting_address`, `fronting_port` and template objects.
+- Existing standalone `smart_dns_pool` service configurations still work. New DNS tunnels can use the per-outbound `smart_pool` boolean or settings object.
+- `ipv6_probe` is accepted for compatibility but no longer performs the old connection-only probe. Use the verified/learned capability options described above.
