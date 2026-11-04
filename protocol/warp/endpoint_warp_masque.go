@@ -39,6 +39,9 @@ func (w *WARPEndpoint) connectMASQUE(done <-chan struct{}, profile *warpProfile)
 		w.fail(err)
 		return
 	}
+	if profile.inline {
+		inner.SetOnRejected(func(err error) { w.linkDeviceRefused(err) })
+	}
 	if err = adapter.StartLate(w.scope, "outbound/masque["+w.tag+"]", inner); err != nil {
 		w.fail(E.Cause(err, "start WARP MASQUE tunnel"))
 		return
@@ -51,10 +54,7 @@ func (w *WARPEndpoint) connectMASQUE(done <-chan struct{}, profile *warpProfile)
 	}
 	w.mtx.Lock()
 	w.endpoint = inner
-	w.scanStatusOf = nil                                                           //H: keep the fork's MASQUE adapter compatible
-	if status, ok := any(inner).(interface{ ScanStatus() *warpscan.Status }); ok { //H
-		w.scanStatusOf = status.ScanStatus //H
-	} //H
+	w.scanStatusOf = func() *warpscan.Status { return inner.ScanStatus() }
 	w.mtx.Unlock()
 }
 

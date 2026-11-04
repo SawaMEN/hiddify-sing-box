@@ -7,13 +7,10 @@ import (
 	"net/http"
 	"time"
 
+	connectip "github.com/Diniboy1123/connect-ip-go"
 	"github.com/sagernet/quic-go/http3"
 	E "github.com/sagernet/sing/common/exceptions"
-
-	connectip "github.com/Diniboy1123/connect-ip-go"
 )
-
-const DefaultConnectURI = "https://cloudflareaccess.com" // H
 
 // HTTP versions of the tunnel (vhttp).
 const (

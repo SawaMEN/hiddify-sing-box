@@ -25,7 +25,7 @@ func createWARPAwgEndpoint(
 	peerPort uint16,
 	peerPublicKey string,
 ) (adapter.Endpoint, error) {
-	addresses, err := warpInterfaceAddresses(config.Interface.Addresses.V4, config.Interface.Addresses.V6)
+	addresses, err := warpInterfaceAddressPair(config.Interface.Addresses.V4, config.Interface.Addresses.V6)
 	if err != nil {
 		return nil, err
 	}

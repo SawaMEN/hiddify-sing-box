@@ -63,6 +63,7 @@ type Outbound struct {
 	uotClient         *uot.Client
 	// H: connection state shown in the UI and used by monitoring
 	ready         atomic.Bool
+	tracker       adapter.StatusTracker
 	connectionErr common.TypedValue[string]
 	disconnected  chan struct{}
 	done          chan struct{}
@@ -461,14 +462,14 @@ func (s *Outbound) IsReady() bool {
 	return s.ready.Load()
 }
 
-// ProxyDisplayName is the protocol name, with the connection state while not connected.
-func (s *Outbound) DisplayType() string {
-	name := C.ProxyDisplayName(s.Type())
-	if s.IsReady() {
-		return name
-	}
-	if connectionErr := s.connectionErr.Load(); connectionErr != "" {
-		return name + " ❌ " + connectionErr
-	}
-	return name + " ⚠️ Connecting..."
-}
+// StatusError is why the last connection to the server failed, while it is not ready. //H
+func (s *Outbound) StatusError() error { //H
+	if connectionErr := s.connectionErr.Load(); connectionErr != "" && !s.ready.Load() { //H
+		return E.New(connectionErr) //H
+	} //H
+	return nil //H
+} //H
+
+func (s *Outbound) Status() adapter.Status { return s.tracker.Status(s.ready.Load()) }
+
+func (s *Outbound) DisplayType() string { return C.ProxyDisplayName(s.Type()) }

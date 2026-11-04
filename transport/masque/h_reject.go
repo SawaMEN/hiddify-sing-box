@@ -37,7 +37,8 @@ func IsRejected(err error) bool {
 	if err == nil {
 		return false
 	}
-	if status, ok := errors.AsType[*StatusError](err); ok {
+	var status *StatusError
+	if errors.As(err, &status) {
 		return status.Status == http.StatusUnauthorized || status.Status == http.StatusForbidden
 	}
 	message := err.Error()

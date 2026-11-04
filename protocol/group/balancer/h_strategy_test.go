@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sagernet/sing/common"
+
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/monitoring"
 	"github.com/sagernet/sing-box/option"
@@ -37,7 +39,7 @@ func (f *fakeOutbound) Type() string           { return "fake" }
 func (f *fakeOutbound) Tag() string            { return f.tag }
 func (f *fakeOutbound) Network() []string      { return f.network }
 func (f *fakeOutbound) Dependencies() []string { return nil }
-func (f *fakeOutbound) IsReady() bool          { return true }
+func (f *fakeOutbound) Status() adapter.Status { return adapter.StatusReady }
 
 func (f *fakeOutbound) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
 	f.dialed.Add(1)
@@ -85,11 +87,12 @@ func TestH_BalancerGetKey(t *testing.T) {
 		Source:      M.ParseSocksaddrHostPort("10.0.0.1", 1234),
 		Destination: M.ParseSocksaddrHostPort("www.example.com", 443),
 	}
-	require.Equal(t, "10.0.0.1example.com", getKeyWithSrcAndDst(md))
+	require.Equal(t, "10.0.0.1|example.com|", stickyKey(md, defaultStickySessionHash), "sticky-sessions sticks by the source and the destination")
+	require.Equal(t, "example.com|", stickyKey(md, []string{stickyHashDomain}))
 }
 
 func TestH_BalancerJumpHash(t *testing.T) {
-	for key := range uint64(1000) {
+	for key := uint64(0); key < 1000; key++ {
 		require.Equal(t, int32(0), jumpHash(key, 1))
 		v := jumpHash(key, 7)
 		require.GreaterOrEqual(t, v, int32(0))
@@ -97,7 +100,7 @@ func TestH_BalancerJumpHash(t *testing.T) {
 		require.Equal(t, v, jumpHash(key, 7))
 	}
 	seen := map[int32]bool{}
-	for key := range uint64(1000) {
+	for key := uint64(0); key < 1000; key++ {
 		seen[jumpHash(key*0x9E3779B97F4A7C15, 4)] = true
 	}
 	require.Len(t, seen, 4)
@@ -254,7 +257,6 @@ func TestH_BalancerConsistentHashing(t *testing.T) {
 }
 
 func TestH_BalancerConsistentHashingUntestedNotAlive(t *testing.T) {
-	t.Skip("BUG: getDelayMap uses raw Delay so an untested outbound (Delay 0) is treated as alive by consistent-hashing/sticky-sessions")
 	a, b := newFake("a"), newFake("b")
 	s := NewConsistentHashing(outs(a, b), option.BalancerOutboundOptions{DelayAcceptableRatio: 2, MaxRetry: 3})
 	s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": {Delay: 0}, "b": his(100)})
@@ -266,7 +268,7 @@ func TestH_BalancerConsistentHashingUntestedNotAlive(t *testing.T) {
 
 func TestH_BalancerStickySession(t *testing.T) {
 	o := []*fakeOutbound{newFake("a"), newFake("b"), newFake("c")}
-	s := NewStickySession(outs(o...), option.BalancerOutboundOptions{DelayAcceptableRatio: 2, MaxRetry: 5})
+	s := common.Must1(NewStickySession(outs(o...), option.BalancerOutboundOptions{DelayAcceptableRatio: 2, MaxRetry: 5}))
 	require.Equal(t, "", s.Now())
 	history := map[string]*adapter.URLTestHistory{"a": his(100), "b": his(110), "c": his(120)}
 	require.True(t, s.UpdateOutboundsInfo(history))
@@ -284,9 +286,8 @@ func TestH_BalancerStickySession(t *testing.T) {
 }
 
 func TestH_BalancerStickySessionAvoidsDead(t *testing.T) {
-	t.Skip("BUG: StickySession.Select retries re-hash with key+UnixNano (often identical within the loop) and returns the last pick without an Alive check, so ~50% of new sessions land on a dead outbound")
 	a, b := newFake("a"), newFake("b")
-	s := NewStickySession(outs(a, b), option.BalancerOutboundOptions{DelayAcceptableRatio: 2, MaxRetry: 5})
+	s := common.Must1(NewStickySession(outs(a, b), option.BalancerOutboundOptions{DelayAcceptableRatio: 2, MaxRetry: 5}))
 	s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": his(100), "b": his(monitoring.TimeoutDelay)})
 	for i := range 500 {
 		md := adapter.InboundContext{
@@ -295,4 +296,46 @@ func TestH_BalancerStickySessionAvoidsDead(t *testing.T) {
 		}
 		require.Equal(t, "a", s.Select(md, N.NetworkTCP, true).Tag(), "iteration %d", i)
 	}
+}
+
+// The hashing strategies report a change only when the set of usable members changes, so
+// interrupt_exist_connections does not close every connection on each monitoring update.
+func TestH_BalancerHashingChangedOnlyOnAliveSet(t *testing.T) {
+	o := []*fakeOutbound{newFake("a"), newFake("b"), newFake("c")}
+	options := option.BalancerOutboundOptions{DelayAcceptableRatio: 2, MaxRetry: 3}
+	for name, s := range map[string]Strategy{
+		"consistent-hashing": NewConsistentHashing(outs(o...), options),
+		"sticky-sessions":    common.Must1(NewStickySession(outs(o...), options)),
+	} {
+		history := map[string]*adapter.URLTestHistory{"a": his(100), "b": his(120), "c": his(monitoring.TimeoutDelay)}
+		require.True(t, s.UpdateOutboundsInfo(history), name)
+		require.False(t, s.UpdateOutboundsInfo(history), name+": same members")
+		require.False(t, s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": his(110), "b": his(105), "c": his(monitoring.TimeoutDelay)}), name+": new delays, same members")
+		require.True(t, s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": his(100), "b": his(monitoring.TimeoutDelay), "c": his(90)}), name+": members changed")
+	}
+}
+
+// an unset delay_acceptable_ratio is 2, not 0: at 0 the hashing strategies saw every member dead
+func TestH_BalancerDefaultRatio(t *testing.T) {
+	o := []*fakeOutbound{newFake("a"), newFake("b")}
+	s := NewConsistentHashing(outs(o...), option.BalancerOutboundOptions{MaxRetry: 2})
+	s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": his(100), "b": his(150)})
+	require.True(t, s.Alive(o[0], N.NetworkTCP))
+	require.True(t, s.Alive(o[1], N.NetworkTCP))
+}
+
+// sticky-sessions sticks by what sticky_hash names, as the pool does; the default is the source
+// address and the destination, as before the option.
+func TestH_StickySessionStickyHash(t *testing.T) {
+	a, b := newFake("a"), newFake("b")
+	s := common.Must1(NewStickySession(outs(a, b), option.BalancerOutboundOptions{DelayAcceptableRatio: 2, StickyHash: []string{"dest_port"}}))
+	s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": his(50), "b": his(60)})
+	byPort := func(port uint16, src string) string {
+		md := adapter.InboundContext{Source: M.ParseSocksaddrHostPort(src, 1), Destination: M.ParseSocksaddrHostPort("example.com", port)}
+		return s.Select(md, N.NetworkTCP, true).Tag()
+	}
+	first := byPort(443, "10.0.0.1")
+	require.Equal(t, first, byPort(443, "10.0.0.2"), "the same port sticks, whatever the source")
+	_, err := NewStickySession(outs(a, b), option.BalancerOutboundOptions{StickyHash: []string{"user"}})
+	require.Error(t, err, "an unknown field is refused")
 }

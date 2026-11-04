@@ -397,10 +397,4 @@ func (receiver *Endpoint) IsReady() bool {
 	return receiver.started || receiver.deviceReady()
 }
 
-func (receiver *Endpoint) DisplayType() string {
-	str := C.ProxyDisplayName(receiver.Type())
-	if !receiver.IsReady() {
-		str += " ⚠️ Connecting..."
-	}
-	return str
-}
+func (receiver *Endpoint) DisplayType() string { return C.ProxyDisplayName(receiver.Type()) }

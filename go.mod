@@ -24,9 +24,10 @@ require (
 	github.com/cretz/bine v0.2.0
 	github.com/database64128/tfo-go/v2 v2.4.2
 	github.com/dblohm7/wingoes v0.0.0-20240119213807-a09d6be7affa
-	github.com/enfein/mieru/v3 v3.38.0
+	github.com/enfein/mieru/v3 v3.38.2
 	github.com/esrrhs/gohome v0.0.0-20260919145331-036124786531
 	github.com/flynn/noise v1.1.0
+	github.com/getlantern/soar v0.2.4
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/go-chi/render v1.0.3
 	github.com/gobwas/ws v1.4.0
@@ -65,6 +66,7 @@ require (
 	github.com/pion/rtp v1.10.2
 	github.com/pires/go-proxyproto v0.16.0
 	github.com/pkg/sftp v1.13.10
+	github.com/refraction-networking/utls v1.8.3-0.20260301010127-aa6edf4b11af
 	github.com/sagernet/asc-go v0.0.0-20260914163356-9e3d45a797c1
 	github.com/sagernet/bbolt v0.0.0-20260915102804-500ee1e84832
 	github.com/sagernet/cors v1.2.1
@@ -272,7 +274,6 @@ require (
 	github.com/refraction-networking/ed25519 v0.1.2 // indirect
 	github.com/refraction-networking/gotapdance v1.7.10 // indirect
 	github.com/refraction-networking/obfs4 v0.1.2 // indirect
-	github.com/refraction-networking/utls v1.8.3-0.20260301010127-aa6edf4b11af // indirect
 	github.com/safchain/ethtool v0.3.0 // indirect
 	github.com/sagernet/cronet-go/lib/android_386 v0.0.0-20261023055542-d5437a0df01a // indirect
 	github.com/sagernet/cronet-go/lib/android_amd64 v0.0.0-20261023055542-d5437a0df01a // indirect
@@ -392,3 +393,5 @@ replace github.com/sagernet/sing-mux => ./replace/sing-mux
 replace github.com/metacubex/utls => github.com/Leadaxe/utls-lx v1.8.8-0.20261011005638-ad69b191e2f8
 
 replace masterdnsvpn-go => ./replace/MasterDnsVPN
+
+replace github.com/getlantern/soar => ./replace/soar

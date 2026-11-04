@@ -68,23 +68,40 @@ do about it. Items marked **Required** break or misbehave until they are handled
   already). With `interrupt_exist_connections`, the hashing strategies interrupt only when the
   set of usable members changes, not on every test round.
 - **Balancer connections are stable.** `lowest-delay` now honours `tolerance` (50 ms when unset;
-  send 50–100, not 1) and `tolerance_ratio` (a tenth of the selected member's delay when unset),
+  hiddify-core sends 20, with `tolerance_ratio` 0.3, so the rule is mostly relative) and
+  `tolerance_ratio` (a tenth of the selected member's delay when unset),
   and keeps its member until one is faster by more than the larger of the two or it fails a
   test. Connections are closed only for a member that died (its own connections) and once, 30
   seconds after start, for the members the first tests left out. A faster member takes new
   connections only, so `interrupt_exist_connections: true` no longer cuts calls or downloads on
   every test round. The balancer starts from the cached results, and the first cycle tests the
   cached fastest member first.
-- **Balancer `pool` strategy.** `strategy: "pool"` with `pool`, `pool_tolerance` and
-  `sticky_hash` gives a fixed set of slots with sticky keys that do not move when another member
-  dies (lx's `round_robin`).
+- **Balancer `pool` strategy.** `strategy: "pool"` with `pool` and `sticky_hash` gives a fixed
+  set of slots with sticky keys that do not move when another member dies (lx's `round_robin`).
+  `tolerance` and `tolerance_ratio` let a faster member outside take a slot, as for lowest-delay;
+  unset, the first working members keep their slots, so hiddify-core sends them to the
+  lowest-delay group only. `sticky_hash` is `sticky-sessions`' key too.
 - **URL test failover.** A failover member that is more than 2 times slower than the fastest
   other one, twice in a row, is now left for one more than 1.5 times faster.
 - **A tapped or selected proxy answers at once.** The outbound a group's selection leads to is
   tested before the first cycle and again when the selection moves; a test asked for runs at
   once beside the cycle, in stages (`experimental.monitoring.on_demand_timeouts`, 1 s, 3 s,
   10 s by default): the app sees the proxy as unavailable after the first mark with no answer,
-  then the first answer from any attempt, however late. The delay is published before the IP
+  then the answer, however late. A proxy is pinged once; only a failed attempt is tried again,
+  at the next mark. A tap while the proxy is being tested joins that test instead of a second
+  ping, and a selection measured in the last 15 s is not tested again. A ping cached from the
+  previous run decides nothing and is not shown: it orders the members until the real pings
+  arrive, and the app's proxy list sorts by `sort_delay`, which carries it, while
+  `url_test_delay` stays 0 for it. hiddify-core sets the
+  lowest-delay groups' `tolerance` to 20 ms and `tolerance_ratio` to 0.3: an absolute 100 ms
+  kept a 59 ms member over a 25 ms one. The `MONITORING` and `LOWEST` log lines say why each
+  test ran and what the group decided. hiddify-core keeps a profile's proxy tags stable across
+  its updates (an unchanged proxy keeps the tag it had, whatever its new position in the list),
+  so a hot reload after a subscription update keeps the unchanged proxies and their pings and
+  tests only what changed; keep top keeps its pick while every kept proxy is unchanged and none
+  timed out. A proxy that worked in this run skips the first mark: it keeps its ping
+  through a slow answer rather than flicker to unavailable after one second. The delay is
+  published before the IP
   lookup, so the IP arrives after the ping. Nothing to set; the core's defaults are these.
 - **IPv6 for the apps is off by default, and verified per proxy when on.** hiddify-core answers
   the apps with `ipv4_only` DNS rules and rejects every IPv6 destination before the sniff rule
@@ -108,7 +125,28 @@ do about it. Items marked **Required** break or misbehave until they are handled
   `masterdns://` links, `slipnet://` links (SlipNet profiles for DNSTT, NoizDNS and VayDNS) as
   `dnstt` outbounds with a `socks` or `ssh` outbound in front, and `dnst://` links (the dnst URL
   spec, github.com/net2share/dnst-url-spec) for the dnstt, vaydns and masterdns transports.
-- **Smart resolver pool, per outbound.** `dnstt` and `masterdns` take `smart_pool`, `true` or an
+- **Soar outbound.** `"type": "soar"` (display name `Soar`) is a new outbound type for Soar
+  servers (`github.com/getlantern/soar`): `domain`, `public_key`, `resolvers` and tuning fields,
+  see [Soar](features/protocols/soar.en.md). TCP only, no outbound behind it. The resolvers
+  written go through its smart pool, on by default; `auto` or no resolvers runs Soar's own
+  discovery. The session
+  opens at the first connection, so the status is CONNECTING until then. ray2sing reads
+  `soar://` links: WhiteDNS's profile link (base64url JSON, schema `whitedns.profile`) and a URL
+  form. The JSON editor offers a `soar` template.
+- **Links turn the masterdns smart pool on.** ray2sing gives a `masterdns://` or `dnst://`
+  masterdns outbound `smart_pool` unless the link says `smart_pool=0` or lists an address range,
+  and a link without resolvers gets `auto`. It also reads WhiteDNS's `masterdns://` profile link.
+- **Shared resolver discovery.** `smart_pool.discovery` (`country`, `sample_ranges`, `want`,
+  `concurrency`, `pace`) is the same block for `dnstt`, `masterdns` and `soar`: their `auto`
+  starts with the candidates of Soar's discovery (device resolvers, the country's bundled list,
+  global resolvers), then the built-in list. hiddify-core fills `discovery.country` from the
+  app's region when it is empty. Links take `country`, `sample_ranges`, `discovery_want`,
+  `discovery_concurrency` and `discovery_pace`.
+- **Soar fork.** `replace/soar` (module `github.com/getlantern/soar`, to be forked as
+  `github.com/hiddify/soar`, branch `hiddify`) adds `Discovery.List()`, so the pool takes Soar's
+  discovery candidates from Soar's own code. hiddify-core's `go.mod` needs
+  `replace github.com/getlantern/soar => ./hiddify-sing-box/replace/soar`, like the other forks.
+- **Smart resolver pool, per outbound.** `dnstt`, `masterdns` and `soar` take `smart_pool`, `true` or an
   object (`load_balance`, `deadline`, `per_attempt`, `probe_interval`, `down_after`); the
   resolver list, scores, probe and pool of every DNS tunnel are one shared package,
   `common/dnspool`, and each outbound runs its own pool. With it, `auto`, DoT and DoH resolvers
@@ -156,12 +194,17 @@ do about it. Items marked **Required** break or misbehave until they are handled
   `lowest` (lowest-delay) balancer when the profile has 2+ proxies. With only one proxy, `lowest`
   is not built; connectivity then uses that proxy's own ping (the select leaf) so the core does
   not stay WAITING ("Connecting") forever.
-- **MASQUE devices from links.** A `masque` outbound with `device` (what `masque://` links
-  become, MahsaNG's shape included) needs no `endpoint_public_key`: the edge's fixed key is
-  built in. The port of an endpoint written as `ip:port` is used. When Cloudflare refuses the
-  device and it points at WARP, the outbound registers a device like a profile and saves it in
-  the cache file under the profile key as the link device's replacement, so the cache file
-  matters for such configs too.
+- **MASQUE devices from links.** The `masque` outbound never registers a WARP device: it needs
+  `device`, and a config without one fails to load ("use the warp endpoint with mode masque").
+  A device needs no `endpoint_public_key`: the edge's fixed key is built in. The port of an
+  endpoint written as `ip:port` is used. A `masque://` link to WARP (an endpoint in WARP's ranges
+  or under `cloudflareclient.com`, or Cloudflare's server name, or none) is a `warp` endpoint with
+  `mode` `masque` (ray2sing): the link's key goes to `masque.device`, and a link without a key gets
+  a saved or registered device from the WARP pool. When Cloudflare refuses `masque.device`, WARP
+  remembers it in the cache file (`<unique_identifier>/refused-masque-device`) and takes a pool
+  device, so the cache file matters for such configs too. ray2sing sets `unique_identifier` from
+  the link's device id, else a hash of its key or endpoints, so renaming the profile keeps its
+  devices. Only a link to another MASQUE server stays a `masque` outbound, and needs its key.
 - **WARP over MASQUE in the warp endpoint.** A `warp` endpoint can now run MASQUE instead of
   WireGuard: `"masque": {"enabled": true}`, or any MASQUE setting (`vhttp`, `server_name`,
   `use_ipv6`, `tls`, …). Prefer this to a separate `masque` outbound: one endpoint handles
@@ -178,20 +221,19 @@ do about it. Items marked **Required** break or misbehave until they are handled
   `masque` type is WARP only.
 - **Display types.** WARP shows `WARP · WG`, `WARP · AWG` or `WARP · MASQUE`; the `masque`
   outbound shows `WARP · MASQUE`. After them comes the endpoint the scanner chose
-  (` · 🔍 <address:port>`, or ` · 🔍 Not found`), then the status mark. If the app maps display
-  types to icons or labels, match on the prefix.
+  (` · 🔍 <address:port>`, or ` · 🔍 Not found`). If the app maps display types to icons or
+  labels, match on the prefix.
 - **Status, for every outbound and endpoint.** `IsReady() bool` is replaced by
   `Status() adapter.Status`: `StatusReady`, `StatusConnecting`, `StatusReconnecting`,
   `StatusSearching`, `StatusFailed` and `StatusRegistering`; `adapter.IsReady(o)` is the yes/no.
-  `adapter.DisplayType(o)` adds the mark of the status to any outbound or endpoint:
-  ` ⏳ Connecting...`, ` ⏳ Reconnecting...`, ` 🔍 Searching...`, ` ❌ Failed`,
-  ` 🔑 Registering...`, nothing when ready. The hourglass flips between ⏳ and ⌛ with the second
-  (`adapter.HourglassFlip`), so a display that refreshes shows it turning; `adapter.SplitStatus`
-  separates the mark from the rest. hiddify-core must show `adapter.DisplayType(o)`
-  (v2/hcore/proxy_info.go does, uncommitted at the time of writing); calling `DisplayType()`
-  directly loses the mark. The `OutboundInfo` message still has only `is_ready`; a `status`
-  field would let the app show the state without parsing the label. Psiphon no longer shows
-  "✔️ Connected", and SSH shows its last error as `SSH: <error>` before the mark.
+  `adapter.DisplayType(o)` is the type and what the status cannot say, nothing more: the
+  resolvers a DNS tunnel uses (`MasterDNS · 3 resolvers`), the endpoint the WARP scanner chose.
+  It has no status mark (no ` ⏳ Connecting...`, no `✔️`): hiddify-core sends the status on its
+  own (`OutboundInfo.status`) and the app shows it. A failed outbound adds why it failed,
+  `adapter.StatusError(o)`: `Invalid: bad uuid`, `WARP · WG: <error>`. While it is only
+  connecting, the error of its last attempt goes to `OutboundInfo.error` and not to the type
+  (SSH's last connection error, for example). The app's `typeWithoutStatus` still strips the
+  marks an older core sends.
 - **WARP registration fallback.** When registration through `profile.detour` fails, WARP (all
   three tunnels) tries again through every other outbound, direct included. That was already so
   for WireGuard and is kept; it lets a cold detour group not block registration, but it means
@@ -263,6 +305,18 @@ do about it. Items marked **Required** break or misbehave until they are handled
   Security · Selectable` or `🔓 Unblocker · Selectable`; its tag ends in `§hide§` like every chain
   hop, so do not hide it) whose items are `Lowest → <hop>` (the
   default, a lowest-delay balancer) and each WARP tunnel and Psiphon, moved with `SelectOutbound`.
+- **Why a proxy failed.** The URL test history keeps the error of a failed test (`Error`), and an
+  outbound that is not ready says why through `adapter.StatusError` (WARP and MASQUE: a refused
+  registration, a tunnel that does not connect, with the tunnel's last connect error). hiddify-core
+  passes either to the app as `OutboundInfo.error`, for the proxy's details. A result loaded from
+  the cache keeps its error only until the next test. See
+  [Monitoring](features/groups/monitoring.en.md).
+- **Fake DNS rule.** The DNS rules hiddify-core generates set `strategy`, which keeps sing-box in
+  legacy DNS mode. A `query_type` (or `ip_version`) matcher in any DNS rule then makes the router
+  refuse to start, with "Legacy `strategy` DNS rule action option is deprecated", and the app
+  stays on Connecting. The fake IP rule therefore matches every query with `bypass_if_failed`;
+  queries other than A and AAAA fail at the fake IP server, at debug level only, and go on to
+  the remote rule. See [bypass_if_failed](features/dns/dns-bypass-if-failed.en.md).
 - **DNS predefined answers.** In legacy DNS mode, A/AAAA records in 10.0.0.0/8 and
   2001:4188:2:600::/64 are removed from `predefined` answers (`dns/blocked_checker.go`). This is
   deliberate and tested, but a predefined answer in those ranges returns nothing; keep it in mind

@@ -106,7 +106,7 @@ func TestH_PsiphonOutboundBeforeStart(t *testing.T) {
 	require.Equal(t, 10, *out.psiphon.config.EstablishTunnelTimeoutSeconds)
 	require.False(t, out.IsReady())
 	require.Equal(t, "connecting...", out.psiphon.State())
-	require.Contains(t, out.DisplayType(), "Connecting")
+	require.Equal(t, "Psiphon", adapter.DisplayType(out))
 
 	_, err := out.DialContext(context.Background(), N.NetworkTCP, M.ParseSocksaddr("1.1.1.1:443"))
 	require.ErrorContains(t, err, "controller not initialized")

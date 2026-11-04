@@ -25,6 +25,7 @@ Sing-box with extended features.
   [Psiphon](docs/hiddify/features/protocols/psiphon.en.md),
   [DNSTT](docs/hiddify/features/protocols/dnstt.en.md),
   [MasterDNS](docs/hiddify/features/protocols/masterdns.en.md),
+  [Soar](docs/hiddify/features/protocols/soar.en.md),
   [GooseRelay](docs/hiddify/features/protocols/gooserelay.en.md),
   [Call tunnel](docs/hiddify/features/protocols/call.en.md),
   [Tunnel](docs/hiddify/features/protocols/tunnel.en.md),
@@ -119,6 +120,7 @@ Besides sing-box, this fork takes work from other forks and projects. Thank you 
 - [Psiphon-Labs](https://github.com/Psiphon-Labs): Psiphon.
 - [net2share/vaydns](https://github.com/net2share/vaydns): DNSTT.
 - [masterking32/MasterDnsVPN](https://github.com/masterking32/MasterDnsVPN): MasterDNS.
+- [getlantern/soar](https://github.com/getlantern/soar): Soar.
 - [kianmhz/GooseRelayVPN](https://github.com/kianmhz/GooseRelayVPN): GooseRelay.
 - [GFW-knocker](https://github.com/GFW-knocker): the WireGuard noise packets.
 - [XTLS/Xray-core](https://github.com/XTLS/Xray-core): XHTTP, mKCP, XDRIVE, finalmask, VLESS
@@ -151,3 +153,5 @@ with this application without prior consent.
 ## Additional protocols in this fork
 
 This fork also retains VetrOFFProxy, OpenFlux, OLCRTC, FPTN, PingTunnel, native Sudoku and Snell, together with its existing WARP endpoint scanner. Existing standalone `smart_dns_pool` service configurations remain supported. See [the synchronization report](UPSTREAM_SYNC_REPORT.md) for the upstream source revision and compatibility details.
+
+- [Soar DNS tunnel](docs/hiddify/features/protocols/soar.en.md): resolver discovery and adaptive smart pool.

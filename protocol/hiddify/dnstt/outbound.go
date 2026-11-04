@@ -176,10 +176,18 @@ func (h *Outbound) Status() adapter.Status {
 	return adapter.StatusConnecting
 }
 
+// StatusError is why it failed: no resolver passed its test. //H
+func (h *Outbound) StatusError() error {
+	if h.started < 0 {
+		return E.New("none of the ", len(h.candidateResolvers), " resolvers passed the test")
+	}
+	return nil
+}
+
 func (h *Outbound) DisplayType() string {
-	str := C.ProxyDisplayName(h.Type()) // H: adapter.DisplayType adds the status mark
+	str := C.ProxyDisplayName(h.Type()) // the status is shown on its own
 	if h.started > 0 {
-		str += fmt.Sprint(" ✔️ ", len(h.resolvers), " resolvers")
+		str += fmt.Sprint(" · ", len(h.resolvers), " resolvers")
 	}
 	return str
 }
