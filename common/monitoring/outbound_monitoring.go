@@ -547,6 +547,8 @@ func (m *OutboundMonitoring) UnsubscribeGroup(groupTag string, observer <-chan G
 
 func (m *OutboundMonitoring) Close() error {
 	m.closerOnce.Do(func() {
+		m.started.Store(false) //H: stop concurrent Touch calls
+		m.cancel()             //H: release active dialers before waiting for workers
 		m.stopTimerWorkers()
 		m.access.Lock()
 		if m.networkRetest != nil {
@@ -896,10 +898,11 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 		m.cacheDirty.Store(true)                                 //H
 		m.recordIPv6(outcome.outboundTag, *outcome.history.IPv6) //H
 	} //H
-	m.history.StoreURLTestHistory(outcome.outboundTag, &state.history)
+	snapshot := state.history                                     //H: readers own an immutable snapshot
+	m.history.StoreURLTestHistory(outcome.outboundTag, &snapshot) //H
 
 	m.emitGroupEvent(state.groupTags)
-	return &state.history
+	return &snapshot //H
 }
 
 func mergeIpInfo(old, new *ipinfo.IpInfo) *ipinfo.IpInfo {
@@ -956,6 +959,9 @@ func (m *OutboundMonitoring) Touch() {
 	}
 	m.access.Lock()
 	defer m.access.Unlock()
+	if !m.started.Load() || m.ctx.Err() != nil {
+		return
+	} //H: Close may have won the lock
 	if m.mainTicker != nil {
 		m.lastActive.Store(time.Now())
 		return

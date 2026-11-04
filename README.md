@@ -147,3 +147,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 In addition, no derivative work may use the name or imply association
 with this application without prior consent.
 ```
+
+## Additional protocols in this fork
+
+This fork also retains VetrOFFProxy, OpenFlux, OLCRTC, FPTN, PingTunnel, native Sudoku and Snell, together with its existing WARP endpoint scanner. Existing standalone `smart_dns_pool` service configurations remain supported. See [the synchronization report](UPSTREAM_SYNC_REPORT.md) for the upstream source revision and compatibility details.
