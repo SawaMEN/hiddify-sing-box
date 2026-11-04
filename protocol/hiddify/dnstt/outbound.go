@@ -100,7 +100,7 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 		options: options,
 	}
 
-	if options.SmartPool {
+	if options.SmartPool.IsEnabled() {
 		mgr, addr, err := multidns.StartLocal(multidns.Options{})
 		if err != nil {
 			return nil, err

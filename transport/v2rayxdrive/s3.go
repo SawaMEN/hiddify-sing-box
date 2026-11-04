@@ -63,7 +63,7 @@ func ValidateS3Config(c *Config) error {
 	if !validS3Name(bucket) || strings.Contains(bucket, "/") {
 		return errors.New("S3 needs a bucket name without path separators")
 	}
-	if !c.S3.PathStyle {
+	if (c.S3.PathStyle == nil || !*c.S3.PathStyle) {
 		if net.ParseIP(u.Hostname()) != nil {
 			return errors.New("S3 virtual-hosted addressing requires a DNS endpoint")
 		}
@@ -120,7 +120,7 @@ func newS3Storage(streamSettings *streamOptions, c *Config) (*s3Storage, error) 
 		base.Path += "/"
 		base.RawPath += "/"
 	}
-	if c.S3.PathStyle {
+	if c.S3.PathStyle != nil && *c.S3.PathStyle {
 		base.Path += c.S3.Bucket + "/"
 		base.RawPath += s3EscapePath(c.S3.Bucket) + "/"
 	} else {

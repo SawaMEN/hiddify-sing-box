@@ -1,8 +1,9 @@
 module github.com/sagernet/sing-box
 
-go 1.26.10
+go 1.27.3
 
 require (
+	masterdnsvpn-go v0.0.0
 	filippo.io/edwards25519 v1.2.0
 	github.com/Diniboy1123/connect-ip-go v0.0.0-20260613064811-66cba32d7d33
 	github.com/Psiphon-Labs/psiphon-tunnel-core v1.0.11-0.20260126173038-c86a1497a760
@@ -29,7 +30,7 @@ require (
 	github.com/gofrs/uuid/v5 v5.5.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
-	github.com/hiddify/hmrd_multi_resolver_dns v0.0.0-20260429114007-8d809dc33d0e
+	github.com/hiddify/hmrd_multi_resolver_dns v0.0.0-20261102140835-72045bdb2631
 	github.com/insomniacslk/dhcp v0.0.0-20260220084031-5adc3eb26f91
 	github.com/jsimonetti/rtnetlink v1.4.1
 	github.com/keybase/go-keychain v0.0.1
@@ -92,7 +93,7 @@ require (
 	github.com/tidwall/gjson v1.18.0
 	github.com/vishvananda/netns v0.0.5
 	github.com/xchacha20-poly1305/sing-trusttunnel v0.3.2
-	github.com/xtls/xray-core v1.260327.1-0.20260728075948-5ca6f4b7d4dc
+	github.com/xtls/xray-core v1.260327.1-0.20261031132019-a4a3dff5b20c
 	github.com/yosida95/uritemplate/v3 v3.0.2
 	go.uber.org/zap v1.28.0
 	go4.org/mem v0.0.0-20240501181205-ae6ca9944745
@@ -383,3 +384,6 @@ replace github.com/sagernet/gvisor => ./replace/gvisor
 replace github.com/sagernet/sing-mux => ./replace/sing-mux
 
 replace github.com/metacubex/utls => github.com/Leadaxe/utls-lx v1.8.8-0.20261011005638-ad69b191e2f8
+
+// Local MasterDnsVPN library submodule, required for upstream MasterDNS outbound.
+replace masterdnsvpn-go => ./replace/MasterDnsVPN

@@ -29,8 +29,8 @@ func parseOptions(t *testing.T, content string) *option.FinalMaskOptions {
 func TestBuildFragmentFinalMask(t *testing.T) {
 	masks, err := Build(parseOptions(t, fragmentFinalMask))
 	require.NoError(t, err)
-	require.NotNil(t, masks.TCP)
-	require.Nil(t, masks.UDP)
+	require.True(t, masks.HasTCP())
+	require.False(t, masks.HasUDP())
 }
 
 func TestBuildEmpty(t *testing.T) {
@@ -42,9 +42,18 @@ func TestBuildEmpty(t *testing.T) {
 	require.Nil(t, masks)
 }
 
+func TestBuildFragmentLengthsDelaysString(t *testing.T) {
+	// Panel/Clash-style compact form: lengths/delays as a single string (not an array).
+	content := `{"tcp":[{"type":"fragment","settings":{"packets":"tlshello","lengths":"1-104","delays":"0","maxSplit":"0"}},{"type":"fragment","settings":{"packets":"1-1","lengths":"1-114","delays":"1","maxSplit":"11"}}]}`
+	masks, err := Build(parseOptions(t, content))
+	require.NoError(t, err)
+	require.True(t, masks.HasTCP())
+}
+
 func TestBuildAllMaskTypes(t *testing.T) {
 	for _, content := range []string{
 		`{"tcp":[{"type":"fragment","settings":{"packets":"1-3","lengths":["5-10","20"],"delays":["1-2"]}}]}`,
+		`{"tcp":[{"type":"fragment","settings":{"packets":"tlshello","lengths":"1-104","delays":"0","maxSplit":"0"}}]}`,
 		`{"tcp":[{"type":"header-custom","settings":{"clients":[[{"type":"str","packet":"GET / HTTP/1.1\r\n\r\n"}]],"servers":[[{"rand":16}]]}}]}`,
 		`{"tcp":[{"type":"sudoku","settings":{"password":"p","ascii":"prefer_entropy","paddingMin":1,"paddingMax":10}}]}`,
 		`{"udp":[{"type":"noise","settings":{"reset":"10-20","noise":[{"rand":"10-20","delay":"5"},{"type":"hex","packet":"deadbeef"}]}}]}`,
@@ -97,7 +106,7 @@ func TestFragmentSplitsFirstPacket(t *testing.T) {
 	client, server := net.Pipe()
 	defer server.Close()
 	raw := &recordConn{Conn: client}
-	conn, err := masks.TCP.WrapConnClient(raw)
+	conn, err := wrapTCP(masks, raw)
 	require.NoError(t, err)
 	payload := bytes.Repeat([]byte("0123456789"), 5)
 	n, err := conn.Write(payload)
@@ -120,7 +129,7 @@ func TestFragmentTLSHello(t *testing.T) {
 	client, server := net.Pipe()
 	defer server.Close()
 	raw := &recordConn{Conn: client}
-	conn, err := masks.TCP.WrapConnClient(raw)
+	conn, err := wrapTCP(masks, raw)
 	require.NoError(t, err)
 	body := bytes.Repeat([]byte{1}, 300)
 	hello := append([]byte{22, 3, 1, byte(len(body) >> 8), byte(len(body))}, body...)
@@ -167,11 +176,21 @@ func TestWrapConnTCPRoundTrip(t *testing.T) {
 }
 
 func dial(ctx context.Context, masks *Masks, network string, destination M.Socksaddr) (net.Conn, error) {
-	conn, err := N.SystemDialer.DialContext(ctx, network, destination)
-	if err != nil {
-		return nil, err
-	}
-	return masks.WrapConn(conn, network, destination)
+	return masks.DialContext(ctx, network, destination, N.SystemDialer.DialContext, N.SystemDialer.ListenPacket)
+}
+
+// wrapTCP puts the tcp masks over conn, as if the dialer had opened it.
+func wrapTCP(masks *Masks, conn net.Conn) (net.Conn, error) {
+	return masks.DialContext(context.Background(), N.NetworkTCP, M.ParseSocksaddr("127.0.0.1:443"), func(context.Context, string, M.Socksaddr) (net.Conn, error) {
+		return conn, nil
+	}, N.SystemDialer.ListenPacket)
+}
+
+// wrapPacket puts the udp masks over conn, as if the dialer had opened it.
+func wrapPacket(ctx context.Context, masks *Masks, destination M.Socksaddr, conn net.PacketConn) (net.PacketConn, error) {
+	return masks.ListenPacket(ctx, destination, N.SystemDialer.DialContext, func(context.Context, M.Socksaddr) (net.PacketConn, error) {
+		return conn, nil
+	})
 }
 
 func readFull(conn net.Conn, p []byte) (int, error) {
@@ -197,7 +216,7 @@ func TestWrapUDPSalamanderRoundTrip(t *testing.T) {
 	rawServer, err := net.ListenPacket("udp", "127.0.0.1:0")
 	require.NoError(t, err)
 	defer rawServer.Close()
-	server, err := serverMasks.UDP.WrapPacketConnServer(rawServer)
+	server, err := serverMasks.WrapPacketConnServer(rawServer)
 	require.NoError(t, err)
 	go func() {
 		buf := make([]byte, 2048)
@@ -217,7 +236,7 @@ func TestWrapUDPSalamanderRoundTrip(t *testing.T) {
 	payload := []byte("hello final mask over udp")
 	packetConn, err := N.SystemDialer.ListenPacket(ctx, destination)
 	require.NoError(t, err)
-	packetConn, err = clientMasks.WrapPacketConn(packetConn)
+	packetConn, err = wrapPacket(ctx, clientMasks, destination, packetConn)
 	require.NoError(t, err)
 	defer packetConn.Close()
 	packetConn.SetReadDeadline(time.Now().Add(5 * time.Second))

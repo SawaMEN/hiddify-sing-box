@@ -64,6 +64,7 @@ const (
 	TypeFallback       = "fallback"       // H
 	TypeDNSTT          = "dnstt"          // H
 	TypeGooseRelay     = "gooserelay"     // H
+	TypeMasterDNS      = "masterdns" // H
 	TypeSmartDNSPool   = "smart_dns_pool" // H — local recursive-resolver pool with AIMD throttling + recovery probing (github.com/hiddify/hmrd_multi_resolver_dns)
 	TypeTrustTunnel    = "trusttunnel"
 	TypeOlcRTC         = "olcrtc"
@@ -181,6 +182,8 @@ func ProxyDisplayName(proxyType string) string {
 		return "DNSTT"
 	case TypeGooseRelay:
 		return "GooseRelay"
+	case TypeMasterDNS:
+		return "MasterDNS"
 	case TypeTrustTunnel:
 		return "TrustTunnel"
 	case TypeOlcRTC:

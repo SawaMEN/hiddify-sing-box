@@ -51,7 +51,9 @@ func (w *WARPEndpoint) connectMASQUE(done <-chan struct{}, profile *warpProfile)
 	}
 	w.mtx.Lock()
 	w.endpoint = inner
-	w.scanStatusOf = func() *warpscan.Status { return inner.ScanStatus() }
+	// This MASQUE outbound variant has no scanner status API. Keep WARP's
+	// own state rather than referencing a removed method and breaking builds.
+	w.scanStatusOf = func() *warpscan.Status { return w.scanStatus }
 	w.mtx.Unlock()
 }
 

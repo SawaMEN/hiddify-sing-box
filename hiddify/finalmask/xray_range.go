@@ -3,6 +3,7 @@
 package finalmask
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -21,33 +22,63 @@ type Int32Range struct {
 	To    int32
 }
 
-// MarshalJSON implements encoding/json.Marshaler.MarshalJSON
-func (receiver *Int32Range) MarshalJSON() ([]byte, error) {
-	return json.Marshal(receiver.String())
+// Int32RangeList accepts Xray-style arrays (["1-2","3"]) and the compact single-value
+// form used by some panels/clients ("1-104" or 0) for fields like lengths/delays.
+type Int32RangeList []Int32Range
+
+func (v Int32RangeList) MarshalJSON() ([]byte, error) {
+	return json.Marshal([]Int32Range(v))
 }
 
-func (receiver Int32Range) String() string {
-	if receiver.Left == receiver.Right {
-		return strconv.Itoa(int(receiver.Left))
+func (v *Int32RangeList) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || string(data) == "null" {
+		*v = nil
+		return nil
+	}
+	if data[0] == '[' {
+		var list []Int32Range
+		if err := json.Unmarshal(data, &list); err != nil {
+			return err
+		}
+		*v = list
+		return nil
+	}
+	var one Int32Range
+	if err := one.UnmarshalJSON(data); err != nil {
+		return errors.New("Invalid integer range list, expected a string/number or an array of ranges").Base(err)
+	}
+	*v = Int32RangeList{one}
+	return nil
+}
+
+// MarshalJSON implements encoding/json.Marshaler.MarshalJSON
+func (v *Int32Range) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+func (v Int32Range) String() string {
+	if v.Left == v.Right {
+		return strconv.Itoa(int(v.Left))
 	} else {
-		return fmt.Sprintf("%d-%d", receiver.Left, receiver.Right)
+		return fmt.Sprintf("%d-%d", v.Left, v.Right)
 	}
 }
 
 // UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON
-func (receiver *Int32Range) UnmarshalJSON(data []byte) error {
-	defer receiver.ensureOrder()
+func (v *Int32Range) UnmarshalJSON(data []byte) error {
+	defer v.ensureOrder()
 	var str string
 	var rawint int32
 	if err := json.Unmarshal(data, &str); err == nil {
 		left, right, err := ParseRangeString(str)
 		if err == nil {
-			receiver.Left, receiver.Right = int32(left), int32(right)
+			v.Left, v.Right = int32(left), int32(right)
 			return nil
 		}
 	} else if err := json.Unmarshal(data, &rawint); err == nil {
-		receiver.Left = rawint
-		receiver.Right = rawint
+		v.Left = rawint
+		v.Right = rawint
 		return nil
 	}
 
@@ -55,10 +86,10 @@ func (receiver *Int32Range) UnmarshalJSON(data []byte) error {
 }
 
 // ensureOrder() gives value to .From & .To and make sure .From < .To
-func (receiver *Int32Range) ensureOrder() {
-	receiver.From, receiver.To = receiver.Left, receiver.Right
-	if receiver.From > receiver.To {
-		receiver.From, receiver.To = receiver.To, receiver.From
+func (r *Int32Range) ensureOrder() {
+	r.From, r.To = r.Left, r.Right
+	if r.From > r.To {
+		r.From, r.To = r.To, r.From
 	}
 }
 

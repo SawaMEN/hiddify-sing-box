@@ -43,6 +43,9 @@ type Server struct {
 }
 
 func NewServer(ctx context.Context, logger logger.ContextLogger, options option.V2RayKCPOptions, tlsConfig tls.ServerConfig, handler adapter.V2RayServerTransportHandler) (adapter.V2RayServerTransport, error) {
+	if options.Legacy || options.Seed != "" || options.Header != "" && options.Header != "none" || options.FinalMask != nil {
+		return newLegacyServer(ctx, logger, options, tlsConfig, handler)
+	}
 	config, err := newConfig(options)
 	if err != nil {
 		return nil, err

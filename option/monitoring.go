@@ -19,4 +19,6 @@ type MonitoringOptions struct {
 	// rule ipv6_by_outbound, rule ipv6_unavailable_via). Empty is [2606:4700:4700::1111]:443; "none"
 	// turns the probe off.
 	IPv6Probe string `json:"ipv6_probe,omitempty"` // H
+	IPv6Declared map[string]bool `json:"ipv6_declared,omitempty"` // H
+	VerifyIPv6 bool `json:"verify_ipv6,omitempty"` // H
 }

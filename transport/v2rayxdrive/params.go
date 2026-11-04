@@ -61,7 +61,7 @@ func paramsFromConfig(c *Config) params {
 		maxPollInterval: millis(c.MaxPollIntervalMs, defaultMaxPollInterval),
 		eagerWindow:     millis(c.EagerWindowMs, defaultEagerWindow),
 		holeTimeout:     millis(c.HoleTimeoutMs, defaultHoleTimeout),
-		sessionTTL:      seconds(c.SessionTtlSeconds, defaultSessionTTL),
+		sessionTTL:      seconds(c.SessionTTLSeconds, defaultSessionTTL),
 		concurrency:     capped(c.Concurrency, defaultConcurrency, maxConcurrency),
 	}
 	if p.maxPollInterval < p.minPollInterval {
