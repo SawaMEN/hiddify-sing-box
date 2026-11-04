@@ -1,9 +1,10 @@
 package dnstt
 
 import (
-	"github.com/sagernet/sing-box/common/dnspool"
 	"sync"
 	"testing"
+
+	"github.com/sagernet/sing-box/common/dnspool"
 )
 
 func TestConcurrentResolverInitializationPublishesImmutableTables(t *testing.T) {

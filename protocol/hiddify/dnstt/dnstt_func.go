@@ -2,14 +2,14 @@ package dnstt
 
 import (
 	"context"
-	"github.com/sagernet/sing-box/option"
+	"fmt"
 	"math/rand"
 	"net"
 
-	"fmt"
+	"github.com/sagernet/sing-box/common/monitoring"
+	"github.com/sagernet/sing-box/option"
 
 	dnstt "github.com/net2share/vaydns/client"
-	"github.com/sagernet/sing-box/common/monitoring"
 )
 
 func (h *Outbound) addResolver(resolver dnstt.Resolver) {

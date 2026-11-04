@@ -50,13 +50,14 @@ func newSystemDevice(options Options) (*systemDevice, error) {
 		return nil, err
 	}
 	inet4Address, inet6Address := firstAddresses(options.Configuration.Address)
-	return &systemDevice{
-		baseDevice:   baseDevice{packetHeadroom: options.PacketHeadroom},
+	device := &systemDevice{
 		options:      options,
 		dialer:       interfaceDialer,
 		inet4Address: inet4Address,
 		inet6Address: inet6Address,
-	}, nil
+	}
+	device.baseDevice.packetHeadroom = options.PacketHeadroom
+	return device, nil
 }
 
 func (d *systemDevice) Start() error {
