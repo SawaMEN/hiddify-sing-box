@@ -16,12 +16,10 @@ import (
 )
 
 type _V2RayTransportOptions struct {
-	XDriveOptions      V2RayXDriveOptions      `json:"-"`
-	Type               string                  `json:"type" enum:"http,ws,quic,grpc,httpupgrade,xhttp,raw,mkcp,kcp"`
+	Type               string                  `json:"type" enum:"http,ws,quic,grpc,httpupgrade,xhttp,raw,mkcp,kcp,xdrive"`
 	HTTPOptions        V2RayHTTPOptions        `json:"-"`
 	WebsocketOptions   V2RayWebsocketOptions   `json:"-"`
 	QUICOptions        V2RayQUICOptions        `json:"-"`
-	KCPOptions         V2RayKCPOptions         `json:"-"`
 	GRPCOptions        V2RayGRPCOptions        `json:"-"`
 	HTTPUpgradeOptions V2RayHTTPUpgradeOptions `json:"-"`
 	XHTTPOptions       V2RayXHTTPOptions       `json:"-"` //H

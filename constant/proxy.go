@@ -53,8 +53,6 @@ const (
 	TypePsiphon            = "psiphon"
 	TypeTunnelClient       = "tunnel_client"
 	TypeTunnelServer       = "tunnel_server"
-	TypeCall               = "call"   // H
-	TypeSudoku             = "sudoku" // H
 
 	TypeHInvalidConfig = "hinvalid"       //H
 	TypeXray           = "xray"           //H
@@ -72,7 +70,6 @@ const (
 	TypeTrustTunnel    = "trusttunnel"
 	TypeOlcRTC         = "olcrtc"
 	TypeVetrOFF        = "vetroff"
-	TypeBond           = "bond"
 )
 
 const (
