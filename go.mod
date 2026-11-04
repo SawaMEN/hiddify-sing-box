@@ -8,6 +8,7 @@ require (
 	filippo.io/edwards25519 v1.2.0
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c
 	github.com/Diniboy1123/connect-ip-go v0.0.0-20260613064811-66cba32d7d33
+	github.com/PoriyaVali/mirage v0.2.1-0.20261024195444-7c21af6f60d8
 	github.com/Psiphon-Labs/psiphon-tunnel-core v1.0.11-0.20260126173038-c86a1497a760
 	github.com/SawaMEN/VetroffProxy v0.1.1-0.20261030200803-b81ec45c6865
 	github.com/ameshkov/dnscrypt/v2 v2.4.0

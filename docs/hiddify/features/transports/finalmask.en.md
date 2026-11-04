@@ -101,6 +101,7 @@ Supported mask types:
 | `fragment` | yes | — | Splits the first writes (or the TLS ClientHello) into small pieces with delays. | see below |
 | `merge` | yes | — | Holds quick writes and sends them as one, for the first writes of the connection. From patterniha's Xray-core. | see below |
 | `oob` | yes | — | Sends each of the first writes with one more byte as TCP urgent (out-of-band) data, which the server drops and a filter may misread. Xray's (patterniha's) `dialMode` `oob.<bytes>`. | see below |
+| `mirage` | yes | — | Splits the TLS ClientHello into two TLS records, written on their own or in one write, so a filter cannot match the server name. PoriyaVali's Mirage library. | `offset`, `layout` |
 | `header-custom` | yes | yes | Adds custom bytes the server expects (a fake protocol header). | TCP: `clients`, `servers`, `errors`; UDP: `mode`, `client`, `server` |
 | `sudoku` | yes | yes | Sudoku obfuscation, keyed by a password. | `password`, `ascii`, `customTable`, `customTables`, `paddingMin`, `paddingMax` |
 | `xmc` | yes | — | Makes the stream look like a Minecraft connection. | `hostname`, `profiles`, `password` |
@@ -188,3 +189,20 @@ Related options: the outbound's [`tls_fragment`](../tls-fragment.en.md) is added
 - [TLS fragment](../tls-fragment.en.md)
 - [TLS tricks](../tls-tricks.en.md)
 - [XHTTP transport](xhttp.en.md)
+
+`mirage` settings:
+
+| Field | Type | Default | Meaning |
+|---|---|---|---|
+| `offset` | number | `5` | Size of the first record's handshake bytes (1 to 16383). Safe sizes depend on the network: 1, 2, 4 and 5 passed in Iran in 2026, 3 and 6 or more were dropped. |
+| `layout` | string | `separate` | `separate` writes each record on its own (what MCI and Irancell let through in September 2026); `single` writes both in one write (what Iran let through in August 2026). |
+
+`mirage` only changes the first write when it is one complete ClientHello with a server name; any
+other first write goes out unchanged. Put it last in `tcp`, or after the masks that need the plain
+ClientHello. A bad `offset` can make the filter drop the whole connection, even for an allowed name.
+
+`oob` works on the socket, so put it last in `tcp`; a share link's `dialMode=oob.0,32` becomes
+`{"type": "oob", "settings": {"bytes": [0, 32]}}` after the link's other masks. It needs a real
+TCP socket: through a `detour` it does nothing.
+
+Related options: the outbound's [`tls_fragment`](../tls-fragment.en.md) is added as the first
