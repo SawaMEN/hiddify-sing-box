@@ -38,15 +38,15 @@ type ConnectionManager struct {
 	urlTestHistory *urltest.HistoryStorage
 	access         sync.Mutex
 	connections    list.List[io.Closer]
-	ctx            context.Context //H: for the IPv6 capability, see h_ipv6_fallback.go
-	hIPv6Fallback  bool            //H: route option ipv6_fallback, set by the router
+	ctx            context.Context // H: for the IPv6 capability, see h_ipv6_fallback.go
+	hIPv6Fallback  bool            // H: route option ipv6_fallback, set by the router
 }
 
 func NewConnectionManager(ctx context.Context, logger logger.ContextLogger) *ConnectionManager {
 	return &ConnectionManager{
 		logger:         logger,
 		urlTestHistory: service.PtrFromContext[urltest.HistoryStorage](ctx),
-		ctx:            ctx, //H
+		ctx:            ctx, // H
 	}
 }
 
@@ -84,9 +84,9 @@ func (m *ConnectionManager) CloseAll() {
 
 func (m *ConnectionManager) TrackConn(conn net.Conn) net.Conn {
 	tracked := &trackedConn{
-		Conn:        conn,
-		socketOwner: socketOwner{original: conn},
-		manager:     m,
+		Conn:     conn,
+		original: conn,
+		manager:  m,
 	}
 	m.access.Lock()
 	tracked.element = m.connections.PushBack(tracked)
@@ -97,7 +97,7 @@ func (m *ConnectionManager) TrackConn(conn net.Conn) net.Conn {
 func (m *ConnectionManager) TrackPacketConn(conn net.PacketConn) net.PacketConn {
 	tracked := &trackedPacketConn{
 		NetPacketConn: bufio.NewPacketConn(conn),
-		socketOwner:   socketOwner{original: conn},
+		original:      conn,
 		manager:       m,
 	}
 	m.access.Lock()
@@ -107,10 +107,10 @@ func (m *ConnectionManager) TrackPacketConn(conn net.PacketConn) net.PacketConn 
 }
 
 func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
-	if m.hIPv6Fallback && hIPv6FallbackApplies(&metadata) { //H: every outbound and group comes through here
-		m.hNewIPv6Connection(ctx, this, conn, metadata, onClose, service.FromContext[adapter.IPv6Capability](m.ctx)) //H
-		return                                                                                                       //H
-	} //H
+	if m.hIPv6Fallback && hIPv6FallbackApplies(&metadata) { // H: every outbound and group comes through here
+		m.hNewIPv6Connection(ctx, this, conn, metadata, onClose, service.FromContext[adapter.IPv6Capability](m.ctx)) // H
+		return                                                                                                       // H
+	} // H
 	ctx = adapter.WithContext(ctx, &metadata)
 	var (
 		remoteConn net.Conn

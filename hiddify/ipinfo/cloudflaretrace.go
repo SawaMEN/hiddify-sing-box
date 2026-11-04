@@ -23,7 +23,7 @@ type CloudflareTraceProvider struct {
 
 func NewCloudflareTraceProvider() *CloudflareTraceProvider {
 	return &CloudflareTraceProvider{
-		BaseProvider: BaseProvider{URL: "https://cloudflare.com/cdn-cgi/trace"},
+		URL: "https://cloudflare.com/cdn-cgi/trace",
 	}
 }
 

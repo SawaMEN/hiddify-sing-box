@@ -126,7 +126,7 @@ func (d *DERPVerifyClientURLOptions) UnmarshalJSON(bytes []byte) error {
 	err := json.Unmarshal(bytes, &stringValue)
 	if err == nil {
 		*d = DERPVerifyClientURLOptions{
-			_DERPVerifyClientURLBase: _DERPVerifyClientURLBase{URL: stringValue},
+			URL: stringValue,
 		}
 		return nil
 	}

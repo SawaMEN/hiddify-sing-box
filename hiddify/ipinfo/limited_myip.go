@@ -14,7 +14,7 @@ type MyIPProvider struct {
 // NewMyIPProvider initializes a new MyIPProvider.
 func NewMyIPProvider() *MyIPProvider {
 	return &MyIPProvider{
-		BaseProvider: BaseProvider{URL: "https://api.myip.com"},
+		URL: "https://api.myip.com",
 	}
 }
 

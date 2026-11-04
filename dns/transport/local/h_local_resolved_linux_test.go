@@ -259,7 +259,7 @@ func (m *resolvedTestServices) Services() []adapter.Service { return m.services 
 func TestH_ResolvedFallbackRejectsOwnListener(t *testing.T) {
 	for _, bind := range []string{"127.0.0.53", "0.0.0.0", "::"} {
 		t.Run(bind, func(t *testing.T) {
-			instance, err := resolved.NewService(context.Background(), log.NewNOPFactory().Logger(), "self", option.ResolvedServiceOptions{ListenOptions: option.ListenOptions{Listen: new(badoption.Addr(netip.MustParseAddr(bind))), ListenPort: 53}})
+			instance, err := resolved.NewService(context.Background(), log.NewNOPFactory().Logger(), "self", option.ResolvedServiceOptions{Listen: new(badoption.Addr(netip.MustParseAddr(bind))), ListenPort: 53})
 			if err != nil {
 				t.Fatal(err)
 			}

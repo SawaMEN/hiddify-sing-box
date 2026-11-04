@@ -1147,10 +1147,8 @@ func TestExchangeLegacyDNSModeDisabledEvaluateMatchResponseRcodeRoute(t *testing
 			switch transport.Tag() {
 			case "upstream":
 				return &mDNS.Msg{
-					MsgHdr: mDNS.MsgHdr{
-						Response: true,
-						Rcode:    mDNS.RcodeNameError,
-					},
+					Response: true,
+					Rcode:    mDNS.RcodeNameError,
 					Question: []mDNS.Question{message.Question[0]},
 				}, nil
 			case "selected":
@@ -1214,10 +1212,8 @@ func TestExchangeLegacyDNSModeDisabledEvaluateMatchResponseNsRoute(t *testing.T)
 			switch transport.Tag() {
 			case "upstream":
 				return &mDNS.Msg{
-					MsgHdr: mDNS.MsgHdr{
-						Response: true,
-						Rcode:    mDNS.RcodeSuccess,
-					},
+					Response: true,
+					Rcode:    mDNS.RcodeSuccess,
 					Question: []mDNS.Question{message.Question[0]},
 					Ns:       []mDNS.RR{nsRecord.Build()},
 				}, nil
@@ -1281,10 +1277,8 @@ func TestExchangeLegacyDNSModeDisabledEvaluateMatchResponseExtraRoute(t *testing
 			switch transport.Tag() {
 			case "upstream":
 				return &mDNS.Msg{
-					MsgHdr: mDNS.MsgHdr{
-						Response: true,
-						Rcode:    mDNS.RcodeSuccess,
-					},
+					Response: true,
+					Rcode:    mDNS.RcodeSuccess,
 					Question: []mDNS.Question{message.Question[0]},
 					Extra:    []mDNS.RR{extraRecord.Build()},
 				}, nil
@@ -1853,10 +1847,8 @@ func TestLookupLegacyDNSModeDisabledAllowsPartialSuccessForRcodeError(t *testing
 				return FixedResponse(0, message.Question[0], []netip.Addr{netip.MustParseAddr("1.1.1.1")}, 60), nil
 			case mDNS.TypeAAAA:
 				return &mDNS.Msg{
-					MsgHdr: mDNS.MsgHdr{
-						Response: true,
-						Rcode:    mDNS.RcodeNameError,
-					},
+					Response: true,
+					Rcode:    mDNS.RcodeNameError,
 					Question: []mDNS.Question{message.Question[0]},
 				}, nil
 			default:

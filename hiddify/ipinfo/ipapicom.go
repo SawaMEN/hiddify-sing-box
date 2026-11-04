@@ -15,7 +15,7 @@ type IpApiProvider struct {
 // NewIpApiProvider initializes a new IpApiProvider.
 func NewIpApiProvider() *IpApiProvider {
 	return &IpApiProvider{
-		BaseProvider: BaseProvider{URL: "http://ip-api.com/json/"},
+		URL: "http://ip-api.com/json/",
 	}
 }
 

@@ -73,7 +73,7 @@ func TestH_ShadowsocksInboundRejectsUnknownObfsMode(t *testing.T) {
 		"relay": {
 			Method:       "2022-blake3-aes-128-gcm",
 			Password:     "AAAAAAAAAAAAAAAAAAAAAA==",
-			Destinations: []option.ShadowsocksDestination{{Name: "d", Password: "AAAAAAAAAAAAAAAAAAAAAA==", ServerOptions: option.ServerOptions{Server: "127.0.0.1", ServerPort: 1}}},
+			Destinations: []option.ShadowsocksDestination{{Name: "d", Password: "AAAAAAAAAAAAAAAAAAAAAA==", Server: "127.0.0.1", ServerPort: 1}},
 			ObfsMode:     "tls1.3",
 		},
 	}
@@ -106,7 +106,7 @@ func startShadowsocksInbound(t *testing.T, options option.ShadowsocksInboundOpti
 
 func dialShadowsocks(t *testing.T, port uint16, password, plugin, pluginOpts string, payload string) error {
 	out, err := NewOutbound(context.Background(), newTestRouter(), log.NewNOPFactory().Logger(), "ss-out", option.ShadowsocksOutboundOptions{
-		ServerOptions: option.ServerOptions{Server: "127.0.0.1", ServerPort: port},
+		Server: "127.0.0.1", ServerPort: port,
 		Method:        "aes-128-gcm",
 		Password:      password,
 		Plugin:        plugin,

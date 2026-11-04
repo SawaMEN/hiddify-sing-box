@@ -111,7 +111,7 @@ func (p *BaseProvider) fetchData(ctx context.Context, detour N.Dialer) (map[stri
 	if err != nil {
 		return nil, 65535, err
 	}
-	agent := p.UserAgent //H: provider is shared by concurrent monitoring tests
+	agent := p.UserAgent // H: provider is shared by concurrent monitoring tests
 	if agent == "" {
 		agent = C.DefaultBrowserAgent
 	}

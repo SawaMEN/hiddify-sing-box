@@ -15,7 +15,7 @@ type IpApiCoProvider struct {
 
 func NewIpApiCoProvider() *IpApiCoProvider {
 	return &IpApiCoProvider{
-		BaseProvider: BaseProvider{URL: "https://ipapi.co/json/", UserAgent: "curl/8.7.1"},
+		URL: "https://ipapi.co/json/", UserAgent: "curl/8.7.1",
 	}
 }
 

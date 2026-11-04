@@ -17,7 +17,7 @@ import (
 func TestH_ReloadKeepsReplacedHistoryAsCache(t *testing.T) {
 	a := &fakeOutbound{tag: "a"}
 	b := &fakeOutbound{tag: "b"}
-	grp := &fakeGroup{fakeOutbound: fakeOutbound{tag: "grp"}, all: []string{"a", "b"}}
+	grp := &fakeGroup{tag: "grp", all: []string{"a", "b"}}
 	m := newTestMonitor(t, nil, option.MonitoringOptions{}, a, b, grp)
 	require.NoError(t, htest.Start(m, adapter.StartStateInitialize))
 	setHistory(m, "a", 120, false, &ipinfo.IpInfo{IP: "1.1.1.1"})

@@ -52,7 +52,7 @@ func TestH_NewServiceValidation(t *testing.T) {
 	t.Parallel()
 	logger := log.NewNOPFactory().NewLogger("test")
 	_, err := NewService(context.Background(), logger, "t", option.SmartDNSPoolServiceOptions{
-		ListenOptions: option.ListenOptions{ListenPort: 19000},
+		ListenPort: 19000,
 		Upstreams: []option.SmartDNSPoolUpstreamOptions{
 			{Type: "udp", Address: "127.0.0.1:53"},
 			{Type: "tcp"},
@@ -61,7 +61,7 @@ func TestH_NewServiceValidation(t *testing.T) {
 	require.ErrorContains(t, err, "upstream #1 missing address")
 
 	_, err = NewService(context.Background(), logger, "t", option.SmartDNSPoolServiceOptions{
-		ListenOptions: option.ListenOptions{ListenPort: 19000},
+		ListenPort: 19000,
 		Upstreams: []option.SmartDNSPoolUpstreamOptions{
 			{Type: "udp", Address: "127.0.0.1:53"},
 			{Type: "quic", Address: "127.0.0.1:853"},
@@ -77,8 +77,8 @@ func TestH_NewServiceListenAddress(t *testing.T) {
 	upstreams := []option.SmartDNSPoolUpstreamOptions{{Address: "127.0.0.1:53"}}
 
 	instance, err := NewService(context.Background(), logger, "pool", option.SmartDNSPoolServiceOptions{
-		ListenOptions: option.ListenOptions{ListenPort: 19876},
-		Upstreams:     upstreams,
+		ListenPort: 19876,
+		Upstreams:  upstreams,
 	})
 	require.NoError(t, err)
 	service := instance.(*Service)
@@ -88,16 +88,16 @@ func TestH_NewServiceListenAddress(t *testing.T) {
 
 	listen := badoption.Addr(netip.MustParseAddr("::1"))
 	instance, err = NewService(context.Background(), logger, "pool", option.SmartDNSPoolServiceOptions{
-		ListenOptions: option.ListenOptions{Listen: &listen, ListenPort: 5353},
-		Upstreams:     upstreams,
+		Listen: &listen, ListenPort: 5353,
+		Upstreams: upstreams,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "[::1]:5353", instance.(*Service).listenAddr)
 
 	listen4 := badoption.Addr(netip.MustParseAddr("0.0.0.0"))
 	instance, err = NewService(context.Background(), logger, "pool", option.SmartDNSPoolServiceOptions{
-		ListenOptions: option.ListenOptions{Listen: &listen4, ListenPort: 53},
-		Upstreams:     upstreams,
+		Listen: &listen4, ListenPort: 53,
+		Upstreams: upstreams,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "0.0.0.0:53", instance.(*Service).listenAddr)
@@ -106,8 +106,8 @@ func TestH_NewServiceListenAddress(t *testing.T) {
 func TestH_ServiceStartOtherStagesAndCloseIdle(t *testing.T) {
 	t.Parallel()
 	instance, err := NewService(context.Background(), log.NewNOPFactory().NewLogger("test"), "pool", option.SmartDNSPoolServiceOptions{
-		ListenOptions: option.ListenOptions{ListenPort: 1},
-		Upstreams:     []option.SmartDNSPoolUpstreamOptions{{Address: "127.0.0.1:53"}},
+		ListenPort: 1,
+		Upstreams:  []option.SmartDNSPoolUpstreamOptions{{Address: "127.0.0.1:53"}},
 	})
 	require.NoError(t, err)
 	service := instance.(*Service)

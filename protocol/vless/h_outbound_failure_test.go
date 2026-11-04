@@ -43,10 +43,10 @@ func hBadServer(t *testing.T) (uint16, <-chan bool) {
 func hNewVLESSOutbound(t *testing.T, port uint16, encryption string, tlsOptions *option.OutboundTLSOptions) *Outbound {
 	t.Helper()
 	outbound, err := NewOutbound(context.Background(), nil, log.NewNOPFactory().Logger(), "vless", option.VLESSOutboundOptions{
-		ServerOptions:               option.ServerOptions{Server: "127.0.0.1", ServerPort: port},
-		UUID:                        "b831381d-6324-4d53-ad4f-8cda48b30811",
-		Encryption:                  encryption,
-		OutboundTLSOptionsContainer: option.OutboundTLSOptionsContainer{TLS: tlsOptions},
+		Server: "127.0.0.1", ServerPort: port,
+		UUID:       "b831381d-6324-4d53-ad4f-8cda48b30811",
+		Encryption: encryption,
+		TLS:        tlsOptions,
 	})
 	require.NoError(t, err)
 	return outbound.(*Outbound)

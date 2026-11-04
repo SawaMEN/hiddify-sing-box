@@ -14,7 +14,7 @@ type ReallyFreeGeoIPProvider struct {
 // NewReallyFreeGeoIPProvider initializes a new ReallyFreeGeoIPProvider.
 func NewReallyFreeGeoIPProvider() *ReallyFreeGeoIPProvider {
 	return &ReallyFreeGeoIPProvider{
-		BaseProvider: BaseProvider{URL: "https://reallyfreegeoip.org/json/"},
+		URL: "https://reallyfreegeoip.org/json/",
 	}
 }
 

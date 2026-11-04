@@ -16,7 +16,7 @@ type CustomIpApiProvider struct {
 // NewCustomIpApiProvider builds a provider for a panel/custom endpoint.
 func NewCustomIpApiProvider(rawURL string) *CustomIpApiProvider {
 	return &CustomIpApiProvider{
-		BaseProvider: BaseProvider{URL: rawURL, UserAgent: "curl/8.7.1"},
+		URL: rawURL, UserAgent: "curl/8.7.1",
 	}
 }
 

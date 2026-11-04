@@ -99,10 +99,8 @@ func TestSmartDNSPool_EndToEnd(t *testing.T) {
 	}
 
 	opts := option.SmartDNSPoolServiceOptions{
-		ListenOptions: option.ListenOptions{
-			Listen:     &listenAddr,
-			ListenPort: port,
-		},
+		Listen:     &listenAddr,
+		ListenPort: port,
 		Upstreams: []option.SmartDNSPoolUpstreamOptions{
 			{Type: "udp", Address: upA},
 			{Type: "udp", Address: upB},
@@ -169,7 +167,7 @@ func TestSmartDNSPool_FailoverWithinDeadline(t *testing.T) {
 	}
 
 	opts := option.SmartDNSPoolServiceOptions{
-		ListenOptions: option.ListenOptions{Listen: &listenAddr, ListenPort: port},
+		Listen: &listenAddr, ListenPort: port,
 		Upstreams: []option.SmartDNSPoolUpstreamOptions{
 			{Type: "udp", Address: dropAddr},
 			{Type: "udp", Address: good},

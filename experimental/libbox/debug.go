@@ -7,7 +7,7 @@ import (
 
 func TriggerGoPanic() {
 	time.AfterFunc(200*time.Millisecond, func() {
-		panic("debug crash requested") //H: explicit crash is compatible with Go vet
+		panic("debug crash requested") // H: explicit crash is compatible with Go vet
 	})
 }
 

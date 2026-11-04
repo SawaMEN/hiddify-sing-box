@@ -190,7 +190,7 @@ func (f *delayedRuntime) WaitReady(int) error {
 
 func TestReadinessTimeoutDoesNotPoisonLaterRequests(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	runtime := &delayedRuntime{fakeRuntime: fakeRuntime{release: make(chan struct{})}}
+	runtime := &delayedRuntime{release: make(chan struct{})}
 	h := &Outbound{runtime: runtime, context: ctx, cancel: cancel}
 	defer h.Close()
 	if _, err := h.ensure(ctx); !errors.Is(err, upstream.ErrReadyTimeout) {

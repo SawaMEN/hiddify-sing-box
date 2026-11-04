@@ -13,7 +13,7 @@ type IpSbProvider struct {
 
 func NewIpSbProvider() *IpSbProvider {
 	return &IpSbProvider{
-		BaseProvider: BaseProvider{URL: "https://api.ip.sb/geoip/"},
+		URL: "https://api.ip.sb/geoip/",
 	}
 }
 

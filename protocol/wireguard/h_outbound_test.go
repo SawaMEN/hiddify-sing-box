@@ -26,9 +26,9 @@ func hKey(t *testing.T) wgtypes.Key {
 
 func hLegacyOptions(t *testing.T) option.LegacyWireGuardOutboundOptions {
 	return option.LegacyWireGuardOutboundOptions{
-		LocalAddress:  badoption.Listable[netip.Prefix]{netip.MustParsePrefix("172.16.0.2/32")},
-		PrivateKey:    hKey(t).String(),
-		ServerOptions: option.ServerOptions{Server: "127.0.0.1", ServerPort: 9},
+		LocalAddress: badoption.Listable[netip.Prefix]{netip.MustParsePrefix("172.16.0.2/32")},
+		PrivateKey:   hKey(t).String(),
+		Server:       "127.0.0.1", ServerPort: 9,
 		PeerPublicKey: hKey(t).PublicKey().String(),
 		Reserved:      []uint8{1, 2, 3},
 		MTU:           1280,
@@ -77,8 +77,8 @@ func TestH_LegacyOutboundOptionValidation(t *testing.T) {
 
 	options = hLegacyOptions(t)
 	options.Peers = []option.LegacyWireGuardPeer{{
-		ServerOptions: option.ServerOptions{Server: "127.0.0.1", ServerPort: 9},
-		PublicKey:     hKey(t).PublicKey().String(),
+		Server: "127.0.0.1", ServerPort: 9,
+		PublicKey: hKey(t).PublicKey().String(),
 	}}
 	_, err = hNewLegacy(t, options)
 	require.ErrorContains(t, err, "missing allowed ips")
@@ -131,15 +131,15 @@ func TestH_LegacyOutboundMultiPeerAllowedIPs(t *testing.T) {
 	options := hLegacyOptions(t)
 	options.Peers = []option.LegacyWireGuardPeer{
 		{
-			ServerOptions: option.ServerOptions{Server: "127.0.0.1", ServerPort: 9},
-			PublicKey:     hKey(t).PublicKey().String(),
-			AllowedIPs:    badoption.Listable[netip.Prefix]{netip.MustParsePrefix("10.0.0.0/8")},
-			Reserved:      []uint8{4, 5, 6},
+			Server: "127.0.0.1", ServerPort: 9,
+			PublicKey:  hKey(t).PublicKey().String(),
+			AllowedIPs: badoption.Listable[netip.Prefix]{netip.MustParsePrefix("10.0.0.0/8")},
+			Reserved:   []uint8{4, 5, 6},
 		},
 		{
-			ServerOptions: option.ServerOptions{Server: "127.0.0.1", ServerPort: 10},
-			PublicKey:     hKey(t).PublicKey().String(),
-			AllowedIPs:    badoption.Listable[netip.Prefix]{netip.MustParsePrefix("fd00::/8")},
+			Server: "127.0.0.1", ServerPort: 10,
+			PublicKey:  hKey(t).PublicKey().String(),
+			AllowedIPs: badoption.Listable[netip.Prefix]{netip.MustParsePrefix("fd00::/8")},
 		},
 	}
 	o, err := hNewLegacy(t, options)

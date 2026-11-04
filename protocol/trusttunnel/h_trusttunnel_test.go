@@ -131,8 +131,8 @@ func TestH_TrustTunnelInboundValidation(t *testing.T) {
 	}{
 		{"udp without tls", option.TrustTunnelInboundOptions{Users: users}, C.ErrTLSRequired.Error()},
 		{"udp with disabled tls", option.TrustTunnelInboundOptions{
-			Users:                      users,
-			InboundTLSOptionsContainer: option.InboundTLSOptionsContainer{TLS: &option.InboundTLSOptions{}},
+			Users: users,
+			TLS:   &option.InboundTLSOptions{},
 		}, C.ErrTLSRequired.Error()},
 		{"no users", option.TrustTunnelInboundOptions{Network: "tcp"}, "missing users"},
 		{"empty username", option.TrustTunnelInboundOptions{Network: "tcp", Users: []auth.User{users[0], {Password: "p"}}}, "missing username or password of user 1"},
@@ -161,7 +161,7 @@ func TestH_TrustTunnelOutboundValidation(t *testing.T) {
 		{"no tls", option.TrustTunnelOutboundOptions{ServerOptions: server, Username: "u", Password: "p"}, C.ErrTLSRequired.Error()},
 		{"tls disabled", option.TrustTunnelOutboundOptions{
 			ServerOptions: server, Username: "u", Password: "p",
-			OutboundTLSOptionsContainer: option.OutboundTLSOptionsContainer{TLS: &option.OutboundTLSOptions{}},
+			TLS: &option.OutboundTLSOptions{},
 		}, C.ErrTLSRequired.Error()},
 		{"no username", option.TrustTunnelOutboundOptions{ServerOptions: server, Password: "p", OutboundTLSOptionsContainer: tlsOn}, "require auth"},
 		{"no password", option.TrustTunnelOutboundOptions{ServerOptions: server, Username: "u", OutboundTLSOptionsContainer: tlsOn}, "require auth"},
@@ -191,16 +191,16 @@ func startTrustTunnelInbound(t *testing.T) *tunnelFixture {
 	f := &tunnelFixture{router: newTestRouter(), port: freeTCPPort(t), cert: certPEM}
 	listen := badoption.Addr(netip.MustParseAddr("127.0.0.1"))
 	in, err := NewInbound(context.Background(), f.router, log.NewNOPFactory().Logger(), "tt-in", option.TrustTunnelInboundOptions{
-		ListenOptions: option.ListenOptions{Listen: &listen, ListenPort: f.port},
-		Network:       "tcp",
-		Users:         []auth.User{{Username: "alice", Password: "secret"}, {Username: "bob", Password: "hunter2"}},
-		InboundTLSOptionsContainer: option.InboundTLSOptionsContainer{TLS: &option.InboundTLSOptions{
+		Listen: &listen, ListenPort: f.port,
+		Network: "tcp",
+		Users:   []auth.User{{Username: "alice", Password: "secret"}, {Username: "bob", Password: "hunter2"}},
+		TLS: &option.InboundTLSOptions{
 			Enabled:     true,
 			ServerName:  testServerName,
 			ALPN:        []string{"h2"},
 			Certificate: []string{certPEM},
 			Key:         []string{keyPEM},
-		}},
+		},
 	})
 	require.NoError(t, err)
 	require.NoError(t, htest.Start(in, adapter.StartStateStart))
@@ -210,14 +210,14 @@ func startTrustTunnelInbound(t *testing.T) *tunnelFixture {
 
 func (f *tunnelFixture) outbound(t *testing.T, user, password string) adapter.Outbound {
 	out, err := NewOutbound(context.Background(), f.router, log.NewNOPFactory().Logger(), "tt-out", option.TrustTunnelOutboundOptions{
-		ServerOptions: option.ServerOptions{Server: "127.0.0.1", ServerPort: f.port},
-		Username:      user,
-		Password:      password,
-		OutboundTLSOptionsContainer: option.OutboundTLSOptionsContainer{TLS: &option.OutboundTLSOptions{
+		Server: "127.0.0.1", ServerPort: f.port,
+		Username: user,
+		Password: password,
+		TLS: &option.OutboundTLSOptions{
 			Enabled:     true,
 			ServerName:  testServerName,
 			Certificate: []string{f.cert},
-		}},
+		},
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { out.(*Outbound).Close() })
