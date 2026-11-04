@@ -31,7 +31,7 @@ type TunnelOptions struct {
 	// NextEndpoint is asked for another endpoint after failed connects; nil keeps the endpoint.
 	NextEndpoint func(failed net.Addr, http2 bool) net.Addr
 	// OnRejected reports a connect the server refused because of the device (IsRejected). //H
-	OnRejected func(err error) //H
+	OnRejected func(err error) // H
 	// ConnectURI is the URI template of the CONNECT-IP request; DefaultConnectURI when empty.
 	ConnectURI string
 }

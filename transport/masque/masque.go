@@ -10,7 +10,6 @@ import (
 	"net/netip"
 	"strings"
 
-	connectip "github.com/Diniboy1123/connect-ip-go"
 	"github.com/sagernet/quic-go"
 	"github.com/sagernet/quic-go/http3"
 	qtls "github.com/sagernet/sing-quic"
@@ -18,6 +17,8 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	aTLS "github.com/sagernet/sing/common/tls"
+
+	connectip "github.com/Diniboy1123/connect-ip-go"
 	"github.com/yosida95/uritemplate/v3"
 	"golang.org/x/net/http2"
 )
@@ -61,15 +62,14 @@ func ConnectTunnel(ctx context.Context, dialer N.Dialer, tlsConfig aTLS.Config, 
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	udpConn = WholePacketConn(udpConn) //H: a full QUIC packet was cut off through Shadowsocks
+	udpConn = WholePacketConn(udpConn) // H: a full QUIC packet was cut off through Shadowsocks
 	conn, err := qtls.Dial(
 		ctx,
 		bufio.NewBindPacketConn(udpConn, quicEndpoint),
 		tlsConfig,
 		quicConfig,
 	)
-	var rejection *tls.ECHRejectionError //H: as in newHTTP2Client, once without ECH when the peer rejects it
-	if errors.As(err, &rejection) {
+	if _, ok := errors.AsType[*tls.ECHRejectionError](err); ok {
 		if capable, ok := tlsConfig.(interface{ SetECHConfigList([]byte) }); ok {
 			capable.SetECHConfigList(nil)
 		}
@@ -148,8 +148,7 @@ func newHTTP2Client(dialer N.Dialer, baseTLSConfig aTLS.Config, endpoint *net.TC
 		Transport: &http2.Transport{
 			DialTLSContext: func(ctx context.Context, network, _ string, _ *tls.Config) (net.Conn, error) {
 				conn, err := dialTLS(ctx)
-				var rejection *tls.ECHRejectionError
-				if errors.As(err, &rejection) {
+				if _, ok := errors.AsType[*tls.ECHRejectionError](err); ok {
 					// The peer does not accept the offered ECH config (WARP does not). Drop it and
 					// retry once rather than failing the tunnel. //H
 					if capable, ok := tlsConfig.(interface{ SetECHConfigList([]byte) }); ok {

@@ -3,10 +3,10 @@ package hinvalid
 import (
 	"context"
 	"errors"
-	"github.com/sagernet/sing-box/adapter"
 	"syscall"
 	"testing"
 
+	"github.com/sagernet/sing-box/adapter"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"

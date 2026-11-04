@@ -54,20 +54,20 @@ const (
 	TypeTunnelClient       = "tunnel_client"
 	TypeTunnelServer       = "tunnel_server"
 
-	TypeHInvalidConfig = "hinvalid"       //H
-	TypeXray           = "xray"           //H
-	TypeCustom         = "custom"         //H
-	TypeAwg            = "awg"            //H
-	TypeBalancer       = "balancer"       //H
-	TypeFallback       = "fallback"       //H
-	TypeSudoku         = "sudoku"         //H
-	TypeBond           = "bond"           //H
-	TypeCall           = "call"           //H
-	TypeDNSTT          = "dnstt"          //H
-	TypeGooseRelay     = "gooserelay"     //H
-	TypeMasterDNS      = "masterdns"      //H
-	TypeSoar           = "soar"           //H
-	TypeSmartDNSPool   = "smart_dns_pool" //H: legacy service
+	TypeHInvalidConfig = "hinvalid"       // H
+	TypeXray           = "xray"           // H
+	TypeCustom         = "custom"         // H
+	TypeAwg            = "awg"            // H
+	TypeBalancer       = "balancer"       // H
+	TypeFallback       = "fallback"       // H
+	TypeSudoku         = "sudoku"         // H
+	TypeBond           = "bond"           // H
+	TypeCall           = "call"           // H
+	TypeDNSTT          = "dnstt"          // H
+	TypeGooseRelay     = "gooserelay"     // H
+	TypeMasterDNS      = "masterdns"      // H
+	TypeSoar           = "soar"           // H
+	TypeSmartDNSPool   = "smart_dns_pool" // H: legacy service
 	TypeTrustTunnel    = "trusttunnel"
 	TypeOlcRTC         = "olcrtc"
 	TypeVetrOFF        = "vetroff"
@@ -183,10 +183,10 @@ func ProxyDisplayName(proxyType string) string {
 		return "DNSTT"
 	case TypeGooseRelay:
 		return "GooseRelay"
-	case TypeMasterDNS: //H
-		return "MasterDNS" //H
-	case TypeSoar: //H
-		return "Soar" //H
+	case TypeMasterDNS: // H
+		return "MasterDNS" // H
+	case TypeSoar: // H
+		return "Soar" // H
 	case TypeTrustTunnel:
 		return "TrustTunnel"
 	case TypeOlcRTC:

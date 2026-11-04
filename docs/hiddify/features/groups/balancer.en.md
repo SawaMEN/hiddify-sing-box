@@ -136,6 +136,7 @@ stops answering; during a regular cycle, until it stops answering.
 | `ttl` | duration | `0` (no expiry) | For `sticky-sessions`: how long a pair keeps its member. |
 | `interrupt_exist_connections` | bool | `false` | When a member dies, or at the one move after start, also close the connections that came in from inbounds. Without it, only connections opened inside sing-box are closed. |
 | `tolerance` | int | `50` | For `lowest-delay`: how much faster, in milliseconds, another member must be to take the selection. |
+| `pool_tolerance` | int | `0` | Legacy alias for pool tolerance when `tolerance` is unset. |
 | `tolerance_ratio` | number | `0.1` | For `lowest-delay`: how much faster, as a share of the selected member's delay, another member must be to take the selection. The larger of the two tolerances applies. |
 
 ## See also

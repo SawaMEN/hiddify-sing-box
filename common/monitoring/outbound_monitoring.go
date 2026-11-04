@@ -157,7 +157,7 @@ func (m *OutboundMonitoring) retestAll() {
 		state.mu.Unlock()
 	}
 	m.Touch()
-	m.periodicCycle.Store(false) //H: the results are of the old network; the groups take the new ones at once
+	m.periodicCycle.Store(false) // H: the results are of the old network; the groups take the new ones at once
 	if !m.startCycleOnce() {
 		// a cycle is running: its results may predate the change, so it runs once more
 		m.cycleAgain.Store(true)
@@ -467,12 +467,13 @@ func (m *OutboundMonitoring) signalChange(outboundTag string, visited map[string
 
 func (m *OutboundMonitoring) TestNow(outboundTag string) error {
 	m.testParents(outboundTag, true)
-	return m.testNow(outboundTag, true, "asked for by the app") //H
+	return m.testNow(outboundTag, true, "asked for by the app") // H
 }
-func (m *OutboundMonitoring) testNow(outboundTag string, priority bool, reason string) error { //H: reason
+
+func (m *OutboundMonitoring) testNow(outboundTag string, priority bool, reason string) error { // H: reason
 	if grp, ok := m.reg().groups[outboundTag]; ok {
 		for tag := range grp.outbounds {
-			m.testNow(tag, false, "member of "+outboundTag+", "+reason) //H
+			m.testNow(tag, false, "member of "+outboundTag+", "+reason) // H
 		}
 	} else {
 		state := m.getState(outboundTag)
@@ -484,12 +485,12 @@ func (m *OutboundMonitoring) testNow(outboundTag string, priority bool, reason s
 			outboundTag: outboundTag,
 			cycleID:     m.cycleSeq.Load(),
 			priority:    priority,
-			staged:      priority, //H
-			reason:      reason,   //H
+			staged:      priority, // H
+			reason:      reason,   // H
 		}
 
 		if !m.enqueueTask(task) {
-			m.logger.Info("MONITORING ", outboundTag, ": not tested again (", reason, "): a test of it is queued or running, or it is unknown") //H
+			m.logger.Info("MONITORING ", outboundTag, ": not tested again (", reason, "): a test of it is queued or running, or it is unknown") // H
 		}
 	}
 	return nil
@@ -501,7 +502,7 @@ func (m *OutboundMonitoring) testParents(outboundTag string, first bool) {
 		return
 	}
 	if _, ok := m.reg().groups[outboundTag]; !ok && !first {
-		m.testNow(outboundTag, true, "goes through what changed") //H
+		m.testNow(outboundTag, true, "goes through what changed") // H
 	}
 	for _, dep := range state.dependenciesInverse {
 		m.testParents(dep, false)
@@ -522,7 +523,7 @@ func (m *OutboundMonitoring) InvalidateTest(outboundTag string) error {
 		outboundTag: outboundTag,
 		cycleID:     m.cycleSeq.Load(),
 		priority:    true,
-		reason:      "a connection through it failed", //H
+		reason:      "a connection through it failed", // H
 	})
 
 	return nil
@@ -585,7 +586,7 @@ func (m *OutboundMonitoring) scheduleLoop(ticker *time.Ticker) {
 				m.stopTimerWorkers()
 				return
 			}
-			m.startCycle(true) //H: a regular cycle, during which the groups hold
+			m.startCycle(true) // H: a regular cycle, during which the groups hold
 
 		}
 	}
@@ -618,7 +619,7 @@ func (m *OutboundMonitoring) executeTask(task *testTask) {
 	}
 
 	state.mu.Lock()
-	if state.testing { //H: a test of it runs: its result is this one's, see joinRunningTest
+	if state.testing { // H: a test of it runs: its result is this one's, see joinRunningTest
 		state.mu.Unlock()
 		if task.priority {
 			m.joinRunningTest(task, state)
@@ -628,14 +629,10 @@ func (m *OutboundMonitoring) executeTask(task *testTask) {
 		return
 	}
 	state.testing = true
-	state.testDone = make(chan struct{}) //H
+	task.testDone = make(chan struct{}) // H: this execution owns its completion signal
+	state.testDone = task.testDone      // H
 	state.mu.Unlock()
-	defer func() {
-		state.mu.Lock()
-		state.testing = false
-		close(state.testDone) //H
-		state.mu.Unlock()
-	}()
+	defer m.finishRunningTest(state, task.testDone)                                                        // H
 	if task.waits < dependencyWaits && (!adapter.IsReady(state.outbound) || !m.dependenciesReady(state)) { // H
 		reason := "not ready"
 		if adapter.IsReady(state.outbound) {
@@ -661,14 +658,14 @@ func (m *OutboundMonitoring) executeTask(task *testTask) {
 	go func() {
 		defer close(done)
 		state.mu.Lock()
-		worked := state.workedLocked()                                 //H
-		known, knownFromCache := state.history.Delay, state.from_cache //H
+		worked := state.workedLocked()                                 // H
+		known, knownFromCache := state.history.Delay, state.from_cache // H
 		state.mu.Unlock()
-		m.logger.Info("MONITORING test ", task.outboundTag, ": ", task.reason, testKind(task, known, knownFromCache))       //H
-		interim := func(history adapter.URLTestHistory, tentative bool) { m.applyInterim(task, state, history, tentative) } //H
+		m.logger.Info("MONITORING test ", task.outboundTag, ": ", task.reason, testKind(task, known, knownFromCache))       // H
+		interim := func(history adapter.URLTestHistory, tentative bool) { m.applyInterim(task, state, history, tentative) } // H
 		networkSeq := m.networkSeq.Load()
 		delay, err := m.tester(m.ctx, task.outboundTag, interim, task.staged, worked)
-		for err != nil && m.networkSeq.Load() != networkSeq { //H: a network reset broke the test
+		for err != nil && m.networkSeq.Load() != networkSeq { // H: a network reset broke the test
 			m.logger.Info("outbound ", task.outboundTag, " test broken by a network reset, testing again")
 			networkSeq = m.networkSeq.Load()
 			select {
@@ -708,7 +705,7 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string, interim 
 		delay uint16
 		err   error
 	)
-	if staged { //H
+	if staged { // H
 		delay, err = m.stagedURLTest(parent, m.urls[idx], out.outbound, interim, worked)
 	} else {
 		ctx, cancel := context.WithTimeout(parent, m.urlTestTimeout)
@@ -722,7 +719,7 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string, interim 
 	}
 	if err != nil || delay >= TimeoutDelay {
 		his.Delay = TimeoutDelay
-		m.logger.Warn("MONITORING result ", tag, ": failed: ", err) //H
+		m.logger.Warn("MONITORING result ", tag, ": failed: ", err) // H
 		return his, err
 	}
 	select {
@@ -757,25 +754,25 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string, interim 
 		}
 	}
 	if his.IpInfo != nil {
-		m.logger.Info("MONITORING result ", tag, ": ", his.Delay, " ms, IP ", fmt.Sprint(his.IpInfo)) //H
+		m.logger.Info("MONITORING result ", tag, ": ", his.Delay, " ms, IP ", fmt.Sprint(his.IpInfo)) // H
 	} else {
-		m.logger.Info("MONITORING result ", tag, ": ", his.Delay, " ms, IP unknown") //H
+		m.logger.Info("MONITORING result ", tag, ": ", his.Delay, " ms, IP unknown") // H
 	}
 	return his, nil
 }
 
 func (m *OutboundMonitoring) startCycleOnce() bool {
-	return m.startCycle(false) //H
+	return m.startCycle(false) // H
 }
 
-func (m *OutboundMonitoring) startCycle(periodic bool) bool { //H
+func (m *OutboundMonitoring) startCycle(periodic bool) bool { // H
 	if !m.cycleRunning.CompareAndSwap(false, true) {
 		return false
 	}
-	m.periodicCycle.Store(periodic)  //H
-	m.cycleStarted.Store(time.Now()) //H
+	m.periodicCycle.Store(periodic)  // H
+	m.cycleStarted.Store(time.Now()) // H
 	go func() {
-		defer m.endCycle() //H: tells the groups, which held their selection during it
+		defer m.endCycle() // H: tells the groups, which held their selection during it
 		m.logger.Info("starting regular outbound monitoring cycle")
 		m.runCycle()
 		for m.cycleAgain.Swap(false) { // periodicCycle is already false: retestAll cleared it
@@ -789,8 +786,8 @@ func (m *OutboundMonitoring) startCycle(periodic bool) bool { //H
 func (m *OutboundMonitoring) runCycle() {
 	cycleID := m.cycleSeq.Add(1)
 	tags := m.collectCycleTargets()
-	m.logger.Info("MONITORING cycle ", cycleID, " starts: ", len(tags), " outbounds due (periodic: ", m.periodicCycle.Load(), ")") //H
-	defer m.logger.Info("MONITORING cycle ", cycleID, " ends")                                                                     //H
+	m.logger.Info("MONITORING cycle ", cycleID, " starts: ", len(tags), " outbounds due (periodic: ", m.periodicCycle.Load(), ")") // H
+	defer m.logger.Info("MONITORING cycle ", cycleID, " ends")                                                                     // H
 
 	if len(tags) == 0 {
 		return
@@ -820,7 +817,7 @@ func (m *OutboundMonitoring) runStage(cycleID uint64, tags []string) []testOutco
 	resultCh := make(chan testOutcome, len(tags))
 
 	expected := 0
-	reason := fmt.Sprint("cycle ", cycleID) //H
+	reason := fmt.Sprint("cycle ", cycleID) // H
 	for _, tag := range tags {
 		state := m.getState(tag)
 		if state == nil {
@@ -832,7 +829,7 @@ func (m *OutboundMonitoring) runStage(cycleID uint64, tags []string) []testOutco
 			cycleID:     cycleID,
 			priority:    false,
 			resultCh:    resultCh,
-			reason:      reason, //H
+			reason:      reason, // H
 		}
 		if m.enqueueTask(task) {
 			expected++
@@ -919,7 +916,7 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 	}
 	state.history.Delay = outcome.history.Delay
 	state.history.Time = outcome.history.Time
-	state.history.Error = testError(outcome.err) //H
+	state.history.Error = testError(outcome.err) // H
 	state.from_cache = false
 	state.tentative = false // H
 	if outcome.history.IpInfo != nil {
@@ -1123,9 +1120,9 @@ func (m *OutboundMonitoring) retestDependents(tag string, visited map[string]boo
 	visited[tag] = true
 	for _, dependent := range state.dependenciesInverse {
 		if _, isGroup := m.reg().groups[dependent]; isGroup {
-			if m.groupUses(dependent, tag) { //H: what goes through the group was measured through tag only if it uses tag
+			if m.groupUses(dependent, tag) { // H: what goes through the group was measured through tag only if it uses tag
 				m.retestDependents(dependent, visited)
-			} //H
+			} // H
 			continue
 		}
 		dependentState := m.getState(dependent)
@@ -1136,7 +1133,7 @@ func (m *OutboundMonitoring) retestDependents(tag string, visited map[string]boo
 		tested := !dependentState.from_cache && dependentState.history.Delay != 0
 		dependentState.mu.Unlock()
 		if tested {
-			m.testNow(dependent, true, "measured through "+tag+", which works again") //H
+			m.testNow(dependent, true, "measured through "+tag+", which works again") // H
 		}
 	}
 }
@@ -1194,8 +1191,9 @@ func (m *OutboundMonitoring) getState(tag string) *outboundState {
 }
 
 type testTask struct {
-	settled     atomic.Bool // H: its result is in, or it was given up on; the other of the two is dropped
-	staged      bool        // H: asked for by a tap or a selection: tested in stages, see stagedURLTest
+	testDone    chan struct{} // H: completion belongs to this task, not a later execution
+	settled     atomic.Bool   // H: its result is in, or it was given up on; the other of the two is dropped
+	staged      bool          // H: asked for by a tap or a selection: tested in stages, see stagedURLTest
 	outboundTag string
 	cycleID     uint64
 	priority    bool

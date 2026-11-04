@@ -11,14 +11,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getlantern/soar"
-	"github.com/miekg/dns"
 	"github.com/sagernet/sing-box/adapter"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+
+	"github.com/getlantern/soar"
+	"github.com/miekg/dns"
 	"github.com/stretchr/testify/require"
 )
 

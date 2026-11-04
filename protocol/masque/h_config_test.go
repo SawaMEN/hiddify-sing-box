@@ -11,12 +11,12 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
-	"github.com/sagernet/sing-box/adapter/htest"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/adapter/htest"
 	"github.com/sagernet/sing-box/adapter/outbound"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
@@ -24,6 +24,7 @@ import (
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+
 	"github.com/stretchr/testify/require"
 )
 

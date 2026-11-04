@@ -11,8 +11,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/getlantern/soar"
 	"github.com/sagernet/sing-box/option"
+
+	"github.com/getlantern/soar"
 )
 
 //go:embed resolvers_by_country.json

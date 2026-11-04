@@ -2,18 +2,17 @@ package balancer
 
 import (
 	"sync"
-	"time" //H
+	"time" // H
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/monitoring"
-	"github.com/sagernet/sing-box/log" //H
+	"github.com/sagernet/sing-box/log" // H
 	"github.com/sagernet/sing-box/option"
 	N "github.com/sagernet/sing/common/network"
 )
 
 type LowestDelay struct {
 	outbounds        map[string][]adapter.Outbound
-	udpOutbounds     []adapter.Outbound
 	selectedOutbound map[string]adapter.Outbound
 	tolerance        uint16            // a member takes the selection when faster by more than this ...
 	toleranceRatio   float64           // ... and than this share of the selected member's delay
@@ -45,7 +44,7 @@ func NewLowestDelay(outbounds []adapter.Outbound, options option.BalancerOutboun
 		},
 		tolerance:      tolerance,
 		toleranceRatio: ratio,
-		stay:           minStay, //H
+		stay:           minStay, // H
 	}
 }
 
@@ -77,33 +76,34 @@ func (s *LowestDelay) UpdateOutboundsInfo(history map[string]*adapter.URLTestHis
 		if best == nil || best.Tag() == current.Tag() || delays[net] >= monitoring.TimeoutDelay {
 			continue
 		}
-		currentHis, bestHis := history[current.Tag()], history[best.Tag()]                 //H
-		currentMeasured, bestMeasured := measuredDelay(currentHis), measuredDelay(bestHis) //H
-		threshold := SelectedThreshold(currentHis, s.tolerance, s.toleranceRatio)          //H: none for a cached pick
-		if answers(currentHis) {                                                           //H: its real ping answers: only a real ping, faster by the tolerance, after the stay
-			if !answers(bestHis) { //H
-				s.logKeep(net, current, best, history, "a cached ping does not take a real one") //H
-				continue                                                                         //H
-			} //H
-			if since := time.Since(s.switchedAt); !s.switchedAt.IsZero() && since < s.stay { //H
-				s.logKeep(net, current, best, history, "chosen ", since.Round(time.Second), " ago, stays ", s.stay) //H
-				continue                                                                                            //H
-			} //H
-			if uint32(bestMeasured)+threshold >= uint32(currentMeasured) { //H
-				s.logKeep(net, current, best, history, "not faster by more than ", threshold, " ms") //H
+		currentHis, bestHis := history[current.Tag()], history[best.Tag()]                 // H
+		currentMeasured, bestMeasured := measuredDelay(currentHis), measuredDelay(bestHis) // H
+		threshold := SelectedThreshold(currentHis, s.tolerance, s.toleranceRatio)          // H: none for a cached pick
+		if answers(currentHis) {                                                           // H: its real ping answers: only a real ping, faster by the tolerance, after the stay
+			if !answers(bestHis) { // H
+				s.logKeep(net, current, best, history, "a cached ping does not take a real one") // H
+				continue                                                                         // H
+			} // H
+			if since := time.Since(s.switchedAt); !s.switchedAt.IsZero() && since < s.stay { // H
+				s.logKeep(net, current, best, history, "chosen ", since.Round(time.Second), " ago, stays ", s.stay) // H
+				continue                                                                                            // H
+			} // H
+			if uint32(bestMeasured)+threshold >= uint32(currentMeasured) { // H
+				s.logKeep(net, current, best, history, "not faster by more than ", threshold, " ms") // H
 				continue
 			}
-		} //H
-		s.logSwitch(net, current, best, history, currentMeasured, bestMeasured, threshold) //H
+		} // H
+		s.logSwitch(net, current, best, history, currentMeasured, bestMeasured, threshold) // H
 		s.selectedOutbound[net] = best
-		if answers(bestHis) && net == N.NetworkTCP { //H: a real ping: it stays a while
-			s.switchedAt = time.Now() //H
-		} //H
+		if answers(bestHis) && net == N.NetworkTCP { // H: a real ping: it stays a while
+			s.switchedAt = time.Now() // H
+		} // H
 		changed = true
 	}
 	s.mu.Unlock()
 	return changed
 }
+
 func (s *LowestDelay) Select(metadata adapter.InboundContext, net string, touch bool) adapter.Outbound {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -111,5 +111,4 @@ func (s *LowestDelay) Select(metadata adapter.InboundContext, net string, touch 
 		net = N.NetworkTCP
 	}
 	return s.selectedOutbound[net]
-
 }

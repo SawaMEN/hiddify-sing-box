@@ -102,7 +102,7 @@ func (s *Balancer) update(history map[string]*adapter.URLTestHistory) {
 		s.dead[tag] = dead
 	}
 	if changed && s.monitor != nil && signalsSelection(s.Strategy()) {
-		s.monitor.SignalChange(s.Tag()) //H: what follows the group learns the new member at once
+		s.monitor.SignalChange(s.Tag()) // H: what follows the group learns the new member at once
 	}
 }
 

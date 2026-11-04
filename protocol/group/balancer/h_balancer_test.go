@@ -10,9 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sagernet/sing-box/adapter/htest"
-
 	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/adapter/htest"
 	"github.com/sagernet/sing-box/common/monitoring"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"

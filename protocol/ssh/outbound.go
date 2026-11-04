@@ -463,12 +463,12 @@ func (s *Outbound) IsReady() bool {
 }
 
 // StatusError is why the last connection to the server failed, while it is not ready. //H
-func (s *Outbound) StatusError() error { //H
-	if connectionErr := s.connectionErr.Load(); connectionErr != "" && !s.ready.Load() { //H
-		return E.New(connectionErr) //H
-	} //H
-	return nil //H
-} //H
+func (s *Outbound) StatusError() error { // H
+	if connectionErr := s.connectionErr.Load(); connectionErr != "" && !s.ready.Load() { // H
+		return E.New(connectionErr) // H
+	} // H
+	return nil // H
+} // H
 
 func (s *Outbound) Status() adapter.Status { return s.tracker.Status(s.ready.Load()) }
 

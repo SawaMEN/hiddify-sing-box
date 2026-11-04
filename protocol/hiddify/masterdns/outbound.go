@@ -17,8 +17,6 @@ import (
 	"syscall"
 	"time"
 
-	mdns "masterdnsvpn-go/lib"
-
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
 	"github.com/sagernet/sing-box/common/dialer"
@@ -33,6 +31,8 @@ import (
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/common/uot"
 	"github.com/sagernet/sing/service"
+
+	mdns "masterdnsvpn-go/lib"
 )
 
 const (

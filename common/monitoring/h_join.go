@@ -34,3 +34,17 @@ func (m *OutboundMonitoring) joinRunningTest(task *testTask, state *outboundStat
 	}
 	m.handResult(task, testOutcome{outboundTag: task.outboundTag, history: history, err: err, cycleID: task.cycleID, priority: task.priority})
 }
+
+// finishRunningTest publishes completion before a stage consumes its result. Otherwise the
+// next URL stage can join the already settled test and reuse the previous URL's failure.
+func (m *OutboundMonitoring) finishRunningTest(state *outboundState, done chan struct{}) {
+	if done == nil {
+		return
+	}
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if state.testDone == done && state.testing {
+		state.testing = false
+		close(done)
+	}
+}

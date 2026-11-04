@@ -23,7 +23,7 @@ func createWARPWireGuardEndpoint(
 	peerPort uint16,
 	peerPublicKey string,
 ) (adapter.Endpoint, error) {
-	addresses, err := warpInterfaceAddressPair(config.Interface.Addresses.V4, config.Interface.Addresses.V6)
+	addresses, err := warpInterfaceAddresses(config)
 	if err != nil {
 		return nil, err
 	}
@@ -40,9 +40,10 @@ func createWARPWireGuardEndpoint(
 		PrivateKey:    config.PrivateKey,
 		Peers: []option.WireGuardPeer{
 			{
-				Address:   peerAddr,
-				Port:      peerPort,
-				PublicKey: peerPublicKey,
+				Address:                     peerAddr,
+				Port:                        peerPort,
+				PublicKey:                   peerPublicKey,
+				PersistentKeepaliveInterval: warpKeepalive, // H
 				AllowedIPs: badoption.Listable[netip.Prefix]{
 					netip.MustParsePrefix("0.0.0.0/0"),
 					netip.MustParsePrefix("::/0"),

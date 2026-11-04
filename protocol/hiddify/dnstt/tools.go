@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	dnstt "github.com/net2share/vaydns/client"
 	"github.com/sagernet/sing-box/common/dnspool"
 	"github.com/sagernet/sing-box/option"
+
+	dnstt "github.com/net2share/vaydns/client"
 )
 
 type ResolverS struct {
@@ -29,6 +30,7 @@ func getConfigResolvers(options option.DnsttOptions) ([]ResolverS, error) {
 	}
 	return resolvers, nil
 }
+
 func getResolver(options option.DnsttOptions, s string) (dnstt.Resolver, error) {
 	var resolver dnstt.Resolver
 	var err error

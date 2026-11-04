@@ -1,9 +1,10 @@
 package http
 
 import (
- "io"
- "github.com/sagernet/sing/common"
- "github.com/sagernet/sing/common/buf"
+	"io"
+
+	"github.com/sagernet/sing/common"
+	"github.com/sagernet/sing/common/buf"
 )
 
 func WriteDatagramCapsules(writer io.Writer, datagrams []*buf.Buffer) error {

@@ -17,8 +17,8 @@ import (
 	N "github.com/sagernet/sing/common/network"
 )
 
-// masqueIncluded tells auto mode that MASQUE is in the build.
-const masqueIncluded = true
+// included reports the capability of the state compiled into this endpoint.
+func (*masqueLinkState) included() bool { return true }
 
 // connectMASQUE runs a MASQUE tunnel to WARP with the device of profile as the inner endpoint.
 // The tunnel looks up endpoints with the scanner and reconnects by itself.

@@ -62,6 +62,7 @@ func (m *OutboundMonitoring) settle(task *testTask, state *outboundState, histor
 	if err == nil && !worked { // it works now; what was measured through it did not
 		m.retestDependents(task.outboundTag, make(map[string]bool))
 	}
+	m.finishRunningTest(state, task.testDone) // H: the next stage must start a fresh test
 	m.handResult(task, outcome)
 }
 
@@ -101,7 +102,7 @@ func (m *OutboundMonitoring) applyInterim(task *testTask, state *outboundState, 
 	state.from_cache = false
 	state.tentative = tentative
 	if !tentative {
-		snapshot := state.history //H: storage readers own an immutable snapshot
+		snapshot := state.history // H: storage readers own an immutable snapshot
 		m.history.StoreURLTestHistory(task.outboundTag, &snapshot)
 	}
 	groupTags := state.groupTags

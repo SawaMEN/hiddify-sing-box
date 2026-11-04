@@ -9,11 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sagernet/sing/common"
-
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/monitoring"
 	"github.com/sagernet/sing-box/option"
+	"github.com/sagernet/sing/common"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 
@@ -40,6 +39,7 @@ func (f *fakeOutbound) Tag() string            { return f.tag }
 func (f *fakeOutbound) Network() []string      { return f.network }
 func (f *fakeOutbound) Dependencies() []string { return nil }
 func (f *fakeOutbound) Status() adapter.Status { return adapter.StatusReady }
+func (f *fakeOutbound) IsReady() bool          { return true }
 
 func (f *fakeOutbound) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
 	f.dialed.Add(1)
@@ -92,7 +92,7 @@ func TestH_BalancerGetKey(t *testing.T) {
 }
 
 func TestH_BalancerJumpHash(t *testing.T) {
-	for key := uint64(0); key < 1000; key++ {
+	for key := range uint64(1000) {
 		require.Equal(t, int32(0), jumpHash(key, 1))
 		v := jumpHash(key, 7)
 		require.GreaterOrEqual(t, v, int32(0))
@@ -100,7 +100,7 @@ func TestH_BalancerJumpHash(t *testing.T) {
 		require.Equal(t, v, jumpHash(key, 7))
 	}
 	seen := map[int32]bool{}
-	for key := uint64(0); key < 1000; key++ {
+	for key := range uint64(1000) {
 		seen[jumpHash(key*0x9E3779B97F4A7C15, 4)] = true
 	}
 	require.Len(t, seen, 4)

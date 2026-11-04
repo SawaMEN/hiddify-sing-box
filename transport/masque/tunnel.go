@@ -10,11 +10,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	connectip "github.com/Diniboy1123/connect-ip-go"
 	"github.com/sagernet/quic-go/http3"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
+
+	connectip "github.com/Diniboy1123/connect-ip-go"
 )
 
 type TunnelDevice interface {
@@ -54,18 +55,18 @@ func (e *Tunnel) IsConnected() bool {
 }
 
 func NewTunnel(ctx context.Context, logger logger.ContextLogger, options TunnelOptions) (*Tunnel, error) {
-	if options.MTU == 0 { //H
-		options.MTU = DefaultMTU //H
-	} //H
-	if options.MTU < DefaultMTU || options.MTU > 9000 { //H
-		return nil, E.New("MASQUE mtu must be between ", DefaultMTU, " and 9000") //H
-	} //H
+	if options.MTU == 0 { // H
+		options.MTU = DefaultMTU // H
+	} // H
+	if options.MTU < DefaultMTU || options.MTU > 9000 { // H
+		return nil, E.New("MASQUE mtu must be between ", DefaultMTU, " and 9000") // H
+	} // H
 	deviceOptions := DeviceOptions{
 		Context:    ctx,
 		Logger:     logger,
 		Handler:    options.Handler,
 		UDPTimeout: options.UDPTimeout,
-		MTU:        options.MTU, //H
+		MTU:        options.MTU, // H
 		Address:    options.Address,
 	}
 	tunDevice, err := NewDevice(deviceOptions)
@@ -129,7 +130,7 @@ func (e *Tunnel) Close() error {
 
 func (e *Tunnel) maintainTunnel() {
 	go func() {
-		buf := make([]byte, e.options.MTU) //H: a packet as large as the MTU, not cut at 1280
+		buf := make([]byte, e.options.MTU) // H: a packet as large as the MTU, not cut at 1280
 		for e.ctx.Err() == nil {
 			n, err := e.tunnelDevice.ReadPacket(buf)
 			if err != nil {
@@ -152,7 +153,7 @@ func (e *Tunnel) maintainTunnel() {
 					}
 					continue
 				}
-				e.logger.ErrorContext(e.ctx, fmt.Errorf("Error writing to IP connection: %v, continuing...", err))
+				e.logger.ErrorContext(e.ctx, fmt.Errorf("write to IP connection: %v", err))
 				continue
 			}
 			if len(icmp) > 0 {
@@ -161,13 +162,13 @@ func (e *Tunnel) maintainTunnel() {
 						e.logger.ErrorContext(e.ctx, fmt.Errorf("connection closed while writing ICMP to TUN device: %v", err))
 						continue
 					}
-					e.logger.ErrorContext(e.ctx, fmt.Errorf("Error writing ICMP to TUN device: %v, continuing...", err))
+					e.logger.ErrorContext(e.ctx, fmt.Errorf("write ICMP to TUN device: %v", err))
 				}
 			}
 		}
 	}()
 	go func() {
-		buf := make([]byte, e.options.MTU) //H: a packet as large as the MTU, not cut at 1280
+		buf := make([]byte, e.options.MTU) // H: a packet as large as the MTU, not cut at 1280
 		for e.ctx.Err() == nil {
 			ipConn, err := e.getIpConn()
 			if err != nil {
@@ -181,7 +182,7 @@ func (e *Tunnel) maintainTunnel() {
 					}
 					continue
 				}
-				e.logger.ErrorContext(e.ctx, fmt.Errorf("Error reading from IP connection: %v, continuine...", err))
+				e.logger.ErrorContext(e.ctx, fmt.Errorf("read from IP connection: %v", err))
 				continue
 			}
 			if err := e.tunnelDevice.WritePacket(buf[:n]); err != nil {
@@ -210,8 +211,8 @@ func (e *Tunnel) getIpConn() (*connectip.Conn, error) {
 			e.tr = conn.tr
 			e.ipConn = conn.ipConn
 			e.activeHTTP2.Store(conn.http2)
-			e.connected.Store(true) //H
-			e.lastError.Store(nil)  //H
+			e.connected.Store(true) // H
+			e.lastError.Store(nil)  // H
 			e.logger.InfoContext(e.ctx, "connected to MASQUE server over ", map[bool]string{true: "HTTP/2", false: "HTTP/3"}[conn.http2])
 			return conn.ipConn, nil
 		}
@@ -219,7 +220,7 @@ func (e *Tunnel) getIpConn() (*connectip.Conn, error) {
 			return nil, e.ctx.Err()
 		}
 		e.logger.ErrorContext(e.ctx, E.Cause(err, "connect MASQUE tunnel"))
-		e.lastError.Store(&err) //H
+		e.lastError.Store(&err) // H
 		timer.Reset(e.options.ReconnectDelay)
 		select {
 		case <-e.ctx.Done():
@@ -233,7 +234,7 @@ func (e *Tunnel) closeIpConn(ipConn *connectip.Conn) bool {
 	e.mtx.Lock()
 	defer e.mtx.Unlock()
 	if ipConn == e.ipConn {
-		e.connected.Store(false) //H
+		e.connected.Store(false) // H
 		e.ipConn.Close()
 		if e.udpConn != nil {
 			e.udpConn.Close()

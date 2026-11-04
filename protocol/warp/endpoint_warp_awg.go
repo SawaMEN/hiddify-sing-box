@@ -25,7 +25,7 @@ func createWARPAwgEndpoint(
 	peerPort uint16,
 	peerPublicKey string,
 ) (adapter.Endpoint, error) {
-	addresses, err := warpInterfaceAddressPair(config.Interface.Addresses.V4, config.Interface.Addresses.V6)
+	addresses, err := warpInterfaceAddresses(config)
 	if err != nil {
 		return nil, err
 	}
@@ -41,6 +41,7 @@ func createWARPAwgEndpoint(
 				Address:   peerAddr,
 				Port:      peerPort,
 				PublicKey: peerPublicKey,
+ PersistentKeepaliveInterval: warpKeepalive, //H
 				AllowedIPs: badoption.Listable[netip.Prefix]{
 					netip.MustParsePrefix("0.0.0.0/0"),
 					netip.MustParsePrefix("::/0"),

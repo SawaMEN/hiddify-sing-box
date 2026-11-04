@@ -59,17 +59,17 @@ type WARPEndpoint struct {
 	registering   atomic.Bool           // H: a device is being registered
 	failedModes   sync.Map              // H: auto mode: the tunnels that did not connect
 
-	mode          string        // H: the tunnel, see h_mode.go
-	active        atomic.Value  // H: in auto mode, the tunnel chosen
-	selecting     atomic.Bool   // H: auto mode races the tunnels
-	profiles      *warpProfiles // H: the devices, see h_profiles.go
-	profile       *warpProfile  // H: the device in use, guarded by mtx
-	recreated     sync.Map      // H: kinds registered anew for profile.recreate
-	sessionAccess sync.Mutex    // H
-	current       *warpSession  // H: the current start
-	candidate     bool          // H: a new tunnel next to the one in use, see h_switch.go
-	discarded     atomic.Bool   // H: the candidate is not used
-	linkRefused   atomic.Bool   // H: Cloudflare refused masque.device, see h_link_device.go
+	mode            string        // H: the tunnel, see h_mode.go
+	active          atomic.Value  // H: in auto mode, the tunnel chosen
+	selecting       atomic.Bool   // H: auto mode races the tunnels
+	profiles        *warpProfiles // H: the devices, see h_profiles.go
+	profile         *warpProfile  // H: the device in use, guarded by mtx
+	recreated       sync.Map      // H: kinds registered anew for profile.recreate
+	sessionAccess   sync.Mutex    // H
+	current         *warpSession  // H: the current start
+	candidate       bool          // H: a new tunnel next to the one in use, see h_switch.go
+	discarded       atomic.Bool   // H: the candidate is not used
+	masqueLinkState               // H: state only exists when MASQUE is included
 }
 
 func NewWARPEndpoint(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.WARPEndpointOptions) (adapter.Endpoint, error) {
@@ -84,44 +84,45 @@ func NewWARPEndpoint(ctx context.Context, router adapter.Router, logger log.Cont
 	if uniqueId == "" {
 		uniqueId = tag
 	}
-	mode, err := warpMode(&options) //H: wg, awg, masque or auto
-	if err != nil {                 //H
-		return nil, err //H
-	} //H
-	if err := validateMASQUEDevice(&options); err != nil { //H: a link device that cannot work fails the config
-		return nil, err //H
-	} //H
-	if err := options.Noise.FakePacket.Validate(); err != nil { //H: a bad template fails the config, not the handshake
-		return nil, E.Cause(err, "warp") //H
-	} //H
-	if options.Scanner != nil { //H
-		for _, name := range options.Scanner.NoisePresets { //H
-			if _, found := warpscan.NoisePresetByName(name); !found { //H
-				return nil, E.New("warp: unknown noise preset: ", name) //H
-			} //H
-		} //H
-	} //H
+	mode, err := warpMode(&options) // H: wg, awg, masque or auto
+	if err != nil {                 // H
+		return nil, err // H
+	} // H
+	if err := validateMASQUEDevice(&options); err != nil { // H: a link device that cannot work fails the config
+		return nil, err // H
+	} // H
+	if err := options.Noise.FakePacket.Validate(); err != nil { // H: a bad template fails the config, not the handshake
+		return nil, E.Cause(err, "warp") // H
+	} // H
+	if options.Scanner != nil { // H
+		for _, name := range options.Scanner.NoisePresets { // H
+			if _, found := warpscan.NoisePresetByName(name); !found { // H
+				return nil, E.New("warp: unknown noise preset: ", name) // H
+			} // H
+		} // H
+	} // H
 	warpEndpoint := &WARPEndpoint{
 		Adapter:  endpoint.NewAdapter(C.TypeWARP, tag, []string{N.NetworkTCP, N.NetworkUDP}, dependencies),
-		ctx:      ctx,                                    //H
-		router:   router,                                 //H
-		logger:   logger,                                 //H
-		tag:      tag,                                    //H
-		uniqueID: uniqueId,                               //H
-		options:  options,                                //H
-		done:     make(chan struct{}),                    //H
-		mode:     mode,                                   //H
-		profiles: newWARPProfiles(ctx, logger, uniqueId), //H: read at start, once the cache file is open
+		ctx:      ctx,                                    // H
+		router:   router,                                 // H
+		logger:   logger,                                 // H
+		tag:      tag,                                    // H
+		uniqueID: uniqueId,                               // H
+		options:  options,                                // H
+		done:     make(chan struct{}),                    // H
+		mode:     mode,                                   // H
+		profiles: newWARPProfiles(ctx, logger, uniqueId), // H: read at start, once the cache file is open
 	}
 	// Do not hold mtx across registration/scan/handshake: Final/dns may dial this
 	// endpoint while it starts (extra security), and a held lock deadlocks or stalls
 	// urltest. IsReady/Dial see nil until connect installs the inner endpoint.
-	warpEndpoint.startHandler = warpEndpoint.start //H: see h_mode.go
+	warpEndpoint.startHandler = warpEndpoint.start // H: see h_mode.go
 	return warpEndpoint, nil
 }
+
 func GetWarpProfile(ctx context.Context, profile *option.WARPProfile) (*cloudflare.CloudflareProfile, error) {
 	var result *cloudflare.CloudflareProfile
-	err := withWARPAPI(ctx, profile, func(dialer N.Dialer) error { //H: the same order for every tunnel
+	err := withWARPAPI(ctx, profile, func(dialer N.Dialer) error { // H: the same order for every tunnel
 		cf, err := GetWarpProfileDialer(ctx, dialer, profile)
 		result = cf
 		return err
@@ -164,8 +165,7 @@ func withWARPAPI(ctx context.Context, profile *option.WARPProfile, call func(N.D
 func GetWarpProfileDialer(ctx context.Context, dialer N.Dialer, profile *option.WARPProfile) (*cloudflare.CloudflareProfile, error) {
 	api := cloudflare.NewCloudflareApiDetour(dialer)
 	if profile.AuthToken != "" && profile.ID != "" {
-		return api.GetProfileWithKey(ctx, profile.AuthToken, profile.ID, profile.PrivateKey) //H: GetProfile has no private key, so the endpoint could not start
-
+		return api.GetProfileWithKey(ctx, profile.AuthToken, profile.ID, profile.PrivateKey) // H: GetProfile has no private key, so the endpoint could not start
 	} else {
 		return api.CreateProfileLicense(ctx, profile.PrivateKey, profile.License)
 	}
@@ -231,13 +231,14 @@ func (w *WARPEndpoint) Status() adapter.Status {
 // fail logs err, after which the endpoint shows as failed: it cannot work as configured. //H
 func (w *WARPEndpoint) fail(err error) {
 	w.logger.ErrorContext(w.ctx, err)
-	w.failError.Set(err) //H
+	w.failError.Set(err) // H
 	w.failed.Store(true)
 }
+
 func (w *WARPEndpoint) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage == adapter.StartStateInitialize {
 		w.scope = scope
-		go func() { //H: the box closes the scope, not the endpoint; stop the background work with it
+		go func() { // H: the box closes the scope, not the endpoint; stop the background work with it
 			select {
 			case <-scope.Context().Done():
 				w.closeOnce.Do(func() { close(w.done) })
@@ -255,20 +256,20 @@ func (w *WARPEndpoint) Start(stage adapter.StartStage, scope *adapter.Scope) err
 }
 
 func (w *WARPEndpoint) Close() error {
-	w.closeOnce.Do(func() { close(w.done) })              //H: stops the failover checks
-	w.endSession()                                        //H
-	w.profiles.release()                                  //H: its devices go back to the pool
-	if w.scope != nil && w.scope.Context().Err() != nil { //H: the closing scope closes the inner endpoint
-		return nil //H
-	} //H
-	w.mtx.Lock()        //H
-	inner := w.endpoint //H
-	w.mtx.Unlock()      //H
+	w.closeOnce.Do(func() { close(w.done) })              // H: stops the failover checks
+	w.endSession()                                        // H
+	w.profiles.release()                                  // H: its devices go back to the pool
+	if w.scope != nil && w.scope.Context().Err() != nil { // H: the closing scope closes the inner endpoint
+		return nil // H
+	} // H
+	w.mtx.Lock()        // H
+	inner := w.endpoint // H
+	w.mtx.Unlock()      // H
 	return adapter.CloseLate(w.scope, inner)
 }
 
 func (w *WARPEndpoint) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-	inner := w.currentEndpoint() //H: the failover replaces it
+	inner := w.currentEndpoint() // H: the failover replaces it
 	if inner == nil {
 		return nil, E.New("endpoint not initialized")
 	}
@@ -276,7 +277,7 @@ func (w *WARPEndpoint) DialContext(ctx context.Context, network string, destinat
 }
 
 func (w *WARPEndpoint) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
-	inner := w.currentEndpoint() //H
+	inner := w.currentEndpoint() // H
 	if inner == nil {
 		return nil, E.New("endpoint not initialized")
 	}
@@ -316,11 +317,18 @@ func (w *WARPEndpoint) DisplayType() string {
 // server_port when set, otherwise the profile's endpoint host and one of its ports, or the
 // port in the host when the profile lists none. //H
 func warpPeerEndpoint(config *C.WARPConfig, server option.ServerOptions) (string, uint16, error) {
-	if len(config.Peers) == 0 {
+	if config == nil || len(config.Peers) == 0 {
 		return "", 0, E.New("WARP config has no peers")
 	}
 	endpoint := config.Peers[0].Endpoint
-	address, portString, hasPort := strings.Cut(endpoint.Host, ":")
+	address, portString, splitErr := net.SplitHostPort(endpoint.Host) // H: preserve IPv6 peer parsing
+	hasPort := splitErr == nil
+	if !hasPort {
+		address = endpoint.Host
+		if strings.Count(address, ":") == 1 {
+			address, portString, hasPort = strings.Cut(address, ":")
+		}
+	}
 	var port uint16
 	if len(endpoint.Ports) > 0 {
 		port = uint16(endpoint.Ports[rand.Intn(len(endpoint.Ports))])
@@ -332,12 +340,12 @@ func warpPeerEndpoint(config *C.WARPConfig, server option.ServerOptions) (string
 	}
 	if server.Server != "" {
 		address = server.Server
-	} else if !M.ParseAddr(address).IsValid() { //H: the profile's host is a domain
+	} else if !M.ParseAddr(address).IsValid() { // H: the profile's host is a domain
 		// use the profile's own address: a domain peer resolves to IPv4 and IPv6, and WireGuard
 		// sends to both over one UDP association, which a detour without IPv6 then closes
-		if profileAddress := warpProfileAddress(endpoint.V4, endpoint.V6); profileAddress != "" { //H
-			address = profileAddress //H
-		} //H
+		if profileAddress := warpProfileAddress(endpoint.V4, endpoint.V6); profileAddress != "" { // H
+			address = profileAddress // H
+		} // H
 	}
 	if server.ServerPort != 0 {
 		port = server.ServerPort
@@ -351,24 +359,10 @@ func warpPeerEndpoint(config *C.WARPConfig, server option.ServerOptions) (string
 // warpInterfaceAddresses returns the tunnel addresses of a WARP config; a missing family is
 // skipped, but at least one is required. //H
 func warpInterfaceAddresses(config *C.WARPConfig) (badoption.Listable[netip.Prefix], error) {
-	var addresses badoption.Listable[netip.Prefix]
-	for _, address := range []struct {
-		value string
-		bits  string
-	}{{config.Interface.Addresses.V4, "/32"}, {config.Interface.Addresses.V6, "/128"}} {
-		if address.value == "" {
-			continue
-		}
-		prefix, err := netip.ParsePrefix(address.value + address.bits)
-		if err != nil {
-			return nil, E.Cause(err, "parse WARP interface address")
-		}
-		addresses = append(addresses, prefix)
+	if config == nil {
+		return nil, E.New("missing WARP profile")
 	}
-	if len(addresses) == 0 {
-		return nil, E.New("WARP config has no interface address")
-	}
-	return addresses, nil
+	return warpInterfaceAddressPair(config.Interface.Addresses.V4, config.Interface.Addresses.V6)
 }
 
 // warpProfileAddress returns the IP of the profile's IPv4 endpoint, or of its IPv6 one when there

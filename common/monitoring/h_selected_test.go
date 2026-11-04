@@ -56,7 +56,7 @@ func TestH_MonitoringTestsTheSelectionFirstAndOnChange(t *testing.T) {
 		time.Sleep(300 * time.Millisecond)
 		return slowDial(ctx, network, destination)
 	}
-	selector := &fakeGroup{fakeOutbound: fakeOutbound{tag: "select"}, all: []string{"a", "b"}, selected: b}
+	selector := &fakeGroup{tag: "select", all: []string{"a", "b"}, selected: b}
 	m := newTestMonitor(t, nil, option.MonitoringOptions{
 		Interval:       badoption.Duration(time.Hour),
 		Workers:        1,
@@ -100,7 +100,7 @@ func TestH_MonitoringSelectionMeasuredJustNowIsNotTestedAgain(t *testing.T) {
 	url, addr := noContentServer(t)
 	var dials atomic.Int64
 	b := &fakeOutbound{tag: "b", dial: dialTo(addr, func(context.Context) error { dials.Add(1); return nil })}
-	selector := &fakeGroup{fakeOutbound: fakeOutbound{tag: "select"}, all: []string{"b"}, selected: b}
+	selector := &fakeGroup{tag: "select", all: []string{"b"}, selected: b}
 	m := newTestMonitor(t, nil, option.MonitoringOptions{
 		Interval: badoption.Duration(time.Hour),
 		Workers:  1,

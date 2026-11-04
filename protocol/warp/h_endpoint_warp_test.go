@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/sagernet/sing-box/adapter/htest"
 	"net"
 	"net/netip"
 	"sync"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/endpoint"
+	"github.com/sagernet/sing-box/adapter/htest"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/hiddify/warpscan"
 	"github.com/sagernet/sing-box/log"
@@ -23,6 +23,7 @@ import (
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/service"
 	"github.com/sagernet/wireguard-go/hiddify"
+
 	"github.com/stretchr/testify/require"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
@@ -165,7 +166,7 @@ func TestH_GetWarpProfileDetourNotFound(t *testing.T) {
 	require.ErrorContains(t, err, "outbound detour not found: missing")
 }
 
-func TestH_GetWarpProfileFallsBackToAllOutbounds(t *testing.T) {
+func TestH_GetWarpProfileHonorsExplicitDetour(t *testing.T) {
 	key, err := wgtypes.GeneratePrivateKey()
 	require.NoError(t, err)
 	first := &hFakeOutbound{hRecordingDialer: &hRecordingDialer{}, tag: "first"}
@@ -174,8 +175,8 @@ func TestH_GetWarpProfileFallsBackToAllOutbounds(t *testing.T) {
 	profile, err := GetWarpProfile(ctx, &option.WARPProfile{PrivateKey: key.String(), Detour: "first"})
 	require.Error(t, err)
 	require.Nil(t, profile)
-	require.GreaterOrEqual(t, first.count(), 2, "detour is tried first, then again in the fallback loop")
-	require.NotZero(t, second.count())
+	require.NotZero(t, first.count(), "the explicitly configured detour is tried")
+	require.Zero(t, second.count(), "an explicit detour does not fall back to other outbounds")
 }
 
 func TestH_GetWarpProfileWithoutOutboundManagerReturnsError(t *testing.T) {
@@ -191,8 +192,10 @@ func hNewWARP(t *testing.T, ctx context.Context, options option.WARPEndpointOpti
 }
 
 func TestH_NewWARPEndpointMetadata(t *testing.T) {
-	options := option.WARPEndpointOptions{Profile: option.WARPProfile{Detour: "profile-out"}}
-	options.Detour = "wg-out"
+	options := option.WARPEndpointOptions{
+		Profile: option.WARPProfile{Detour: "profile-out"},
+		Detour:  "wg-out",
+	}
 	ep := hNewWARP(t, hTestContext(t), options)
 	require.Equal(t, C.TypeWARP, ep.Type())
 	require.Equal(t, "warp-tag", ep.Tag())
@@ -205,8 +208,10 @@ func TestH_NewWARPEndpointMetadata(t *testing.T) {
 }
 
 func TestH_WARPStartFailureLeavesEndpointUninitialized(t *testing.T) {
-	options := option.WARPEndpointOptions{WARPConfig: hWARPConfig(t, hWARPConfigJSON)}
-	options.Detour = "missing-detour"
+	options := option.WARPEndpointOptions{
+		WARPConfig: hWARPConfig(t, hWARPConfigJSON),
+		Detour:     "missing-detour",
+	}
 	ep := hNewWARP(t, hShortContext(t), options)
 	ep.startHandler()
 
@@ -220,8 +225,10 @@ func TestH_WARPStartFailureLeavesEndpointUninitialized(t *testing.T) {
 }
 
 func TestH_WARPStartPostStartRunsHandler(t *testing.T) {
-	options := option.WARPEndpointOptions{WARPConfig: hWARPConfig(t, hWARPConfigJSON), AWG: &option.AwgOptions{Jc: 3}}
-	options.Detour = "missing-detour"
+	options := option.WARPEndpointOptions{
+		WARPConfig: hWARPConfig(t, hWARPConfigJSON), AWG: &option.AwgOptions{Jc: 3},
+		Detour: "missing-detour",
+	}
 	ep := hNewWARP(t, hTestContext(t), options)
 	require.NoError(t, htest.Start(ep, adapter.StartStatePostStart))
 	done := make(chan bool, 1)
@@ -239,8 +246,10 @@ func TestH_WARPUsesCachedConfig(t *testing.T) {
 	require.NoError(t, err)
 	cache := &hFakeCacheFile{store: map[string]*adapter.SavedBinary{"unique": {Content: cached}}}
 	ctx := service.ContextWith[adapter.CacheFile](hShortContext(t), cache)
-	options := option.WARPEndpointOptions{UniqueIdentifier: "unique"}
-	options.Detour = "missing-detour"
+	options := option.WARPEndpointOptions{
+		UniqueIdentifier: "unique",
+		Detour:           "missing-detour",
+	}
 	ep := hNewWARP(t, ctx, options)
 	ep.startHandler()
 	require.Contains(t, cache.loads, "unique", "the device saved before is read")
@@ -249,8 +258,10 @@ func TestH_WARPUsesCachedConfig(t *testing.T) {
 
 	cache = &hFakeCacheFile{store: map[string]*adapter.SavedBinary{"warp-tag": {Content: cached}}}
 	ctx = service.ContextWith[adapter.CacheFile](hShortContext(t), cache)
-	options = option.WARPEndpointOptions{WARPConfig: hWARPConfig(t, hWARPConfigJSON), Profile: option.WARPProfile{Recreate: true}}
-	options.Detour = "missing-detour"
+	options = option.WARPEndpointOptions{
+		WARPConfig: hWARPConfig(t, hWARPConfigJSON), Profile: option.WARPProfile{Recreate: true},
+		Detour: "missing-detour",
+	}
 	ep = hNewWARP(t, ctx, options)
 	ep.startHandler()
 	require.True(t, ep.currentProfile().inline, "the profile in the config is used")
@@ -272,16 +283,20 @@ func TestH_WARPMalformedCachedConfig(t *testing.T) {
 }
 
 func TestH_WARPConfigWithoutPortsDoesNotPanic(t *testing.T) {
-	options := option.WARPEndpointOptions{WARPConfig: hWARPConfig(t, `{"private_key":"x","peers":[{"endpoint":{"host":"h:1"}}]}`)}
-	options.Detour = "missing-detour"
-	options.ServerPort = 2408
+	options := option.WARPEndpointOptions{
+		WARPConfig: hWARPConfig(t, `{"private_key":"x","peers":[{"endpoint":{"host":"h:1"}}]}`),
+		Detour:     "missing-detour",
+		ServerPort: 2408,
+	}
 	ep := hNewWARP(t, hShortContext(t), options)
 	require.NotPanics(t, ep.startHandler)
 }
 
 func TestH_WARPConfigWithoutPeersDoesNotPanic(t *testing.T) {
-	options := option.WARPEndpointOptions{WARPConfig: hWARPConfig(t, `{"private_key":"x","peers":[]}`)}
-	options.Detour = "missing-detour"
+	options := option.WARPEndpointOptions{
+		WARPConfig: hWARPConfig(t, `{"private_key":"x","peers":[]}`),
+		Detour:     "missing-detour",
+	}
 	ep := hNewWARP(t, hTestContext(t), options)
 	require.NotPanics(t, ep.startHandler)
 	require.False(t, adapter.IsReady(ep))
@@ -582,4 +597,15 @@ func TestH_WARPDevicePool(t *testing.T) {
 	second.retire(second.usable(kindWireGuard), "gone")
 	fourth := loadWARPProfiles(ctx, hLogger(), "warp-d")
 	require.Nil(t, fourth.usable(kindWireGuard), "a retired device is not taken")
+}
+
+// The fork keeps IPv6 peer parsing when adopting the upstream profile selection.
+func TestH_WARPIPv6PeerAddress(t *testing.T) {
+	config := hWARPConfig(t, `{"private_key":"x","peers":[{"endpoint":{"host":"[2001:db8::1]:2408"}}]}`)
+	address, port, err := warpPeerEndpoint(config, option.ServerOptions{})
+	require.NoError(t, err)
+	require.Equal(t, "2001:db8::1", address)
+	require.Equal(t, uint16(2408), port)
+	_, _, err = warpPeerEndpoint(nil, option.ServerOptions{})
+	require.Error(t, err)
 }

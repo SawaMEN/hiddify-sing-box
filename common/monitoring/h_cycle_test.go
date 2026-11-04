@@ -20,7 +20,7 @@ import (
 func TestH_MonitoringTellsTheGroupsWhenACycleEnds(t *testing.T) {
 	url, addr := noContentServer(t)
 	a := &fakeOutbound{tag: "a", dial: dialTo(addr, nil)}
-	grp := &fakeGroup{fakeOutbound: fakeOutbound{tag: "grp"}, all: []string{"a"}}
+	grp := &fakeGroup{tag: "grp", all: []string{"a"}}
 	m := newTestMonitor(t, nil, option.MonitoringOptions{
 		Interval:       badoption.Duration(time.Hour),
 		Workers:        1,
@@ -96,8 +96,8 @@ func TestH_MonitoringOnlyPeriodicCyclesHold(t *testing.T) {
 // subscription that answered.
 func TestH_MonitoringGroupUsesItsSelectionOnly(t *testing.T) {
 	a, b := &fakeOutbound{tag: "a"}, &fakeOutbound{tag: "b"}
-	inner := &fakeGroup{fakeOutbound: fakeOutbound{tag: "inner"}, all: []string{"a", "b"}, selected: a}
-	outer := &fakeGroup{fakeOutbound: fakeOutbound{tag: "outer"}, all: []string{"inner"}, selected: inner}
+	inner := &fakeGroup{tag: "inner", all: []string{"a", "b"}, selected: a}
+	outer := &fakeGroup{tag: "outer", all: []string{"inner"}, selected: inner}
 	m := newTestMonitor(t, nil, option.MonitoringOptions{Interval: badoption.Duration(time.Hour)}, a, b, inner, outer)
 	require.NoError(t, htest.Start(m, adapter.StartStateInitialize))
 	require.True(t, m.groupUses("inner", "a"))

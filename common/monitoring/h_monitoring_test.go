@@ -12,9 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sagernet/sing-box/adapter/htest"
-
 	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/adapter/htest"
 	"github.com/sagernet/sing-box/hiddify/ipinfo"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
@@ -38,13 +37,14 @@ func (f *fakeOutbound) Tag() string            { return f.tag }
 func (f *fakeOutbound) Network() []string      { return []string{N.NetworkTCP, N.NetworkUDP} }
 func (f *fakeOutbound) Dependencies() []string { return f.deps }
 func (f *fakeOutbound) Status() adapter.Status { return adapter.StatusReady }
-func (f *fakeOutbound) IsReady() bool          { return true } //H: the fork retains the legacy readiness interface
+func (f *fakeOutbound) IsReady() bool          { return true } // H: the fork retains the legacy readiness interface
 func (f *fakeOutbound) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
 	if f.dial != nil {
 		return f.dial(ctx, network, destination)
 	}
 	return nil, errors.New("fake: unreachable")
 }
+
 func (f *fakeOutbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
 	return nil, errors.New("fake: unsupported")
 }
@@ -204,7 +204,7 @@ func TestH_MonitoringMergeIpInfo(t *testing.T) {
 
 func TestH_MonitoringRealTag(t *testing.T) {
 	a := &fakeOutbound{tag: "a"}
-	g := &fakeGroup{fakeOutbound: fakeOutbound{tag: "g"}, all: []string{"a"}}
+	g := &fakeGroup{tag: "g", all: []string{"a"}}
 	require.Equal(t, "a", RealTag(a))
 	require.Equal(t, "g", RealTag(g))
 	g.selected = a
@@ -215,8 +215,8 @@ func TestH_MonitoringGroupsAndHistory(t *testing.T) {
 	a := &fakeOutbound{tag: "a"}
 	b := &fakeOutbound{tag: "b"}
 	c := &fakeOutbound{tag: "c", deps: []string{"a"}}
-	urltestGroup := &fakeGroup{fakeOutbound: fakeOutbound{tag: "auto"}, all: []string{"a", "b"}}
-	selector := &fakeGroup{fakeOutbound: fakeOutbound{tag: "select"}, all: []string{"auto", "c"}, selected: c}
+	urltestGroup := &fakeGroup{tag: "auto", all: []string{"a", "b"}}
+	selector := &fakeGroup{tag: "select", all: []string{"auto", "c"}, selected: c}
 	m := newTestMonitor(t, nil, option.MonitoringOptions{}, a, b, c, urltestGroup, selector)
 	require.Equal(t, "outbound-monitoring", m.Name())
 	require.NoError(t, htest.Start(m, adapter.StartStateInitialize))
@@ -277,7 +277,7 @@ func TestH_MonitoringQueueAndApplyResult(t *testing.T) {
 	}
 	a := &fakeOutbound{tag: "a", dial: held}
 	b := &fakeOutbound{tag: "b", dial: held}
-	grp := &fakeGroup{fakeOutbound: fakeOutbound{tag: "grp"}, all: []string{"a", "b"}}
+	grp := &fakeGroup{tag: "grp", all: []string{"a", "b"}}
 	m := newTestMonitor(t, nil, option.MonitoringOptions{}, a, b, grp)
 	require.NoError(t, htest.Start(m, adapter.StartStateInitialize))
 
@@ -330,7 +330,7 @@ func TestH_MonitoringSaveLoadHistory(t *testing.T) {
 	cache := &fakeCache{data: map[string]*adapter.SavedBinary{}}
 	a := &fakeOutbound{tag: "a"}
 	b := &fakeOutbound{tag: "b"}
-	grp := &fakeGroup{fakeOutbound: fakeOutbound{tag: "grp"}, all: []string{"a", "b"}}
+	grp := &fakeGroup{tag: "grp", all: []string{"a", "b"}}
 	m := newTestMonitor(t, cache, option.MonitoringOptions{}, a, b, grp)
 	require.NoError(t, htest.Start(m, adapter.StartStateInitialize))
 	setHistory(m, "a", 77, false, &ipinfo.IpInfo{IP: "8.8.8.8", CountryCode: "US"})
@@ -353,7 +353,7 @@ func TestH_MonitoringSaveLoadHistory(t *testing.T) {
 }
 
 func TestH_MonitoringStartRejectsUnknownGroupMember(t *testing.T) {
-	grp := &fakeGroup{fakeOutbound: fakeOutbound{tag: "grp"}, all: []string{"ghost"}}
+	grp := &fakeGroup{tag: "grp", all: []string{"ghost"}}
 	m := newTestMonitor(t, nil, option.MonitoringOptions{}, grp)
 	require.Error(t, htest.Start(m, adapter.StartStateInitialize))
 }
@@ -373,7 +373,7 @@ func TestH_MonitoringCycleEndToEnd(t *testing.T) {
 		return dialer.DialContext(ctx, network, destination.String())
 	}}
 	bad := &fakeOutbound{tag: "bad"}
-	grp := &fakeGroup{fakeOutbound: fakeOutbound{tag: "grp"}, all: []string{"good", "bad"}}
+	grp := &fakeGroup{tag: "grp", all: []string{"good", "bad"}}
 	cache := &fakeCache{data: map[string]*adapter.SavedBinary{}}
 
 	m := newTestMonitor(t, cache, option.MonitoringOptions{
@@ -407,9 +407,9 @@ func TestH_MonitoringCycleEndToEnd(t *testing.T) {
 func TestH_MonitoringSignalChangePropagatesToDependents(t *testing.T) {
 	a := &fakeOutbound{tag: "a"}
 	b := &fakeOutbound{tag: "b"}
-	selector := &fakeGroup{fakeOutbound: fakeOutbound{tag: "select"}, all: []string{"a", "b"}, selected: a}
+	selector := &fakeGroup{tag: "select", all: []string{"a", "b"}, selected: a}
 	viaSelector := &fakeOutbound{tag: "c", deps: []string{"select"}}
-	outer := &fakeGroup{fakeOutbound: fakeOutbound{tag: "outer"}, all: []string{"c"}, selected: viaSelector}
+	outer := &fakeGroup{tag: "outer", all: []string{"c"}, selected: viaSelector}
 	m := newTestMonitor(t, nil, option.MonitoringOptions{
 		OnDemandTimeouts: []badoption.Duration{badoption.Duration(50 * time.Millisecond), badoption.Duration(100 * time.Millisecond), badoption.Duration(200 * time.Millisecond)},
 	}, a, b, selector, viaSelector, outer)
@@ -473,7 +473,7 @@ func TestH_MonitoringRetestsTestBrokenByNetworkReset(t *testing.T) {
 		plainDials.Add(1)
 		return nil, errors.New("plain: unreachable")
 	}}
-	grp := &fakeGroup{fakeOutbound: fakeOutbound{tag: "grp"}, all: []string{"broken", "plain"}}
+	grp := &fakeGroup{tag: "grp", all: []string{"broken", "plain"}}
 	m = newTestMonitor(t, nil, option.MonitoringOptions{
 		Interval:       badoption.Duration(time.Hour),
 		Workers:        1,

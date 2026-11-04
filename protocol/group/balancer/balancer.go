@@ -43,10 +43,7 @@ type Balancer struct {
 	connection                   adapter.ConnectionManager
 	logger                       log.ContextLogger
 	tags                         []string
-	link                         string
-	interval                     time.Duration
 	tolerance                    uint16
-	idleTimeout                  time.Duration
 	strategyFn                   Strategy
 	options                      option.BalancerOutboundOptions
 	interruptExternalConnections bool
@@ -118,29 +115,29 @@ func (s *Balancer) Start() error {
 	case StrategyConsistentHashing:
 		s.strategyFn = NewConsistentHashing(outbounds, s.options)
 	case StrategyStickySessions:
-		sticky, err := NewStickySession(outbounds, s.options) //H
-		if err != nil {                                       //H
-			return err //H
-		} //H
-		s.strategyFn = sticky //H
+		sticky, err := NewStickySession(outbounds, s.options) // H
+		if err != nil {                                       // H
+			return err // H
+		} // H
+		s.strategyFn = sticky // H
 	case StrategyLowestDelay:
 		s.strategyFn = NewLowestDelay(outbounds, s.options)
-	case StrategyPool: //H
-		pool, err := NewPool(outbounds, s.options) //H
-		if err != nil {                            //H
-			return err //H
-		} //H
-		s.strategyFn = pool //H
+	case StrategyPool: // H
+		pool, err := NewPool(outbounds, s.options) // H
+		if err != nil {                            // H
+			return err // H
+		} // H
+		s.strategyFn = pool // H
 	default:
 		return E.New("unknown load balance strategy: ", s.options.Strategy)
 	}
 	if s.monitor != nil {
 		s.strategyFn.UpdateOutboundsInfo(s.monitor.OutboundsHistory(s.Tag())) // the cached results choose the first member
 	}
-	if lowest, ok := s.strategyFn.(*LowestDelay); ok { //H: the LOWEST log, from here on: the first choice is logged as the start
-		lowest.logger, lowest.tag = s.logger, s.Tag() //H
+	if lowest, ok := s.strategyFn.(*LowestDelay); ok { // H: the LOWEST log, from here on: the first choice is logged as the start
+		lowest.logger, lowest.tag = s.logger, s.Tag() // H
 		s.logger.Info("LOWEST ", s.Tag(), ": starts on ", lowest.Now())
-	} //H
+	} // H
 
 	return nil
 }
@@ -185,6 +182,7 @@ func (s *Balancer) worker() {
 		}
 	}
 }
+
 func (s *Balancer) Close() error {
 	s.closeOnce.Do(func() { close(s.close) })
 	return nil

@@ -27,7 +27,7 @@ import (
 
 // detourSettle is the least time between two moves of the tunnel when a group detour moves by
 // itself (a URL test, a balancer). //H
-const detourSettle = 30 * time.Second //H
+const detourSettle = 30 * time.Second // H
 
 func RegisterOutbound(registry *outbound.Registry) {
 	outbound.Register[option.MASQUEOutboundOptions](registry, C.TypeMASQUE, NewOutbound)
@@ -45,7 +45,7 @@ type Outbound struct {
 	options      option.MASQUEOutboundOptions
 	tunnel       *masque.Tunnel
 	startHandler func()
-	scanner      *masqueScanner //H
+	scanner      *masqueScanner // H
 
 	warpConfig   *Config     // the device of the warp endpoint, which registered it
 	peer         M.Socksaddr // the endpoint of the warp endpoint's server and server_port
@@ -54,21 +54,21 @@ type Outbound struct {
 	done         chan struct{}
 	tracker      adapter.StatusTracker
 	doneOnce     sync.Once
-	tunnelAccess sync.Mutex //H: currentTunnel reads it while the tunnel is set up or closed
+	tunnelAccess sync.Mutex // H: currentTunnel reads it while the tunnel is set up or closed
 
-	onRejected func(err error) //H: told when Cloudflare refuses the device; see SetOnRejected
+	onRejected func(err error) // H: told when Cloudflare refuses the device; see SetOnRejected
 
 	await chan struct{}
 
-	ownerFollowsDetour bool //H: see followDetour
+	ownerFollowsDetour bool // H: see followDetour
 
-	setupError adapter.LastError //H: why the device or the tunnel could not be set up; see StatusError
+	setupError adapter.LastError // H: why the device or the tunnel could not be set up; see StatusError
 }
 
 func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.MASQUEOutboundOptions) (adapter.Outbound, error) {
-	if options.Device == nil { //H: it does not register WARP devices
-		return nil, errNoDevice //H
-	} //H
+	if options.Device == nil { // H: it does not register WARP devices
+		return nil, errNoDevice // H
+	} // H
 	return newWARPOutbound(ctx, logger, tag, options, nil, M.Socksaddr{}, "")
 }
 
@@ -79,11 +79,11 @@ func NewWARPOutbound(ctx context.Context, logger log.ContextLogger, tag string, 
 	if config == nil {
 		return nil, E.New("missing WARP MASQUE config")
 	}
-	outbound, err := newWARPOutbound(ctx, logger, tag, options, config, peer, profileKey) //H
-	if err == nil {                                                                       //H
+	outbound, err := newWARPOutbound(ctx, logger, tag, options, config, peer, profileKey) // H
+	if err == nil {                                                                       // H
 		outbound.ownerFollowsDetour = true // H: the warp endpoint moves the tunnel itself
-	} //H
-	return outbound, err //H
+	} // H
+	return outbound, err // H
 }
 
 func newWARPOutbound(ctx context.Context, logger log.ContextLogger, tag string, options option.MASQUEOutboundOptions, config *Config, peer M.Socksaddr, profileKey string) (*Outbound, error) {
@@ -91,17 +91,17 @@ func newWARPOutbound(ctx context.Context, logger log.ContextLogger, tag string, 
 		return nil, err
 	}
 	if profileKey == "" {
-		profileKey = options.UniqueIdentifier //H: unique_identifier, so renaming the outbound keeps the device
+		profileKey = options.UniqueIdentifier // H: unique_identifier, so renaming the outbound keeps the device
 	}
 	if profileKey == "" {
 		profileKey = tag
 	}
-	if config == nil && options.Device != nil { //H: an enrolled device, without the API
-		var err error                                               //H
-		if config, err = deviceConfig(options.Device); err != nil { //H
-			return nil, err //H
-		} //H
-	} //H
+	if config == nil && options.Device != nil { // H: an enrolled device, without the API
+		var err error                                               // H
+		if config, err = deviceConfig(options.Device); err != nil { // H
+			return nil, err // H
+		} // H
+	} // H
 	outbound := &Outbound{
 		Adapter:    outbound.NewAdapterWithDialerOptions(C.TypeMASQUE, tag, []string{N.NetworkTCP, N.NetworkUDP, N.NetworkICMP}, options.DialerOptions),
 		ctx:        ctx,
@@ -118,7 +118,7 @@ func newWARPOutbound(ctx context.Context, logger log.ContextLogger, tag string, 
 		defer close(outbound.await)
 		if err := outbound.startTunnel(outbound.warpConfig); err != nil {
 			logger.ErrorContext(ctx, err)
-			outbound.setupError.Set(err) //H
+			outbound.setupError.Set(err) // H
 		}
 		if outbound.isClosed() { // closed while the tunnel was set up
 			outbound.closeTunnel()
@@ -142,11 +142,11 @@ func warpTLS(ctx context.Context, logger logger.ContextLogger, options option.MA
 	if err != nil {
 		return nil, E.New("failed to generate cert: ", err)
 	}
-	serverName := options.ServerName //H
+	serverName := options.ServerName // H
 	if serverName == "" {
 		serverName = defaultServerName
 	}
-	tlsConfig, err := tls.NewMASQUEClient(ctx, logger, serverName, cert, privKey, peerPubKey, options.MASQUEOutboundTLSOptions) //H
+	tlsConfig, err := tls.NewMASQUEClient(ctx, logger, serverName, cert, privKey, peerPubKey, options.MASQUEOutboundTLSOptions) // H
 	if err != nil {
 		return nil, E.New("failed to prepare TLS config: ", err)
 	}
@@ -187,7 +187,7 @@ func (w *Outbound) startTunnel(appConfig *Config) error {
 	}
 	var scanner *masqueScanner
 	var scan func(http2 bool) (net.Addr, error)
-	if options.Scanner != nil && options.Scanner.Enabled && !hasPeer(w.peer) { //H: look for endpoints that answer
+	if options.Scanner != nil && options.Scanner.Enabled && !hasPeer(w.peer) { // H: look for endpoints that answer
 		scanner, err = newMASQUEScanner(ctx, logger, w.profileKey, options, outboundDialer, tlsConfig, &w.scanStatus)
 		if err != nil {
 			logger.WarnContext(ctx, "WARP scanner: ", err)
@@ -197,7 +197,7 @@ func (w *Outbound) startTunnel(appConfig *Config) error {
 		}
 	}
 	peer := w.peer
-	if peer.IsFqdn() { // the warp endpoint's server is a domain
+	if peer.IsDomain() { // the warp endpoint's server is a domain
 		addresses, err := w.dnsRouter.Lookup(ctx, peer.Fqdn, adapter.DNSQueryOptions{})
 		if err != nil {
 			return E.Cause(err, "resolve WARP server ", peer.Fqdn)
@@ -225,16 +225,16 @@ func (w *Outbound) startTunnel(appConfig *Config) error {
 	if err != nil {
 		return err
 	}
-	if scanner != nil { //H: scores and failover
+	if scanner != nil { // H: scores and failover
 		tunnel.SetFailover(scanner.OnConnected, scanner.NextEndpoint)
 		w.scanner = scanner
 	}
-	if w.onRejected != nil { //H
-		tunnel.SetOnRejected(w.onRejected) //H
-	} //H
-	w.tunnelAccess.Lock()   //H
-	w.tunnel = tunnel       //H
-	w.tunnelAccess.Unlock() //H
+	if w.onRejected != nil { // H
+		tunnel.SetOnRejected(w.onRejected) // H
+	} // H
+	w.tunnelAccess.Lock()   // H
+	w.tunnel = tunnel       // H
+	w.tunnelAccess.Unlock() // H
 	if err = tunnel.Start(false); err != nil {
 		return err
 	}
@@ -249,7 +249,7 @@ func (w *Outbound) startTunnel(appConfig *Config) error {
 // followDetour reconnects the tunnel when a group detour moves to another member: the tunnel
 // keeps its connection on the member it was opened through.
 func (w *Outbound) followDetour() {
-	if w.options.Detour == "" || w.ownerFollowsDetour { //H
+	if w.options.Detour == "" || w.ownerFollowsDetour { // H
 		return
 	}
 	outboundManager := service.FromContext[adapter.OutboundManager](w.ctx)
@@ -265,11 +265,11 @@ func (w *Outbound) followDetour() {
 		network = N.NetworkTCP
 	}
 	// H: a move a group made by itself waits a little: another may follow soon
-	monitoring.FollowDetourSettled(w.ctx, w.done, detour, network, detourSettle, func() bool { return !adapter.IsReady(w) }, func(change monitoring.DetourChange) { //H
-		w.logger.InfoContext(w.ctx, "detour moved from ", change.From, " to ", change.To, ", reconnecting") //H
-		if tunnel := w.currentTunnel(); tunnel != nil {                                                     //H
-			tunnel.ResetConnection() //H
-		} //H
+	monitoring.FollowDetourSettled(w.ctx, w.done, detour, network, detourSettle, func() bool { return !adapter.IsReady(w) }, func(change monitoring.DetourChange) { // H
+		w.logger.InfoContext(w.ctx, "detour moved from ", change.From, " to ", change.To, ", reconnecting") // H
+		if tunnel := w.currentTunnel(); tunnel != nil {                                                     // H
+			tunnel.ResetConnection() // H
+		} // H
 	})
 }
 
@@ -294,7 +294,7 @@ func (w *Outbound) Status() adapter.Status {
 		}
 		return adapter.StatusConnecting
 	}
-	tunnel := w.currentTunnel() //H
+	tunnel := w.currentTunnel() // H
 	if tunnel == nil {
 		return adapter.StatusFailed
 	}
@@ -336,10 +336,10 @@ func (w *Outbound) Close() error {
 }
 
 func (w *Outbound) closeTunnel() error {
-	w.tunnelAccess.Lock()   //H
-	tunnel := w.tunnel      //H
-	w.tunnel = nil          //H
-	w.tunnelAccess.Unlock() //H
+	w.tunnelAccess.Lock()   // H
+	tunnel := w.tunnel      // H
+	w.tunnel = nil          // H
+	w.tunnelAccess.Unlock() // H
 	if tunnel == nil {
 		return nil
 	}
@@ -354,7 +354,7 @@ func (w *Outbound) currentTunnel() *masque.Tunnel {
 }
 
 func (w *Outbound) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-	tunnel, err := w.initializedTunnel(ctx) //H
+	tunnel, err := w.initializedTunnel(ctx) // H
 	if err != nil {
 		return nil, err
 	}
@@ -377,7 +377,7 @@ func (w *Outbound) DialContext(ctx context.Context, network string, destination 
 }
 
 func (w *Outbound) ListenPacketWithDestination(ctx context.Context, destination M.Socksaddr) (net.PacketConn, netip.Addr, error) {
-	tunnel, err := w.initializedTunnel(ctx) //H
+	tunnel, err := w.initializedTunnel(ctx) // H
 	if err != nil {
 		return nil, netip.Addr{}, err
 	}
@@ -410,13 +410,13 @@ func (w *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (n
 	return packetConn, nil
 }
 
-func (w *Outbound) initializedTunnel(ctx context.Context) (*masque.Tunnel, error) { //H: the tunnel, once set up
+func (w *Outbound) initializedTunnel(ctx context.Context) (*masque.Tunnel, error) { // H: the tunnel, once set up
 	select {
 	case <-w.await:
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	tunnel := w.currentTunnel() //H
+	tunnel := w.currentTunnel() // H
 	if tunnel == nil {
 		return nil, E.New("tunnel not initialized")
 	}
@@ -430,7 +430,7 @@ func (w *Outbound) InterfaceUpdated(ctx context.Context) {
 	default:
 		return
 	}
-	tunnel := w.currentTunnel() //H
+	tunnel := w.currentTunnel() // H
 	if tunnel == nil {
 		return
 	}

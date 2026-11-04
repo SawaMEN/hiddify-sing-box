@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"strings"
+ "sync/atomic"
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
@@ -97,3 +98,5 @@ func (w *WARPEndpoint) rememberLinkDeviceRefused() bool {
 	}
 	return true
 }
+
+type masqueLinkState struct { linkRefused atomic.Bool }

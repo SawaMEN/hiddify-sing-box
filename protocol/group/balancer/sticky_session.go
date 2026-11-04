@@ -26,11 +26,11 @@ type StickySession struct {
 	alive                map[string]string // members within the acceptable delay, per network
 }
 
-func NewStickySession(outbounds []adapter.Outbound, options option.BalancerOutboundOptions) (*StickySession, error) { //H: an error for a bad sticky_hash
-	stickyHash, err := parseStickyHash(options.StickyHash, defaultStickySessionHash) //H
-	if err != nil {                                                                  //H
-		return nil, err //H
-	} //H
+func NewStickySession(outbounds []adapter.Outbound, options option.BalancerOutboundOptions) (*StickySession, error) { // H: an error for a bad sticky_hash
+	stickyHash, err := parseStickyHash(options.StickyHash, defaultStickySessionHash) // H
+	if err != nil {                                                                  // H
+		return nil, err // H
+	} // H
 	lruCache := common.Must1(freelru.New[uint64, int](1000, maphash.NewHasher[uint64]().Hash32, true))
 	lruCache.SetLifetime(options.TTL.Build())
 	cOutbounds := convertOutbounds(outbounds)
@@ -40,8 +40,8 @@ func NewStickySession(outbounds []adapter.Outbound, options option.BalancerOutbo
 		hash:                 maphash.NewHasher[string](),
 		maxRetry:             options.MaxRetry,
 		delayAcceptableRatio: acceptableRatio(options),
-		stickyHash:           stickyHash, //H
-	}, nil //H
+		stickyHash:           stickyHash, // H
+	}, nil // H
 }
 
 var _ Strategy = (*StickySession)(nil)
@@ -53,7 +53,7 @@ func (s *StickySession) Select(metadata adapter.InboundContext, net string, touc
 	if net != N.NetworkTCP && net != N.NetworkUDP {
 		net = N.NetworkTCP
 	}
-	key := s.hash.Hash(stickyKey(&metadata, s.stickyHash)) //H
+	key := s.hash.Hash(stickyKey(&metadata, s.stickyHash)) // H
 	outbounds := s.outbounds[net]
 	length := int32(len(outbounds))
 	idx, has := s.lruCache.Get(key)
@@ -93,6 +93,7 @@ func (s *StickySession) Select(metadata adapter.InboundContext, net string, touc
 func (s *StickySession) Now() string {
 	return ""
 }
+
 func (s *StickySession) UpdateOutboundsInfo(history map[string]*adapter.URLTestHistory) bool {
 	_, minDelay := getMinDelay(s.outbounds, history)
 	delayMap := getDelayMap(history)
@@ -115,5 +116,4 @@ func (s *StickySession) Alive(proxy adapter.Outbound, net string) bool {
 		return delay <= s.maxAcceptableDelay[net]
 	}
 	return false
-
 }

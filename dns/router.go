@@ -540,11 +540,9 @@ func cancelDNSFutures(state *dnsRuleWalkState) {
 
 func dnsRefusedResponse(message *mDNS.Msg) *mDNS.Msg {
 	return &mDNS.Msg{
-		MsgHdr: mDNS.MsgHdr{
-			Id:       message.Id,
-			Rcode:    mDNS.RcodeRefused,
-			Response: true,
-		},
+		Id:       message.Id,
+		Rcode:    mDNS.RcodeRefused,
+		Response: true,
 		Question: []mDNS.Question{message.Question[0]},
 	}
 }
@@ -1005,9 +1003,7 @@ func (r *Router) lookupWithRules(ctx context.Context, rules []adapter.DNSRule, d
 
 func (r *Router) lookupWithRulesType(ctx context.Context, rules []adapter.DNSRule, domain string, qType uint16, options adapter.DNSQueryOptions) ([]netip.Addr, error) {
 	request := &mDNS.Msg{
-		MsgHdr: mDNS.MsgHdr{
-			RecursionDesired: true,
-		},
+		RecursionDesired: true,
 		Question: []mDNS.Question{{
 			Name:   mDNS.Fqdn(domain),
 			Qtype:  qType,
@@ -1048,25 +1044,21 @@ func (r *Router) prepareExchange(ctx context.Context, message *mDNS.Msg) (*dnsEx
 	if len(message.Question) != 1 {
 		r.logger.WarnContext(ctx, "bad question size: ", len(message.Question))
 		return nil, &mDNS.Msg{
-			MsgHdr: mDNS.MsgHdr{
-				Id:       message.Id,
-				Response: true,
-				Rcode:    mDNS.RcodeFormatError,
-			},
+			Id:       message.Id,
+			Response: true,
+			Rcode:    mDNS.RcodeFormatError,
 			Question: message.Question,
 		}, nil
 	}
 	if isResolverDiscoveryQuery(message.Question[0]) {
 		r.logger.DebugContext(ctx, "rejected resolver discovery query ", FormatQuestion(message.Question[0].String()))
 		return nil, &mDNS.Msg{
-			MsgHdr: mDNS.MsgHdr{
-				Id:                 message.Id,
-				Response:           true,
-				RecursionDesired:   message.RecursionDesired,
-				RecursionAvailable: true,
-				Rcode:              mDNS.RcodeSuccess,
-			},
-			Question: message.Question,
+			Id:                 message.Id,
+			Response:           true,
+			RecursionDesired:   message.RecursionDesired,
+			RecursionAvailable: true,
+			Rcode:              mDNS.RcodeSuccess,
+			Question:           message.Question,
 		}, nil
 	}
 	r.rulesAccess.RLock()
@@ -1134,11 +1126,9 @@ func (r *Router) exchangeLegacy(ctx context.Context, exchangeCtx *dnsExchangeCon
 				switch action.Method {
 				case C.RuleActionRejectMethodDefault:
 					return &mDNS.Msg{
-						MsgHdr: mDNS.MsgHdr{
-							Id:       message.Id,
-							Rcode:    mDNS.RcodeRefused,
-							Response: true,
-						},
+						Id:       message.Id,
+						Rcode:    mDNS.RcodeRefused,
+						Response: true,
 						Question: []mDNS.Question{message.Question[0]},
 					}, nil, nil
 				case C.RuleActionRejectMethodDrop:
@@ -1159,8 +1149,8 @@ func (r *Router) exchangeLegacy(ctx context.Context, exchangeCtx *dnsExchangeCon
 			} else if errors.Is(err, ErrResponseRejected) {
 				rejected = true
 				r.logger.DebugContext(ctx, E.Cause(err, "response rejected for ", FormatQuestion(message.Question[0].String())))
-			} else if len(message.Question) > 0 && rule != nil && rule.BypassIfFailed() && ruleIndex != -1 { //H: the next rule answers, so not an error
-				r.logger.DebugContext(ctx, E.Cause(err, "exchange failed for ", FormatQuestion(message.Question[0].String())), ", trying the next rule") //H
+			} else if len(message.Question) > 0 && rule != nil && rule.BypassIfFailed() && ruleIndex != -1 { // H: the next rule answers, so not an error
+				r.logger.DebugContext(ctx, E.Cause(err, "exchange failed for ", FormatQuestion(message.Question[0].String())), ", trying the next rule") // H
 			} else if len(message.Question) > 0 {
 				r.logger.ErrorContext(ctx, E.Cause(err, "exchange failed for ", FormatQuestion(message.Question[0].String())))
 			} else {

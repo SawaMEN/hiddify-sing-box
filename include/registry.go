@@ -30,7 +30,7 @@ import (
 	"github.com/sagernet/sing-box/protocol/hiddify/gooserelay"
 	"github.com/sagernet/sing-box/protocol/hiddify/hinvalid"
 	"github.com/sagernet/sing-box/protocol/hiddify/masterdns"
-	"github.com/sagernet/sing-box/protocol/hiddify/soar" //H
+	"github.com/sagernet/sing-box/protocol/hiddify/soar" // H
 	"github.com/sagernet/sing-box/protocol/hiddify/xray"
 	"github.com/sagernet/sing-box/protocol/http"
 	"github.com/sagernet/sing-box/protocol/masque"
@@ -140,7 +140,7 @@ func OutboundRegistry() *outbound.Registry {
 	dnstt.RegisterOutbound(registry)
 	gooserelay.RegisterOutbound(registry)
 	masterdns.RegisterOutbound(registry)
-	soar.RegisterOutbound(registry) //H
+	soar.RegisterOutbound(registry) // H
 	balancer.RegisterLoadBalance(registry)
 	registerMASQUEOutbound(registry)
 	legacyWireguard.RegisterOutbound(registry) // H
@@ -197,7 +197,7 @@ func DNSTransportRegistry() *dns.TransportRegistry {
 
 func ServiceRegistry() *service.Registry {
 	registry := service.NewRegistry()
-	smartdnspool.RegisterService(registry) //H: legacy service configurations
+	smartdnspool.RegisterService(registry) // H: legacy service configurations
 
 	api.RegisterService(registry)
 	resolved.RegisterService(registry)

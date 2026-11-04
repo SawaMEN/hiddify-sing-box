@@ -7,12 +7,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sagernet/sing-box/option"
-
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/monitoring"
+	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common"
 	N "github.com/sagernet/sing/common/network"
+
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -22,7 +22,7 @@ func getKey(metadata *adapter.InboundContext) string {
 	}
 
 	var metadataHost string
-	if metadata.Destination.IsFqdn() {
+	if metadata.Destination.IsDomain() {
 		metadataHost = metadata.Destination.Fqdn
 	} else {
 		metadataHost = metadata.Domain
@@ -111,6 +111,7 @@ func filterOutbounds(outbounds []adapter.Outbound, network string) []adapter.Out
 	}
 	return res
 }
+
 func convertOutbounds(outbounds []adapter.Outbound) map[string][]adapter.Outbound {
 	return map[string][]adapter.Outbound{
 		N.NetworkTCP: filterOutbounds(outbounds, N.NetworkTCP),
@@ -123,14 +124,15 @@ func sortOutboundsByDelay(outbounds map[string][]adapter.Outbound, history map[s
 	for net, outs := range outbounds {
 		res[net] = append([]adapter.Outbound{}, outs...)
 		sort.SliceStable(res[net], func(i, j int) bool {
-			var delayi uint16 = getTagDelay(res[net][i].Tag(), history)
-			var delayj uint16 = getTagDelay(res[net][j].Tag(), history)
+			delayi := getTagDelay(res[net][i].Tag(), history)
+			delayj := getTagDelay(res[net][j].Tag(), history)
 			return delayi < delayj
 		})
 	}
 
 	return res
 }
+
 func getAcceptableIndex(sortedOutbounds map[string][]adapter.Outbound, history map[string]*adapter.URLTestHistory, delayAcceptableRatio float64) map[string]int {
 	res := map[string]int{}
 	for net, outs := range sortedOutbounds {
@@ -148,7 +150,6 @@ func getAcceptableIndex(sortedOutbounds map[string][]adapter.Outbound, history m
 		res[net] = maxAvailableIndex
 	}
 	return res
-
 }
 
 func getMinDelay(outbounds map[string][]adapter.Outbound, history map[string]*adapter.URLTestHistory) (map[string]adapter.Outbound, map[string]uint16) {
@@ -169,7 +170,6 @@ func getMinDelay(outbounds map[string][]adapter.Outbound, history map[string]*ad
 		bestOuts[net] = minOut
 	}
 	return bestOuts, delays
-
 }
 
 func getDelayMap(history map[string]*adapter.URLTestHistory) map[string]uint16 {
@@ -179,7 +179,6 @@ func getDelayMap(history map[string]*adapter.URLTestHistory) map[string]uint16 {
 	}
 
 	return delayMap
-
 }
 
 // aliveSet names the members within the acceptable delay, per network, so a strategy can tell

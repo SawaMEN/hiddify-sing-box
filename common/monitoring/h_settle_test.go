@@ -139,7 +139,7 @@ func TestH_MonitoringStagedTestShowsTheMissThenTheAnswer(t *testing.T) {
 		}
 		return dialer.DialContext(ctx, network, destination.String())
 	}
-	grp := &fakeGroup{fakeOutbound: fakeOutbound{tag: "grp"}, all: []string{"slow"}, selected: slow}
+	grp := &fakeGroup{tag: "grp", all: []string{"slow"}, selected: slow}
 	m := newTestMonitor(t, nil, option.MonitoringOptions{
 		Interval:         badoption.Duration(time.Hour),
 		Workers:          1,
@@ -213,7 +213,7 @@ func TestH_MonitoringMissOfACachedMemberIsSeenByTheGroups(t *testing.T) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}}
-	grp := &fakeGroup{fakeOutbound: fakeOutbound{tag: "grp"}, all: []string{"cached"}, selected: never}
+	grp := &fakeGroup{tag: "grp", all: []string{"cached"}, selected: never}
 	m := newTestMonitor(t, nil, option.MonitoringOptions{
 		Interval:         badoption.Duration(time.Hour),
 		Workers:          1,

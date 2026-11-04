@@ -4,11 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sagernet/sing/common"
-
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
+	"github.com/sagernet/sing/common"
 	N "github.com/sagernet/sing/common/network"
 
 	"github.com/stretchr/testify/require"

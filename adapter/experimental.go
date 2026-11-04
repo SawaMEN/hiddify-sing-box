@@ -29,14 +29,14 @@ type URLTestHistory struct {
 	IpInfo      *ipinfo.IpInfo `json:"ipinfo"`
 	IsFromCache bool           `json:"from_cache"`
 	// IpInfoFromCache: IpInfo is the one of a previous run, not looked up in this one yet. //H
-	IpInfoFromCache bool `json:"ipinfo_from_cache"` //H
+	IpInfoFromCache bool `json:"ipinfo_from_cache"` // H
 	// IPv6: whether the outbound carries IPv6, as the monitoring verified at the URL test, the
 	// link declared or the connections showed; nil until known. //H
-	IPv6 *bool `json:"ipv6,omitempty"` //H
+	IPv6 *bool `json:"ipv6,omitempty"` // H
 	// IPv6FromCache: IPv6 is the answer of a previous run, not verified in this one yet. //H
-	IPv6FromCache bool `json:"ipv6_from_cache,omitempty"` //H
+	IPv6FromCache bool `json:"ipv6_from_cache,omitempty"` // H
 	// Error: why the last URL test failed; empty when it worked. //H
-	Error string `json:"error,omitempty"` //H
+	Error string `json:"error,omitempty"` // H
 }
 
 type URLTestHistoryStorage interface {

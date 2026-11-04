@@ -15,9 +15,9 @@ type BalancerOutboundOptions struct {
 	// pool takes a slot when faster by more than tolerance and tolerance_ratio, as for
 	// lowest-delay; with tolerance unset the slots keep the first working members.
 	Pool          int    `json:"pool,omitempty"`
-	PoolTolerance uint16 `json:"pool_tolerance,omitempty"` //H: legacy alias when tolerance is unset //H
+	PoolTolerance uint16 `json:"pool_tolerance,omitempty"` // H: legacy alias when tolerance is unset //H
 	// pool and sticky-sessions: what a connection sticks by: process, domain, source_ip, dest_ip,
 	// dest_port, or none. The pool's default is process and domain, sticky-sessions' source_ip
 	// and domain.
-	StickyHash badoption.Listable[string] `json:"sticky_hash,omitempty"` //H
+	StickyHash badoption.Listable[string] `json:"sticky_hash,omitempty"` // H
 }

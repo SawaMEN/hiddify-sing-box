@@ -8,11 +8,11 @@ import (
 	"net/http"
 	"time"
 
-	dnstt "github.com/net2share/vaydns/client"
 	"github.com/sagernet/sing-box/common/dnspool"
 	"github.com/sagernet/sing/common/batch"
 
 	"github.com/miekg/dns"
+	dnstt "github.com/net2share/vaydns/client"
 )
 
 // historyKey names the saved resolver scores; each record type keeps its own.
@@ -103,6 +103,7 @@ func (h *Outbound) startTestResolver() error {
 
 	return b.Wait()
 }
+
 func (h *Outbound) testTunnelResolver(resolver dnstt.Resolver) (rate int, err error) {
 	domain := h.options.PreTestDomain
 	record := h.options.PreTestRecordType
@@ -147,7 +148,6 @@ func (h *Outbound) testTunnelResolver(resolver dnstt.Resolver) (rate int, err er
 	h.logger.InfoContext(h.ctx, "successfully opened stream to resolver ", resolver.ResolverAddr)
 	conn.Close()
 	return 1, nil
-
 }
 
 // ResolveUDP is the shared plain-DNS probe, through sing-box's UDP transport.
@@ -192,7 +192,6 @@ func (h *Outbound) Resolve(resolver dnstt.Resolver, name string, qtype uint16) (
 }
 
 func (h *Outbound) getTCPBasedResolverConnection(r dnstt.Resolver, timeout time.Duration) (net.PacketConn, *net.UDPAddr, error) {
-
 	h.logger.InfoContext(h.ctx, "getting resolver connection ", r.ResolverAddr)
 	switch r.ResolverType {
 	case dnstt.ResolverTypeUDP:

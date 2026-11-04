@@ -6,9 +6,8 @@ import (
 	"github.com/sagernet/sing/common/json/badoption"
 )
 
-//H — WARP-flavored MASQUE outbound, tunnels through Cloudflare's consumer WARP service
-
-type MASQUEOutboundTLSOptions struct { //H
+// H — WARP-flavored MASQUE outbound, tunnels through Cloudflare's consumer WARP service
+type MASQUEOutboundTLSOptions struct { // H
 	Insecure bool `json:"insecure,omitempty"`
 	// CertificatePublicKeySHA256 verifies the endpoint by the SHA-256 (hex) of its certificate's
 	// public key instead of the profile's key, as Xray's pinnedPeerPublicKeySha256 does. //H
@@ -26,7 +25,7 @@ type MASQUEOutboundTLSOptions struct { //H
 	ECH *OutboundECHOptions `json:"ech,omitempty"`
 }
 
-type MASQUEOutboundOptions struct { //H
+type MASQUEOutboundOptions struct { // H
 	DialerOptions
 	Profile                  CloudflareProfile        `json:"profile,omitempty"`
 	Device                   *MASQUEDeviceOptions     `json:"device,omitempty"` // an enrolled device, used instead of profile

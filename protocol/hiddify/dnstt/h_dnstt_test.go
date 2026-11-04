@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/miekg/dns"
-	dnstt "github.com/net2share/vaydns/client"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/dnspool"
 	C "github.com/sagernet/sing-box/constant"
@@ -18,6 +16,9 @@ import (
 	"github.com/sagernet/sing/common/json/badoption"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+
+	"github.com/miekg/dns"
+	dnstt "github.com/net2share/vaydns/client"
 	"github.com/stretchr/testify/require"
 )
 
@@ -87,16 +88,18 @@ func TestH_DnsttAutoResolvers(t *testing.T) {
 	for _, auto := range []string{"auto", ""} {
 		resolvers, err := getConfigResolvers(option.DnsttOptions{Resolvers: []string{auto, "4.4.4.4:53"}})
 		require.NoError(t, err)
-		require.Len(t, resolvers, len(builtin)+1)
+		require.GreaterOrEqual(t, len(resolvers), len(builtin)+1)
 		seen := map[string]bool{}
 		for _, r := range resolvers[:len(resolvers)-1] {
 			require.True(t, r.Auto)
 			require.Equal(t, dnstt.ResolverTypeUDP, r.Resolver.ResolverType)
 			require.True(t, strings.HasSuffix(r.Resolver.ResolverAddr, ":53"), r.Resolver.ResolverAddr)
 			ip := strings.TrimSuffix(r.Resolver.ResolverAddr, ":53")
-			_, known := builtin[ip]
-			require.True(t, known, ip)
-			seen[ip] = true
+			if _, known := builtin[ip]; known {
+				seen[ip] = true
+			} else {
+				require.Equal(t, dnspool.TierDiscovery, r.Tier, "additional candidates come from discovery")
+			}
 		}
 		require.Len(t, seen, len(builtin))
 		last := resolvers[len(resolvers)-1]

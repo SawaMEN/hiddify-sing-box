@@ -1,8 +1,8 @@
 package masque
 
 import (
- "github.com/sagernet/sing-tun"
- "github.com/sagernet/sing/common/buf"
+	"github.com/sagernet/sing-tun"
+	"github.com/sagernet/sing/common/buf"
 )
 
 func (c *ClientEndpoint) WaitWriteInboundBuffers(packetBuffers []*buf.Buffer) error {
@@ -32,4 +32,3 @@ func (s *ServerEndpoint) FrontHeadroom() int {
 func (s *ServerEndpoint) NewOutboundQueue(handler func(packetBuffers []*buf.Buffer)) *tun.OutboundQueue {
 	return s.device.NewOutboundQueue(handler)
 }
-

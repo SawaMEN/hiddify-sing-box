@@ -26,6 +26,12 @@ VetrOFFProxy, OpenFlux, OLCRTC, FPTN, PingTunnel, custom Sudoku, Snell and the e
 
 WARP/MASQUE now uses the latest upstream device-pool, refusal recovery and scope-owned lifecycle. The fork retains explicit registration-detour policy, IPv4/IPv6 profile validation and its adapted gVisor stack. Standalone `masque` requires an enrolled `device`; automatic registration uses a `warp` endpoint with `mode: masque`. The fork's `IsReady` adapter contract and legacy `pool_tolerance` configuration are retained alongside optional detailed status. Live WARP/Psiphon checks require network access and their documented opt-in environment variables.
 
+## Integration regressions
+
+- Monitoring publishes completion before its result, so a subsequent URL stage starts a fresh test instead of joining a settled test; completion signals belong to their execution.
+- MASQUE unwraps mapped IPv4 destinations and uses its IPv6 local address for IPv6 UDP. The fork's gVisor forwarder Start/Close ownership is retained.
+- DNS auto-resolver tests cover both bundled and dynamically discovered candidates.
+
 ## Validation
 
-The pull request runs the standard platform Test and Lint workflows plus production-tag vet, race regressions and the full production-tag suite in `Upstream compatibility`. Final validation results are recorded after those checks complete. Schema and module metadata are generated from the integrated source, rather than copied over the fork's options.
+The pull request runs the standard platform Test and Lint workflows plus production-tag vet, race regressions and the full production-tag suite in `Upstream compatibility`. The exact-head CI results are attached to PR #17. Local regression checks cover monitoring, balancer, WARP/MASQUE, DNSTT/MasterDNS, Soar, IP lookup, schema and options. Schema and module metadata are generated from the integrated source, rather than copied over the fork's options.

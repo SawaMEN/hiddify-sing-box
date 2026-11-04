@@ -22,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/getlantern/soar"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
 	"github.com/sagernet/sing-box/common/dialer"
@@ -35,6 +34,8 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/service"
+
+	"github.com/getlantern/soar"
 )
 
 const (
@@ -107,7 +108,7 @@ func validateZone(zone string) error {
 	if len(zone) > 200 {
 		return E.New("domain ", strconv.Quote(zone), " is too long to carry data under it")
 	}
-	for _, label := range strings.Split(zone, ".") {
+	for label := range strings.SplitSeq(zone, ".") {
 		if label == "" || len(label) > 63 {
 			return E.New("domain ", strconv.Quote(zone), " is not a DNS name")
 		}

@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/sagernet/wireguard-go/tun"
+
 	"github.com/songgao/water"
 )
 
@@ -45,13 +46,13 @@ func NewNetstackAdapter(dev tun.Device) TunnelDevice {
 	return &NetstackAdapter{
 		dev: dev,
 		tunnelBufPool: sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				buf := make([][]byte, 1)
 				return &buf
 			},
 		},
 		tunnelSizesPool: sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				sizes := make([]int, 1)
 				return &sizes
 			},

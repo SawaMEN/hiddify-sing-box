@@ -81,5 +81,4 @@ func (s *RoundRobin) Select(metadata adapter.InboundContext, net string, touch b
 		s.idx[net] = id
 	}
 	return proxy
-
 }

@@ -99,6 +99,7 @@ func newStackDevice(options DeviceOptions) (*stackDevice, error) {
 }
 
 func (w *stackDevice) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
+ destination = destination.Unwrap() //H: mapped IPv4 uses the IPv4 local address
 	addr := tcpip.FullAddress{
 		NIC:  tun.DefaultNIC,
 		Port: destination.Port,
@@ -140,6 +141,7 @@ func (w *stackDevice) DialContext(ctx context.Context, network string, destinati
 }
 
 func (w *stackDevice) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
+ destination = destination.Unwrap() //H
 	bind := tcpip.FullAddress{
 		NIC: tun.DefaultNIC,
 	}
@@ -149,7 +151,7 @@ func (w *stackDevice) ListenPacket(ctx context.Context, destination M.Socksaddr)
 		bind.Addr = tun.AddressFromAddr(w.inet4Address)
 	} else {
 		networkProtocol = header.IPv6ProtocolNumber
-		bind.Addr = tun.AddressFromAddr(w.inet4Address)
+		bind.Addr = tun.AddressFromAddr(w.inet6Address) //H
 	}
 	udpConn, err := gonet.DialUDP(w.stack, &bind, nil, networkProtocol)
 	if err != nil {

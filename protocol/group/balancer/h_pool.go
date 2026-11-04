@@ -47,7 +47,7 @@ var _ Strategy = (*Pool)(nil)
 func NewPool(outbounds []adapter.Outbound, options option.BalancerOutboundOptions) (*Pool, error) {
 	if options.Tolerance == 0 {
 		options.Tolerance = options.PoolTolerance
-	} //H: legacy alias
+	} // H: legacy alias
 	size := options.Pool
 	if size < 0 {
 		return nil, E.New("pool must not be negative")

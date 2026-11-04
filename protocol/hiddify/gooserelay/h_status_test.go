@@ -7,6 +7,7 @@ import (
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
+
 	"github.com/stretchr/testify/require"
 )
 

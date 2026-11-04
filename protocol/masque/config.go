@@ -21,8 +21,8 @@ type Config struct {
 	AccessToken    string `json:"access_token"`              // Authentication token for API access
 	IPv4           string `json:"ipv4"`                      // Assigned IPv4 address
 	IPv6           string `json:"ipv6"`                      // Assigned IPv6 address
-	EndpointPort   int    `json:"endpoint_port,omitempty"`   //H: port of the endpoints; 443 when 0
-	ReplacedDevice string `json:"replaced_device,omitempty"` //H: private key of the link's device this registered one replaces
+	EndpointPort   int    `json:"endpoint_port,omitempty"`   // H: port of the endpoints; 443 when 0
+	ReplacedDevice string `json:"replaced_device,omitempty"` // H: private key of the link's device this registered one replaces
 }
 
 func (c *Config) GetEcPrivateKey() (*ecdsa.PrivateKey, error) {
