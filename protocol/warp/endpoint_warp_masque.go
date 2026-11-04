@@ -51,7 +51,10 @@ func (w *WARPEndpoint) connectMASQUE(done <-chan struct{}, profile *warpProfile)
 	}
 	w.mtx.Lock()
 	w.endpoint = inner
-	w.scanStatusOf = func() *warpscan.Status { return inner.ScanStatus() }
+	w.scanStatusOf = nil                                                           //H: keep the fork's MASQUE adapter compatible
+	if status, ok := any(inner).(interface{ ScanStatus() *warpscan.Status }); ok { //H
+		w.scanStatusOf = status.ScanStatus //H
+	} //H
 	w.mtx.Unlock()
 }
 

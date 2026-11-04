@@ -226,8 +226,8 @@ type FragmentMask struct {
 	Packets  string       `json:"packets"`
 	Length   Int32Range   `json:"length"`
 	Delay    Int32Range   `json:"delay"`
-	Lengths  []Int32Range `json:"lengths"`
-	Delays   []Int32Range `json:"delays"`
+	Lengths  hInt32Ranges `json:"lengths"` //H: accept old compact ranges
+	Delays   hInt32Ranges `json:"delays"`  //H: accept old compact ranges
 	MaxSplit Int32Range   `json:"maxSplit"`
 }
 
