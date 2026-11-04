@@ -134,7 +134,7 @@ func TestH_ProtocolFieldExtensions(t *testing.T) {
 	require.NotNil(t, dnstt.MaxQnameLen)
 	require.Equal(t, 101, *dnstt.MaxQnameLen)
 	require.NotNil(t, dnstt.IdleTimeout)
-	require.True(t, dnstt.SmartPool)
+	require.True(t, dnstt.SmartPool.IsEnabled())
 	require.Nil(t, dnstt.RPS)
 }
 
