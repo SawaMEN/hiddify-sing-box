@@ -42,15 +42,15 @@ func (c *LegacyClient) DialContext(ctx context.Context) (net.Conn, error) {
 	if closed {
 		return nil, net.ErrClosed
 	}
-	raw, err := c.dialer.DialContext(ctx, N.NetworkUDP, c.address)
+	var raw net.Conn
+	var err error
+	if c.masks != nil && c.masks.HasUDP() {
+		raw, err = c.masks.DialContext(ctx, N.NetworkUDP, c.address, c.dialer.DialContext, c.dialer.ListenPacket)
+	} else {
+		raw, err = c.dialer.DialContext(ctx, N.NetworkUDP, c.address)
+	}
 	if err != nil {
 		return nil, err
-	}
-	if c.masks != nil {
-		raw, err = c.masks.WrapConn(raw, N.NetworkUDP, c.address)
-		if err != nil {
-			return nil, err
-		}
 	}
 	var conversation [2]byte
 	if _, err = io.ReadFull(rand.Reader, conversation[:]); err != nil {

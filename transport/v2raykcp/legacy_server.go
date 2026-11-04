@@ -44,9 +44,9 @@ func (s *LegacyServer) Network() []string        { return []string{N.NetworkUDP}
 func (s *LegacyServer) Serve(net.Listener) error { return os.ErrInvalid }
 func (s *LegacyServer) ServePacket(packet net.PacketConn) error {
 	var err error
-	if s.masks != nil && s.masks.UDP != nil {
+	if s.masks != nil && s.masks.HasUDP() {
 		raw := packet
-		packet, err = s.masks.UDP.WrapPacketConnServer(raw)
+		packet, err = s.masks.WrapPacketConnServer(raw)
 		if err != nil {
 			raw.Close()
 			return err
