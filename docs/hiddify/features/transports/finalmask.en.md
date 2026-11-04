@@ -24,7 +24,7 @@ not reassemble them cannot read the SNI. `noise` sends random packets first, so 
 does not start the flow. Header and wrapping masks make the traffic look like another protocol, or
 like random bytes.
 
-Masks that only change sizes and timing (`fragment`, `merge`, `oob`, `noise`) work with any
+Masks that only change sizes and timing (`fragment`, `merge`, `oob`, `mirage`, `noise`) work with any
 server. Masks that change the content (headers, `salamander`, `sudoku`, `xdns`, `xicmp`, `xmc`,
 `mkcp-legacy`, `realm`) need the same mask on the server, which means an Xray server configured
 for it. `udphop` needs a server that listens on every port it hops to. A mask does not help when
