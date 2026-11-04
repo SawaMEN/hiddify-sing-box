@@ -212,12 +212,10 @@ func (t *Transport) updateTransports(link *TransportLink) error {
 	if servers, loaded := t.linkServers[link]; loaded {
 		servers.serverScope.Close()
 	}
-	serverDialer := common.Must1(dialer.NewDefault(t.ctx, option.DialerOptions{
-		AbstractDialerOptions: {
-			BindInterface:      link.iif.Name,
-			UDPFragmentDefault: true,
-		},
-	}))
+	dialOptions := option.DialerOptions{}
+	dialOptions.AbstractDialerOptions.BindInterface = link.iif.Name
+	dialOptions.AbstractDialerOptions.UDPFragmentDefault = true
+	serverDialer := common.Must1(dialer.NewDefault(t.ctx, dialOptions))
 	serverScope := adapter.NewScope(t.ctx, t.logger) // H
 	var transports []adapter.DNSTransport
 	for _, address := range link.address {
