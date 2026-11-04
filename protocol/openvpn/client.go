@@ -88,9 +88,9 @@ func NewClientEndpoint(ctx context.Context, router adapter.Router, logger log.Co
 		onDemand:      options.OnDemand,
 	}
 	clientEndpoint.endpointBase = endpointBase{
-			Adapter: endpoint.NewAdapterWithDialerOptions(C.TypeOpenVPNClient, tag, []string{N.NetworkTCP, N.NetworkUDP, N.NetworkICMP}, options.DialerOptions),
-			router:  router,
-			logger:  logger,
+		Adapter: endpoint.NewAdapterWithDialerOptions(C.TypeOpenVPNClient, tag, []string{N.NetworkTCP, N.NetworkUDP, N.NetworkICMP}, options.DialerOptions),
+		router:  router,
+		logger:  logger,
 	}
 	success := false
 	defer func() {

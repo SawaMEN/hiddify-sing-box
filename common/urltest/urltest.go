@@ -198,7 +198,7 @@ func urlTest(ctx context.Context, link string, detour N.Dialer) (t uint16, err e
 	}
 	resp.Body.Close()
 
-	t = uint16(time.Since(start) / time.Millisecond)
+	t = uint16(max(time.Since(start)/time.Millisecond, 1)) // H: zero is reserved for unmeasured
 
 	if IsUnifiedDelayFromContext(ctx) {
 		select {
@@ -212,7 +212,7 @@ func urlTest(ctx context.Context, link string, detour N.Dialer) (t uint16, err e
 			return
 		}
 		resp.Body.Close()
-		t = uint16(time.Since(second) / time.Millisecond) // to avid timeout in the second call
+		t = uint16(max(time.Since(second)/time.Millisecond, 1)) // H: preserve successful sub-millisecond results
 	}
 	return
 }
