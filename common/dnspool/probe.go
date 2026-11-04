@@ -7,13 +7,14 @@ import (
 	"strconv"
 	"time"
 
-	multidns "github.com/hiddify/hmrd_multi_resolver_dns"
-	mDNS "github.com/miekg/dns"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/dns/transport"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
+
+	multidns "github.com/hiddify/hmrd_multi_resolver_dns"
+	mDNS "github.com/miekg/dns"
 )
 
 // ProbeTimeout is how long one probe may take.
@@ -82,12 +83,8 @@ func Probe(ctx context.Context, logger log.ContextLogger, resolver string, name 
 			port = uint16(n)
 		}
 		trans, err = transport.NewHTTPS(ctx, logger, "probe", option.RemoteHTTPSDNSServerOptions{
-			RemoteTLSDNSServerOptions: option.RemoteTLSDNSServerOptions{
-				RemoteDNSServerOptions: option.RemoteDNSServerOptions{
-					RawLocalDNSServerOptions: local,
-					DNSServerAddressOptions:  option.DNSServerAddressOptions{Server: u.Hostname(), ServerPort: port},
-				},
-			},
+			RawLocalDNSServerOptions: local,
+			Server:                   u.Hostname(), ServerPort: port,
 			Path: u.Path,
 		})
 		if err != nil {
@@ -104,7 +101,7 @@ func Probe(ctx context.Context, logger log.ContextLogger, resolver string, name 
 		}
 		remote := option.RemoteDNSServerOptions{
 			RawLocalDNSServerOptions: local,
-			DNSServerAddressOptions:  option.DNSServerAddressOptions{Server: host, ServerPort: uint16(n)},
+			Server:                   host, ServerPort: uint16(n),
 		}
 		switch config.Protocol {
 		case multidns.ProtoTCP:

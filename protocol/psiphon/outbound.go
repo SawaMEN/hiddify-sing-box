@@ -350,13 +350,7 @@ func (receiver *Outbound) run() {
 	// }
 }
 
-func (receiver *Outbound) DisplayType() string {
-	str := "⚠️ Connecting..."
-	if receiver.psiphon.IsConnected() {
-		str = "✔️ Connected"
-	}
-	return C.ProxyDisplayName(receiver.Type()) + " " + str
-}
+func (receiver *Outbound) DisplayType() string { return C.ProxyDisplayName(receiver.Type()) }
 
 func (receiver *Outbound) connectOnce() error {
 	return receiver.psiphon.Start()

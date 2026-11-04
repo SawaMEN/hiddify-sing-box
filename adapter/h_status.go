@@ -1,7 +1,6 @@
 package adapter
 
 import (
-	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -84,19 +83,6 @@ func IsReady(outbound Outbound) bool {
 	return OutboundStatus(outbound) == StatusReady
 }
 
-// SplitStatus separates a display type from its status mark, which is always last; mark is
-// empty when it has none.
-func SplitStatus(display string) (base string, mark string) {
-	for _, status := range []Status{StatusConnecting, StatusReconnecting, StatusSearching, StatusFailed, StatusRegistering} {
-		for _, hourglass := range HourglassFlip {
-			if suffix := status.mark(hourglass); strings.HasSuffix(display, suffix) {
-				return strings.TrimSuffix(display, suffix), strings.TrimSpace(suffix)
-			}
-		}
-	}
-	return display, ""
-}
-
 // StatusTracker gives the status of a connection from whether it carries traffic now:
 // connecting until it was first ready, reconnecting after. The zero value is ready to use.
 type StatusTracker struct {
@@ -112,4 +98,43 @@ func (t *StatusTracker) Status(ready bool) Status {
 		return StatusReconnecting
 	}
 	return StatusConnecting
+}
+
+// StatusErrorer is an outbound or an endpoint that can say why it is not ready: the error that
+// failed it, or the one its last attempt to connect ended with.
+type StatusErrorer interface {
+	StatusError() error
+}
+
+// StatusError is why outbound is not ready; nil when it is ready or does not say.
+func StatusError(outbound Outbound) error {
+	if OutboundStatus(outbound) == StatusReady {
+		return nil
+	}
+	if errorer, ok := outbound.(StatusErrorer); ok {
+		return errorer.StatusError()
+	}
+	return nil
+}
+
+// LastError keeps the last error of something that retries. The zero value is ready to use.
+type LastError struct {
+	err atomic.Pointer[error]
+}
+
+// Set keeps err; nil clears it.
+func (l *LastError) Set(err error) {
+	if err == nil {
+		l.err.Store(nil)
+		return
+	}
+	l.err.Store(&err)
+}
+
+// Get is the error kept, or nil.
+func (l *LastError) Get() error {
+	if err := l.err.Load(); err != nil {
+		return *err
+	}
+	return nil
 }

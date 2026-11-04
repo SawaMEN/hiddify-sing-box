@@ -111,10 +111,11 @@ func (p *BaseProvider) fetchData(ctx context.Context, detour N.Dialer) (map[stri
 	if err != nil {
 		return nil, 65535, err
 	}
-	if p.UserAgent == "" {
-		p.UserAgent = C.DefaultBrowserAgent
+	agent := p.UserAgent //H: provider is shared by concurrent monitoring tests
+	if agent == "" {
+		agent = C.DefaultBrowserAgent
 	}
-	req.Header.Set("User-Agent", p.UserAgent)
+	req.Header.Set("User-Agent", agent)
 	start := time.Now()
 	var client http.Client
 	if detour != nil {

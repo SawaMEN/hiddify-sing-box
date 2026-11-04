@@ -11,15 +11,25 @@ do about it. Items marked **Required** break or misbehave until they are handled
   (v5), plus the existing ones. `go.mod` and `test/go.mod` point at them with `replace`.
   **Required:** hiddify-core and every CI or gomobile build must check out submodules recursively
   (`git submodule update --init --recursive`), or the build fails on missing modules.
+- **MasterDnsVPN fork.** `replace/MasterDnsVPN` (module `masterdnsvpn-go`, fork
+  `github.com/hiddify/MasterDnsVPN`, branch `hiddify`) is the client of the `masterdns` outbound,
+  with a library API in `lib/`. **Required:** hiddify-core's `go.mod` (and ray2sing's) need
+  `replace masterdnsvpn-go => ./hiddify-sing-box/replace/MasterDnsVPN`, like the other
+  `replace/` forks. No build tag.
 - **Build tags.** `with_masque` is now in the core Makefile and in hiddify-core's Makefile
   (hiddify-core commit `6bea470`). Four new features are behind tags that are **off** by default:
   `with_kcp` (mKCP), `with_sudoku` (Sudoku), `with_bond` (Bond) and `with_call` (call tunnel). A
   config using one of them fails with "… is not included in this build" unless the tag is set.
   Decide per platform whether to ship them; `with_call` pulls in a large WebRTC stack. rmux needs
   no tag.
-- **Go 1.27.** Binaries with Psiphon crashed at start when built with Go 1.27 (psiphon-tls
-  checked the old `tls.ConnectionState` layout). Fixed in `bb18926a9`; Go 1.26.3 and 1.27.3 both
-  work.
+- **XDRIVE and the default tags.** The core Makefile's default tags meant to include
+  `with_sudoku`, `with_call`, `with_bond` and `with_kcp` but joined them with `/`, so none of the
+  four was built; they are now separated by commas, and `with_xdrive` (the XDRIVE transport) is
+  added. hiddify-core's `PROTOCOL_TAGS` has `with_xdrive` too. In this fork, XDrive remains registered in ordinary builds; `with_xdrive` enables additional
+  integration tests. Existing fronting and template options remain accepted.
+- **Go 1.27 required.** Xray-core v26.10.31, which finalmask and XDRIVE use, needs Go 1.27, so
+  `go.mod` and `test/go.mod` now say `go 1.27`. Every CI and gomobile build must use Go 1.27.3 or
+  newer. (Binaries with Psiphon crashed at start when built with Go 1.27; fixed in `bb18926a9`.)
 - **uTLS fork.** `github.com/metacubex/utls` is replaced by `github.com/Leadaxe/utls-lx` in
   `go.mod` and `test/go.mod`. The `firefox` fingerprint is now Firefox 148 and `safari` is
   Safari 26.3; `chrome` stays Chrome 133. Nothing to change in configs.
@@ -58,31 +68,91 @@ do about it. Items marked **Required** break or misbehave until they are handled
   already). With `interrupt_exist_connections`, the hashing strategies interrupt only when the
   set of usable members changes, not on every test round.
 - **Balancer connections are stable.** `lowest-delay` now honours `tolerance` (50 ms when unset;
-  send 50–100, not 1) and `tolerance_ratio` (a tenth of the selected member's delay when unset),
+  hiddify-core sends 20, with `tolerance_ratio` 0.3, so the rule is mostly relative) and
+  `tolerance_ratio` (a tenth of the selected member's delay when unset),
   and keeps its member until one is faster by more than the larger of the two or it fails a
   test. Connections are closed only for a member that died (its own connections) and once, 30
   seconds after start, for the members the first tests left out. A faster member takes new
   connections only, so `interrupt_exist_connections: true` no longer cuts calls or downloads on
   every test round. The balancer starts from the cached results, and the first cycle tests the
   cached fastest member first.
-- **Balancer `pool` strategy.** `strategy: "pool"` with `pool`, `pool_tolerance` and
-  `sticky_hash` gives a fixed set of slots with sticky keys that do not move when another member
-  dies (lx's `round_robin`).
+- **Balancer `pool` strategy.** `strategy: "pool"` with `pool` and `sticky_hash` gives a fixed
+  set of slots with sticky keys that do not move when another member dies (lx's `round_robin`).
+  `tolerance` and `tolerance_ratio` let a faster member outside take a slot, as for lowest-delay;
+  unset, the first working members keep their slots, so hiddify-core sends them to the
+  lowest-delay group only. `sticky_hash` is `sticky-sessions`' key too.
 - **URL test failover.** A failover member that is more than 2 times slower than the fastest
   other one, twice in a row, is now left for one more than 1.5 times faster.
 - **A tapped or selected proxy answers at once.** The outbound a group's selection leads to is
   tested before the first cycle and again when the selection moves; a test asked for runs at
   once beside the cycle, in stages (`experimental.monitoring.on_demand_timeouts`, 1 s, 3 s,
   10 s by default): the app sees the proxy as unavailable after the first mark with no answer,
-  then the first answer from any attempt, however late. The delay is published before the IP
+  then the answer, however late. A proxy is pinged once; only a failed attempt is tried again,
+  at the next mark. A tap while the proxy is being tested joins that test instead of a second
+  ping, and a selection measured in the last 15 s is not tested again. A ping cached from the
+  previous run decides nothing and is not shown: it orders the members until the real pings
+  arrive, and the app's proxy list sorts by `sort_delay`, which carries it, while
+  `url_test_delay` stays 0 for it. hiddify-core sets the
+  lowest-delay groups' `tolerance` to 20 ms and `tolerance_ratio` to 0.3: an absolute 100 ms
+  kept a 59 ms member over a 25 ms one. The `MONITORING` and `LOWEST` log lines say why each
+  test ran and what the group decided. hiddify-core keeps a profile's proxy tags stable across
+  its updates (an unchanged proxy keeps the tag it had, whatever its new position in the list),
+  so a hot reload after a subscription update keeps the unchanged proxies and their pings and
+  tests only what changed; keep top keeps its pick while every kept proxy is unchanged and none
+  timed out. A proxy that worked in this run skips the first mark: it keeps its ping
+  through a slow answer rather than flicker to unavailable after one second. The delay is
+  published before the IP
   lookup, so the IP arrives after the ping. Nothing to set; the core's defaults are these.
-- **IPv6 follows the proxy.** The monitoring probes an IPv6 address through every outbound and
-  endpoint that answered, each on its own (`experimental.monitoring.ipv6_probe`); hiddify-core sets `ipv6_by_outbound` on the
-  remote DNS rules and an `ipv6_unavailable_via` reject rule, both on the main selector. A
-  browser through a proxy without IPv6 gets IPv4 answers only, and an IPv6 connection that still
-  comes is refused so it falls back (hiddify-app #2307, #2420). Nothing to set in the app; the
-  IPv6 mode only orders the families. `URLTestHistory.IPv6` says what the probe found, for an
-  app that wants to show it.
+- **IPv6 for the apps is off by default, and verified per proxy when on.** hiddify-core answers
+  the apps with `ipv4_only` DNS rules and rejects every IPv6 destination before the sniff rule
+  (so before the handshake) unless the IPv6 mode turns IPv6 on; the app's routing page says why
+  (most exits have no IPv6, and a connection the proxy cannot carry dies after it opened, which
+  browsers never retry). When on, the core sets `verify_ipv6` (each proxy's URL test is followed
+  once per run by the same URL over IPv6, cached per proxy), `route.ipv6_fallback` (an IPv6
+  connection through a proxy not known yet is carried over IPv4 inside the connection and
+  teaches the proxy's IPv6), `ipv6_by_outbound` on the DNS rules answering the apps and an
+  `ipv6_unavailable_via` reject rule on the main selector, both fail-open. A subscription turns
+  IPv6 on for its profile with an `ipv6-mode: prefer_ipv4` header (the app's override list), and
+  a share link declares its proxy with `ipv6=1` or `ipv6=0` (ray2sing, `ipv6_declared`). No
+  probe of a public address is made (`ipv6_probe` is retired): the verification uses the user's
+  own test URL. See [IPv6 by outbound](features/dns/ipv6-by-outbound.en.md).
+- **MasterDNS outbound.** `"type": "masterdns"` (display name `MasterDNS`) is a new outbound
+  type for MasterDnsVPN servers: `domains`, `resolvers`, `encryption`, `key`, `mode` and tuning
+  fields, see [MasterDNS](features/protocols/masterdns.en.md). TCP only; in `socks5` mode it needs
+  no outbound behind it, in `tcp` mode the app chains a `socks` or `ssh` outbound with `detour`
+  as for DNSTT. Its status is CONNECTING until the resolvers are tested and the session is open,
+  which can take several seconds; the app should show that rather than an error. ray2sing reads
+  `masterdns://` links, `slipnet://` links (SlipNet profiles for DNSTT, NoizDNS and VayDNS) as
+  `dnstt` outbounds with a `socks` or `ssh` outbound in front, and `dnst://` links (the dnst URL
+  spec, github.com/net2share/dnst-url-spec) for the dnstt, vaydns and masterdns transports.
+- **Soar outbound.** `"type": "soar"` (display name `Soar`) is a new outbound type for Soar
+  servers (`github.com/getlantern/soar`): `domain`, `public_key`, `resolvers` and tuning fields,
+  see [Soar](features/protocols/soar.en.md). TCP only, no outbound behind it. The resolvers
+  written go through its smart pool, on by default; `auto` or no resolvers runs Soar's own
+  discovery. The session
+  opens at the first connection, so the status is CONNECTING until then. ray2sing reads
+  `soar://` links: WhiteDNS's profile link (base64url JSON, schema `whitedns.profile`) and a URL
+  form. The JSON editor offers a `soar` template.
+- **Links turn the masterdns smart pool on.** ray2sing gives a `masterdns://` or `dnst://`
+  masterdns outbound `smart_pool` unless the link says `smart_pool=0` or lists an address range,
+  and a link without resolvers gets `auto`. It also reads WhiteDNS's `masterdns://` profile link.
+- **Shared resolver discovery.** `smart_pool.discovery` (`country`, `sample_ranges`, `want`,
+  `concurrency`, `pace`) is the same block for `dnstt`, `masterdns` and `soar`: their `auto`
+  starts with the candidates of Soar's discovery (device resolvers, the country's bundled list,
+  global resolvers), then the built-in list. hiddify-core fills `discovery.country` from the
+  app's region when it is empty. Links take `country`, `sample_ranges`, `discovery_want`,
+  `discovery_concurrency` and `discovery_pace`.
+- **Soar fork.** `replace/soar` (module `github.com/getlantern/soar`, to be forked as
+  `github.com/hiddify/soar`, branch `hiddify`) adds `Discovery.List()`, so the pool takes Soar's
+  discovery candidates from Soar's own code. hiddify-core's `go.mod` needs
+  `replace github.com/getlantern/soar => ./hiddify-sing-box/replace/soar`, like the other forks.
+- **Smart resolver pool, per outbound.** `dnstt`, `masterdns` and `soar` take `smart_pool`, `true` or an
+  object (`load_balance`, `deadline`, `per_attempt`, `probe_interval`, `down_after`); the
+  resolver list, scores, probe and pool of every DNS tunnel are one shared package,
+  `common/dnspool`, and each outbound runs its own pool. With it, `auto`, DoT and DoH resolvers
+  work for both tunnels. See [Smart resolver pool](features/dns/smart-dns-pool.en.md).
+  **Required:** the `smart_dns_pool` service is removed; a config with it fails to load. Set
+  `smart_pool` on the outbound instead.
 - **New options worth exposing:**
   - DNS group: `mode` `stable` and `fastest`, `error_ttl`, `win_ttl`.
   - URL test: `urls` (more test URLs) and `mode: "failover"`.
@@ -124,12 +194,17 @@ do about it. Items marked **Required** break or misbehave until they are handled
   `lowest` (lowest-delay) balancer when the profile has 2+ proxies. With only one proxy, `lowest`
   is not built; connectivity then uses that proxy's own ping (the select leaf) so the core does
   not stay WAITING ("Connecting") forever.
-- **MASQUE devices from links.** A `masque` outbound with `device` (what `masque://` links
-  become, MahsaNG's shape included) needs no `endpoint_public_key`: the edge's fixed key is
-  built in. The port of an endpoint written as `ip:port` is used. When Cloudflare refuses the
-  device and it points at WARP, the outbound registers a device like a profile and saves it in
-  the cache file under the profile key as the link device's replacement, so the cache file
-  matters for such configs too.
+- **MASQUE devices from links.** The `masque` outbound never registers a WARP device: it needs
+  `device`, and a config without one fails to load ("use the warp endpoint with mode masque").
+  A device needs no `endpoint_public_key`: the edge's fixed key is built in. The port of an
+  endpoint written as `ip:port` is used. A `masque://` link to WARP (an endpoint in WARP's ranges
+  or under `cloudflareclient.com`, or Cloudflare's server name, or none) is a `warp` endpoint with
+  `mode` `masque` (ray2sing): the link's key goes to `masque.device`, and a link without a key gets
+  a saved or registered device from the WARP pool. When Cloudflare refuses `masque.device`, WARP
+  remembers it in the cache file (`<unique_identifier>/refused-masque-device`) and takes a pool
+  device, so the cache file matters for such configs too. ray2sing sets `unique_identifier` from
+  the link's device id, else a hash of its key or endpoints, so renaming the profile keeps its
+  devices. Only a link to another MASQUE server stays a `masque` outbound, and needs its key.
 - **WARP over MASQUE in the warp endpoint.** A `warp` endpoint can now run MASQUE instead of
   WireGuard: `"masque": {"enabled": true}`, or any MASQUE setting (`vhttp`, `server_name`,
   `use_ipv6`, `tls`, …). Prefer this to a separate `masque` outbound: one endpoint handles
@@ -146,20 +221,19 @@ do about it. Items marked **Required** break or misbehave until they are handled
   `masque` type is WARP only.
 - **Display types.** WARP shows `WARP · WG`, `WARP · AWG` or `WARP · MASQUE`; the `masque`
   outbound shows `WARP · MASQUE`. After them comes the endpoint the scanner chose
-  (` · 🔍 <address:port>`, or ` · 🔍 Not found`), then the status mark. If the app maps display
-  types to icons or labels, match on the prefix.
+  (` · 🔍 <address:port>`, or ` · 🔍 Not found`). If the app maps display types to icons or
+  labels, match on the prefix.
 - **Status, for every outbound and endpoint.** `IsReady() bool` is replaced by
   `Status() adapter.Status`: `StatusReady`, `StatusConnecting`, `StatusReconnecting`,
   `StatusSearching`, `StatusFailed` and `StatusRegistering`; `adapter.IsReady(o)` is the yes/no.
-  `adapter.DisplayType(o)` adds the mark of the status to any outbound or endpoint:
-  ` ⏳ Connecting...`, ` ⏳ Reconnecting...`, ` 🔍 Searching...`, ` ❌ Failed`,
-  ` 🔑 Registering...`, nothing when ready. The hourglass flips between ⏳ and ⌛ with the second
-  (`adapter.HourglassFlip`), so a display that refreshes shows it turning; `adapter.SplitStatus`
-  separates the mark from the rest. hiddify-core must show `adapter.DisplayType(o)`
-  (v2/hcore/proxy_info.go does, uncommitted at the time of writing); calling `DisplayType()`
-  directly loses the mark. The `OutboundInfo` message still has only `is_ready`; a `status`
-  field would let the app show the state without parsing the label. Psiphon no longer shows
-  "✔️ Connected", and SSH shows its last error as `SSH: <error>` before the mark.
+  `adapter.DisplayType(o)` is the type and what the status cannot say, nothing more: the
+  resolvers a DNS tunnel uses (`MasterDNS · 3 resolvers`), the endpoint the WARP scanner chose.
+  It has no status mark (no ` ⏳ Connecting...`, no `✔️`): hiddify-core sends the status on its
+  own (`OutboundInfo.status`) and the app shows it. A failed outbound adds why it failed,
+  `adapter.StatusError(o)`: `Invalid: bad uuid`, `WARP · WG: <error>`. While it is only
+  connecting, the error of its last attempt goes to `OutboundInfo.error` and not to the type
+  (SSH's last connection error, for example). The app's `typeWithoutStatus` still strips the
+  marks an older core sends.
 - **WARP registration fallback.** When registration through `profile.detour` fails, WARP (all
   three tunnels) tries again through every other outbound, direct included. That was already so
   for WireGuard and is kept; it lets a cold detour group not block registration, but it means
@@ -203,14 +277,19 @@ do about it. Items marked **Required** break or misbehave until they are handled
   secrets. The app's "include configuration" option no longer adds the configuration. The app
   should stop showing an "encrypted" state for reports.
 
-## Scope-owned logging cleanup
-
-The box registers log cleanup when it is constructed and closes the logger through its scope
-only. This also covers closing before startup. Stopping after a successful reload no longer
-returns a spurious `file already closed`; real cleanup failures are still returned. Apps should
-keep surfacing actual stop errors and need no new setting or retry.
-
 ## Behaviour the app should know about
+
+- **finalmask follows Xray v26.10.** `xdns` takes `domains` as `{"names": [...]}` and
+  `resolvers` as `{"addrs": [...]}`, with DoH resolvers (`https://…` plus `tlsConfig`); the older
+  string forms still load. New masks: `udphop`, noise `type: "exp"` and `script`. Masks are now
+  dialed through: `xdns` and `udphop` open their own sockets with the outbound's dialer. Links
+  carry finalmask as JSON (`fm=`), which ray2sing passes through unchanged, so nothing to change
+  in link parsing for the new masks.
+- **XDRIVE.** The `xdrive` transport needs VLESS with `encryption` for an Xray server. The
+  outbound's `server` and `server_port` are required but unused; the app may show them as
+  meaningless for such a profile. Each proxy connection is its own storage session, since the
+  client has no Mux.Cool: a profile on Google Drive is slow and spends API quota, so a URL test
+  every few minutes costs a session each time.
 
 - **URL test.** A dial that fails because the path is dead moves the group to another member
   immediately, without closing live connections, so the selected member can change between tests.
@@ -226,6 +305,18 @@ keep surfacing actual stop errors and need no new setting or retry.
   Security · Selectable` or `🔓 Unblocker · Selectable`; its tag ends in `§hide§` like every chain
   hop, so do not hide it) whose items are `Lowest → <hop>` (the
   default, a lowest-delay balancer) and each WARP tunnel and Psiphon, moved with `SelectOutbound`.
+- **Why a proxy failed.** The URL test history keeps the error of a failed test (`Error`), and an
+  outbound that is not ready says why through `adapter.StatusError` (WARP and MASQUE: a refused
+  registration, a tunnel that does not connect, with the tunnel's last connect error). hiddify-core
+  passes either to the app as `OutboundInfo.error`, for the proxy's details. A result loaded from
+  the cache keeps its error only until the next test. See
+  [Monitoring](features/groups/monitoring.en.md).
+- **Fake DNS rule.** The DNS rules hiddify-core generates set `strategy`, which keeps sing-box in
+  legacy DNS mode. A `query_type` (or `ip_version`) matcher in any DNS rule then makes the router
+  refuse to start, with "Legacy `strategy` DNS rule action option is deprecated", and the app
+  stays on Connecting. The fake IP rule therefore matches every query with `bypass_if_failed`;
+  queries other than A and AAAA fail at the fake IP server, at debug level only, and go on to
+  the remote rule. See [bypass_if_failed](features/dns/dns-bypass-if-failed.en.md).
 - **DNS predefined answers.** In legacy DNS mode, A/AAAA records in 10.0.0.0/8 and
   2001:4188:2:600::/64 are removed from `predefined` answers (`dns/blocked_checker.go`). This is
   deliberate and tested, but a predefined answer in those ranges returns nothing; keep it in mind
@@ -257,3 +348,15 @@ keep surfacing actual stop errors and need no new setting or retry.
 All forks have GitHub repos under `github.com/hiddify/` (`sing-tun`, `gvisor`, `wireguard-go`,
 `amneziawg-go`, `sing-mux`, and the older ones). Nothing has been pushed yet: push each fork's
 branch before pushing hiddify-sing-box, or the submodule commits cannot be fetched.
+
+## Fork synchronization on 2026-11-04
+
+- Build with Go 1.27.3 or newer and initialize submodules recursively, including `replace/MasterDnsVPN`.
+- XDrive remains registered in ordinary fork builds; `with_xdrive` enables additional integration tests. Its former duplicated implementation has been replaced by the canonical Xray adapter. The fork still accepts `front_address`, `front_port`, JSON-encoded template strings and inbound `storage_dialer` settings; new configurations can use `fronting_address`, `fronting_port` and template objects.
+- Existing standalone `smart_dns_pool` service configurations still work. New DNS tunnels can use the per-outbound `smart_pool` boolean or settings object.
+- `ipv6_probe` is accepted for compatibility but no longer performs the old connection-only probe. Use the verified/learned capability options described above.
+
+## November 2026 fork synchronization
+
+- Keep `final_mask` in existing app configurations; upstream `finalmask` is accepted too. If both appear, `final_mask` takes precedence.
+- Use the updated `tfo-go v2.4.2` module graph for Go 1.27 builds, including Windows.

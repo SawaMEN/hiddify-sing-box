@@ -3,11 +3,6 @@ package option
 // V2RayKCPOptions configures the mKCP transport, as Xray 26's kcpSettings. The header and seed of
 // older mKCP are finalmask UDP masks now (mkcp-original, mkcp-aes128gcm, header-*), as in Xray.
 type V2RayKCPOptions struct {
-	// Legacy Xray mKCP compatibility. Modern clients use the native KCP engine.
-	Legacy bool `json:"legacy,omitempty"`
-	Seed string `json:"seed,omitempty"`
-	Header string `json:"header,omitempty"`
-	FinalMask *FinalMaskOptions `json:"final_mask,omitempty"`
 	MTU              uint32 `json:"mtu,omitempty"`
 	TTI              uint32 `json:"tti,omitempty"`
 	UplinkCapacity   uint32 `json:"uplink_capacity,omitempty"`

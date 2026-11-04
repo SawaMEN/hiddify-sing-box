@@ -59,10 +59,23 @@ It does not. It finds out which outbounds work, so groups can avoid the blocked 
   groups' subscribers at once, past `debounce_window`.
 - A test asked for runs in stages, `on_demand_timeouts` (1 s, 3 s and 10 s unless set). The
   first attempt starts at once. When it fails, or has not answered by the first mark, the
-  outbound shows as unavailable for now, and at that mark a second attempt starts beside the
-  first; so at every mark but the last, which is the deadline of them all. The first answer from
-  any attempt shows at once, however late: an answer at 1.5 s replaces the miss shown at 1 s.
-  When every attempt has failed and none is due, it is over without waiting for the deadline.
+  outbound shows as unavailable for now. A failed attempt is tried again at the next mark, and
+  so at every mark but the last, which is the deadline of them all; an attempt still running at
+  a mark is left to answer, so a proxy is pinged once unless its ping failed. The answer shows
+  at once, however late: an answer at 1.5 s replaces the miss shown at 1 s. When the last
+  attempt has failed and no mark is left to try at, it is over without waiting for the deadline.
+  A test asked for while a test of the same outbound runs (the cycle's, or an earlier tap) joins
+  it and takes its result: one ping at a time per outbound. Two at once pinged the proxy twice,
+  and the one that ended last wrote the result, so a late failure replaced a fresh answer. A
+  group's new selection is not tested again when it was measured in the last 15 s: under load,
+  that second ping read 2549 ms for a 59 ms member and the group moved on.
+- The log says why every test runs and what every lowest-delay group decides: lines prefixed
+  `MONITORING` (test, result, cycle, the stages of a staged test) and `LOWEST` (the member kept
+  or taken, with the fastest one and the reason), at the info level.
+  The first mark is for an outbound nothing is known of yet: no result of this run, or only the
+  one cached from the previous run. An outbound that worked in this run keeps its result past
+  it, instead of showing as unavailable after one slow answer, and its stages start at the
+  second mark (3 s, then the 10 s deadline).
   Groups never see the miss, only the last confirmed result, so a balancer does not take a slow
   member for dead, move away from it and cut its connections, on a miss its next attempt answers.
 - A test's delay is published as soon as the URL test answers. The IP lookup that follows it,
@@ -90,6 +103,11 @@ The IP information is loaded too, so the app can show the last run's exit IP and
 any test. It stays marked as from the cache (`IpInfoFromCache`) until an IP lookup of this run
 succeeds; a failed test does not change it. The exit IP of WARP, Psiphon or a rotating proxy can
 change between runs, so the app should show such an IP as not confirmed yet.
+
+A failed test keeps its error in the result (`Error`), so the app can say why the proxy failed:
+a refused handshake, a timeout, a DNS failure. A test that answers clears it. An outbound that is
+not ready is not tested, so it has no test error; WARP and MASQUE say why they are not ready
+through `adapter.StatusError` instead (a refused registration, a tunnel that does not connect).
 
 Groups that subscribe to monitoring get one update for a burst of results, after
 `debounce_window`.
@@ -136,10 +154,12 @@ api.my-ip.io: it answers the address and the country only, with no rate limit.
 | `interval` | duration | `5m` | How often outbounds are tested. |
 | `urls` | list of strings | `["https://www.gstatic.com/generate_204"]` | Test addresses, in order of preference. |
 | `ipinfo_url` | string | `""` | An IP information service to try first, for example from your subscription. |
-| `ipv6_probe` | string | `[2606:4700:4700::1111]:443` | The IPv6 address a connection is opened to through each outbound that answered, once per outbound per run, to learn whether that outbound carries IPv6; see [IPv6 by outbound](../dns/ipv6-by-outbound.en.md). `none` turns it off. |
+| `verify_ipv6` | bool | `false` | After each outbound's URL test, the same URL is fetched once more over the host's IPv6 address through it, once per run, to learn whether the outbound carries IPv6; see [IPv6 by outbound](../dns/ipv6-by-outbound.en.md). |
+| `ipv6_declared` | object, tag to bool | | Outbounds whose IPv6 the link declared (`ipv6=1`, `ipv6=0`); known from the start. |
+| `ipv6_probe` | | | Retired, no effect. |
 | `workers` | int | `10` | Tests that run at once. |
 | `url_test_timeout` | duration | `5s` | Longest time for one test of the cycle, and for one IP information request. |
-| `on_demand_timeouts` | list of durations | `["1s", "3s", "10s"]` | The marks of a test asked for: unavailable for now at the first with no answer, another attempt at each but the last, which is the deadline. |
+| `on_demand_timeouts` | list of durations | `["1s", "3s", "10s"]` | The marks of a test asked for: unavailable for now at the first with no answer, a failed attempt tried again at each but the last, which is the deadline. The first mark is skipped for an outbound that worked in this run. |
 | `idle_timeout` | duration | `10m` | Stop testing after this long with no connections. |
 | `debounce_window` | duration | `500ms` | How long to collect results before groups get an update. |
 

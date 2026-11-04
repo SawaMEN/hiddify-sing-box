@@ -18,7 +18,7 @@
 
 - [WARP](features/protocols/warp.fa.md): WARP کلادفلر روی WireGuard، AmneziaWG یا MASQUE، با ثبت حساب رایگان، بسته‌های نویز و اسکنری که برای هر شبکه جدا به نشانی دیگری می‌رود.
 - [اسکنر و noise در WARP](features/protocols/warp-scanner.fa.md): اسکنر endpoint، حالت‌ها و پیش‌تنظیم‌های noise (DNS، QUIC، SIP، تصادفی)، جست‌وجوی noise و حالت auto چطور راهی برای عبور پیدا می‌کنند.
-- [WARP روی MASQUE](features/protocols/warp-masque.fa.md): outbound مستقل `masque` برای WARP روی HTTP/3، HTTP/2 یا هر دو؛ برای سرور MASQUE شخصی، از `masque-client` در sing-box اصلی استفاده کنید.
+- [WARP روی MASQUE](features/protocols/warp-masque.fa.md): outbound مستقل `masque` برای WARP روی HTTP/3، HTTP/2 یا هر دو، با دستگاهی که جای دیگری ثبت شده؛ برای ثبت دستگاه، endpoint ‏`warp` با `mode` برابر `masque` را به کار ببرید؛ برای سرور MASQUE شخصی، از `masque-client` در sing-box اصلی استفاده کنید.
 - [AmneziaWG](features/protocols/amneziawg.fa.md): WireGuard با بسته‌های بی‌معنی، handshakeهای padding‌دار و نوع پیام‌های دلخواه که شناسایی WireGuard را خنثی می‌کنند.
 - [WireGuard: افزوده‌های هیدیفای](features/protocols/wireguard-hiddify.fa.md): بسته‌های نویز پیش از handshake، نام کاربر برای هر peer، بازیابی سوکت و تکه‌تکه کردن UDP که به‌طور پیش‌فرض روشن است.
 - [خروجی WireGuard (قالب قدیمی)](features/protocols/wireguard-legacy.fa.md): خروجی قدیمی WireGuard که sing-box اصلی حذفش کرد، نگه داشته شده تا کانفیگ‌های قدیمی هنوز بارگذاری شوند.
@@ -29,6 +29,8 @@
 - [SSH](features/protocols/ssh.fa.md): یک ورودی سرور SSH برای port forwarding، به‌علاوهٔ UDP روی TCP و اتصال پس‌زمینه برای خروجی SSH.
 - [سایفون](features/protocols/psiphon.fa.md): بدون سرور شخصی از راه شبکهٔ سایفون وصل شوید و کشور خروجی را انتخاب کنید.
 - [DNSTT](features/protocols/dnstt.fa.md): ترافیک را درون پرس‌وجوهای DNS از راه resolverهای عمومی می‌برد و خودش آن‌ها را پیدا می‌کند.
+- [MasterDNS](features/protocols/masterdns.fa.md): تونل MasterDnsVPN از راه resolverهای عمومی، با سربار کم، تکرار بسته‌ها روی چند resolver و آزمایش MTU؛ سرور خودش به مقصد وصل می‌شود.
+- [Soar](features/protocols/soar.fa.md): تونل DNS پروژهٔ Lantern، هر resolver یک مسیر جدا با بازیابی سریع از دست رفتن بسته‌ها و کشف resolver، به‌طور پیش‌فرض از راه مجموعهٔ هوشمند؛ لینک‌های `soar://`.
 - [GooseRelay](features/protocols/gooserelay.fa.md): ترافیک را از راه Google Apps Script به سرور خودتان می‌فرستد، پس شبکه فقط HTTPS به گوگل می‌بیند.
 - [تونل تماس](features/protocols/call.fa.md): ترافیک پراکسی را درون یک تماس تصویری در VK، Telemost، Dion، WB Stream یا Bitrix24 می‌برد تا شبیه تماس با یک سرویس داخلی مجاز باشد؛ به‌طور کامل تست نشده است (build tag `with_call`).
 - [Tunnel](features/protocols/tunnel.fa.md): یک تونل معکوس که از راه یک سرور عمومی به دستگاه‌های پشت NAT می‌رسد.
@@ -38,18 +40,19 @@
 
 - [XHTTP](features/transports/xhttp.fa.md): ترنسپورت XHTTP از Xray با حالت‌ها، padding، جایگاه‌ها، XMUX و دانلود جداگانه.
 - [mKCP](features/transports/kcp.fa.md): mKCP نسخهٔ Xray 26 روی UDP برای شبکه‌های پرافت یا شبکه‌هایی که TCP را کند می‌کنند، پنهان‌شده با ماسک‌های UDP در finalmask (build tag `with_kcp`).
+- [XDRIVE](features/transports/xdrive.fa.md): ترنسپورت ذخیره‌سازی Xray؛ اتصال VLESS در فایل‌هایی روی Google Drive، S3 یا سرویس ذخیره‌سازی دیگر حمل می‌شود و کلاینت هرگز به سرور وصل نمی‌شود (build tag `with_xdrive`).
 - [ترنسپورت raw](features/transports/raw.fa.md): ترنسپورت `raw`، تا کانفیگ‌هایی که از Xray تبدیل شده‌اند بارگذاری شوند.
 - [مسیرهای دلخواه gRPC](features/transports/grpc-custom-path.fa.md): مسیرهای چندبخشی gRPC به سبک Xray در `service_name`.
-- [finalmask](features/transports/finalmask.fa.md): ماسک‌های finalmask از Xray (fragment، noise، header-custom و موارد دیگر) روی هر اتصالی که یک خروجی برقرار می‌کند.
+- [finalmask](features/transports/finalmask.fa.md): ماسک‌های finalmask از Xray (fragment، noise، header-custom، xdns روی UDP، TCP یا DoH، udphop، merge، oob و موارد دیگر) روی هر اتصالی که یک خروجی برقرار می‌کند.
 - [سرور simple-obfs در Shadowsocks](features/transports/shadowsocks-obfs.fa.md): یک سرور simple-obfs روی ورودی‌های Shadowsocks، با یک مقصد فریب وقتی obfs یا ورود شکست بخورد.
 - [rmux](features/transports/rmux.fa.md): یک پروتکل چندگانه‌سازی دیگر برای بردن چند اتصال در یک اتصال، در کنار smux، yamux و h2mux.
 
 ## DNS
 
 - [گروه DNS](features/dns/dns-group.fa.md): از چند سرور DNS هم‌زمان یا به نوبت بپرسید، یا روی سروری که کار می‌کند بمانید، و پاسخ‌های مسموم را کنار بگذارید.
-- [IPv6 بر اساس خروجی](features/dns/ipv6-by-outbound.fa.md): پاسخ AAAA و اتصال IPv6 فقط از خروجی‌هایی که پایش دید IPv6 را رد می‌کنند؛ بقیه بی‌درنگ به IPv4 برمی‌گردند.
+- [IPv6 بر اساس خروجی](features/dns/ipv6-by-outbound.fa.md): IPv6 فقط از خروجی‌هایی که معلوم است آن را رد می‌کنند، بررسی‌شده در تست URL و آموخته از اتصال‌ها؛ اتصالی که خروجی نتواند رد کند درون همان اتصال با IPv4 برده می‌شود تا هیچ برنامه‌ای مرگش را نبیند.
 - [قاعده‌های DNS: bypass_if_failed](features/dns/dns-bypass-if-failed.fa.md): وقتی سرور یک قاعدهٔ DNS شکست می‌خورد، پرس‌وجو به قاعدهٔ منطبق بعدی می‌رود.
-- [مجموعهٔ هوشمند DNS](features/dns/smart-dns-pool.fa.md): یک سرور DNS محلی که پرس‌وجوها را میان resolverهای زیادی پخش می‌کند، ساخته‌شده برای DNSTT.
+- [مجموعهٔ هوشمند resolver](features/dns/smart-dns-pool.fa.md): مجموعهٔ resolverی که هر خروجی تونل DNS با `smart_pool` برای خودش راه می‌اندازد، مشترک میان DNSTT، MasterDNS و Soar، با resolverهای `auto`، امتیازهای ذخیره‌شده و DoT/DoH.
 - [DNSCrypt (استمپ‌های SDNS)](features/dns/sdns.fa.md): سرور `sdns` که پرس‌وجوهای رمزشده را به یک resolver از نوع DNSCrypt می‌فرستد که با استمپش مشخص شده است.
 - [نام‌های sslip.io](features/dns/sslip-hosts.fa.md): سرور `hosts` به نام‌های `sslip.io` با نشانی‌ای که در خود نام نوشته شده پاسخ می‌دهد.
 

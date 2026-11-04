@@ -47,7 +47,11 @@ in one pool in the cache file (key `warp-profiles`) unless `cache_file.store_war
 shared by all warp endpoints. Each endpoint leases its own devices: two endpoints on one device
 would push each other off Cloudflare. It takes, in order:
 
-1. A profile written in the config itself (`private_key`, `interface`, `peers`), for WireGuard.
+1. A profile written in the config itself (`private_key`, `interface`, `peers`), for WireGuard;
+   for MASQUE, `masque.device`, a device enrolled elsewhere (a `masque://` link's). When
+   Cloudflare refuses that device (its key was never enrolled, or the device was deleted), WARP
+   remembers it in the cache file, goes on with 2 and 3, and does not try it again while the
+   config carries it.
 2. A device of the kind from the pool that is not retired nor leased by another endpoint: the one
    this endpoint (by `unique_identifier`, or the tag) used before, else any free one. Not with
    `profile.recreate` (then each start registers a new one). A closed endpoint gives its devices
@@ -109,20 +113,19 @@ server.
 
 **Status and display type.** The type shown for the endpoint names the tunnel:
 `WARP · WG`, `WARP · AWG` or `WARP · MASQUE`; then, once the scanner has chosen,
-` · 🔍 <address:port>` or ` · 🔍 Not found`; then the mark of its status, as for every outbound
-and endpoint:
+` · 🔍 <address:port>` or ` · 🔍 Not found`. The status is not in the type; the app shows it
+from the status the core sends, as for every outbound and endpoint:
 
-| Status | Mark | When |
-|---|---|---|
-| registering | ` 🔑 Registering...` | A device is being registered. |
-| searching | ` 🔍 Searching...` | The scanner looks for an endpoint that answers. |
-| connecting | ` ⏳ Connecting...` | It has not connected yet. |
-| reconnecting | ` ⏳ Reconnecting...` | It was connected and the peer stopped answering. |
-| failed | ` ❌ Failed` | The config cannot work (a profile without peers, MASQUE not in the build). |
-| ready | | It carries traffic. |
+| Status | When |
+|---|---|
+| registering | A device is being registered. |
+| searching | The scanner looks for an endpoint that answers. |
+| connecting | It has not connected yet. |
+| reconnecting | It was connected and the peer stopped answering. |
+| failed | The config cannot work (a profile without peers, MASQUE not in the build); the type then ends with why, `: <error>`. |
+| ready | It carries traffic. |
 
-The hourglass flips between ⏳ and ⌛ each second. For example
-`WARP · MASQUE · 🔍 162.159.198.1:443`, or `WARP · WG ⏳ Reconnecting...`.
+For example `WARP · MASQUE · 🔍 162.159.198.1:443`, or, failed, `WARP · WG: <error>`.
 
 **Group detour.** When `detour` is a group (a selector, URL test or balancer), WARP follows the
 member it resolves to, through nested groups. The WireGuard or AmneziaWG socket, or the MASQUE
@@ -278,6 +281,7 @@ to use MASQUE with every default.
 | `udp_keepalive_period` | duration | `30s` | QUIC keepalive. |
 | `udp_initial_packet_size` | number | | First QUIC packet size. |
 | `reconnect_delay` | duration | | Wait between connect attempts. |
+| `device` | object | | A device enrolled elsewhere, used before the saved devices and registering: the fields of the `masque` outbound's [`device`](warp-masque.en.md#device). A device that cannot work (a key that does not parse, no address) fails the config. See "Devices" above for a device Cloudflare refuses. |
 
 The endpoint's `mtu` (1280 to 9000 over MASQUE), `udp_timeout`, `scanner`, `server`,
 `server_port` and dialer fields apply too. `noise`, `listen_port`, `workers`, `system` and `name`

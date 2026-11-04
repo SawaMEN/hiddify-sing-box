@@ -213,7 +213,7 @@ func (t *Transport) updateTransports(link *TransportLink) error {
 		servers.serverScope.Close()
 	}
 	serverDialer := common.Must1(dialer.NewDefault(t.ctx, option.DialerOptions{
-		AbstractDialerOptions: option.AbstractDialerOptions{
+		AbstractDialerOptions: {
 			BindInterface:      link.iif.Name,
 			UDPFragmentDefault: true,
 		},

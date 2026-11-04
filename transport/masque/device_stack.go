@@ -40,6 +40,8 @@ type stackDevice struct {
 	dispatcher     stack.NetworkDispatcher
 	inet4Address   netip.Addr
 	inet6Address   netip.Addr
+	udpForwarder   *tun.UDPForwarder  //H
+	icmpForwarder  *tun.ICMPForwarder //H
 }
 
 func newStackDevice(options DeviceOptions) (*stackDevice, error) {
@@ -85,8 +87,11 @@ func newStackDevice(options DeviceOptions) (*stackDevice, error) {
 	tunDevice.stack = ipStack
 	if options.Handler != nil {
 		ipStack.SetTransportProtocolHandler(tcp.ProtocolNumber, tun.NewTCPForwarder(options.Context, ipStack, options.Handler).HandlePacket)
-		ipStack.SetTransportProtocolHandler(udp.ProtocolNumber, tun.NewUDPForwarder(options.Context, ipStack, options.Handler, nil, tun.UDPNatOptions{Timeout: options.UDPTimeout}).HandlePacket)
-		icmpForwarder := tun.NewICMPForwarder(ipStack, options.Handler, nil, options.Logger)
+		udpForwarder := tun.NewUDPForwarder(options.Context, ipStack, options.Handler, nil, tun.UDPNatOptions{Timeout: options.UDPTimeout}) //H
+		tunDevice.udpForwarder = udpForwarder                                                                                               //H
+		ipStack.SetTransportProtocolHandler(udp.ProtocolNumber, udpForwarder.HandlePacket)                                                  //H
+		icmpForwarder := tun.NewICMPForwarder(ipStack, options.Handler, nil, options.Logger)                                                //H
+		tunDevice.icmpForwarder = icmpForwarder                                                                                             //H
 		ipStack.SetTransportProtocolHandler(icmp.ProtocolNumber4, icmpForwarder.HandlePacket)
 		ipStack.SetTransportProtocolHandler(icmp.ProtocolNumber6, icmpForwarder.HandlePacket)
 	}
@@ -94,6 +99,7 @@ func newStackDevice(options DeviceOptions) (*stackDevice, error) {
 }
 
 func (w *stackDevice) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
+ destination = destination.Unwrap() //H: mapped IPv4 uses the IPv4 local address
 	addr := tcpip.FullAddress{
 		NIC:  tun.DefaultNIC,
 		Port: destination.Port,
@@ -135,6 +141,7 @@ func (w *stackDevice) DialContext(ctx context.Context, network string, destinati
 }
 
 func (w *stackDevice) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
+ destination = destination.Unwrap() //H
 	bind := tcpip.FullAddress{
 		NIC: tun.DefaultNIC,
 	}
@@ -144,7 +151,7 @@ func (w *stackDevice) ListenPacket(ctx context.Context, destination M.Socksaddr)
 		bind.Addr = tun.AddressFromAddr(w.inet4Address)
 	} else {
 		networkProtocol = header.IPv6ProtocolNumber
-		bind.Addr = tun.AddressFromAddr(w.inet4Address)
+		bind.Addr = tun.AddressFromAddr(w.inet6Address) //H
 	}
 	udpConn, err := gonet.DialUDP(w.stack, &bind, nil, networkProtocol)
 	if err != nil {
@@ -154,6 +161,11 @@ func (w *stackDevice) ListenPacket(ctx context.Context, destination M.Socksaddr)
 }
 
 func (w *stackDevice) Start() error {
+	if w.udpForwarder != nil { //H
+		if err := w.udpForwarder.Start(); err != nil {
+			return err
+		} //H
+	} //H
 	w.events <- wgTun.EventUp
 	return nil
 }
@@ -227,6 +239,12 @@ func (w *stackDevice) Events() <-chan wgTun.Event {
 }
 
 func (w *stackDevice) Close() error {
+	if w.udpForwarder != nil {
+		_ = w.udpForwarder.Close()
+	} //H
+	if w.icmpForwarder != nil {
+		_ = w.icmpForwarder.Close()
+	} //H
 	close(w.done)
 	close(w.events)
 	w.stack.Close()

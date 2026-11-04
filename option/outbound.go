@@ -96,7 +96,8 @@ type DialerOptions struct {
 	TLSFragment TLSFragmentOptions `json:"tls_fragment,omitempty" schema:"omit"`
 	Detour      string             `json:"detour,omitempty" reference:"outbound"`
 	// H: Xray-style finalmask applied to the connections this dialer opens
-	FinalMask *FinalMaskOptions `json:"final_mask,omitempty"`
+	FinalMask     *FinalMaskOptions `json:"final_mask,omitempty"`
+	FinalMaskXray *FinalMaskOptions `json:"finalmask,omitempty"` //H: upstream spelling
 	AbstractDialerOptions
 }
 

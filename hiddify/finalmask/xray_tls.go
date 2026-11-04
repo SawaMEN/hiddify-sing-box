@@ -178,7 +178,7 @@ func (list *PortList) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &listStr); err != nil {
 		return errors.New("invalid port: ", string(data)).Base(err)
 	}
-	for _, rangeStr := range strings.Split(listStr, ",") {
+	for rangeStr := range strings.SplitSeq(listStr, ",") {
 		trimmed := strings.TrimSpace(rangeStr)
 		if trimmed == "" {
 			continue

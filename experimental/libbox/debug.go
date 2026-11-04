@@ -3,12 +3,11 @@ package libbox
 import (
 	"runtime"
 	"time"
-	"unsafe"
 )
 
 func TriggerGoPanic() {
 	time.AfterFunc(200*time.Millisecond, func() {
-		*(*int)(unsafe.Pointer(uintptr(0))) = 0
+		panic("debug crash requested") //H: explicit crash is compatible with Go vet
 	})
 }
 

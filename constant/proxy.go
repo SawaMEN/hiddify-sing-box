@@ -53,8 +53,6 @@ const (
 	TypePsiphon            = "psiphon"
 	TypeTunnelClient       = "tunnel_client"
 	TypeTunnelServer       = "tunnel_server"
-	TypeCall               = "call"   // H
-	TypeSudoku             = "sudoku" // H
 
 	TypeHInvalidConfig = "hinvalid"       // H
 	TypeXray           = "xray"           // H
@@ -62,14 +60,17 @@ const (
 	TypeAwg            = "awg"            // H
 	TypeBalancer       = "balancer"       // H
 	TypeFallback       = "fallback"       // H
+	TypeSudoku         = "sudoku"         // H
+	TypeBond           = "bond"           // H
+	TypeCall           = "call"           // H
 	TypeDNSTT          = "dnstt"          // H
 	TypeGooseRelay     = "gooserelay"     // H
-	TypeMasterDNS      = "masterdns" // H
-	TypeSmartDNSPool   = "smart_dns_pool" // H — local recursive-resolver pool with AIMD throttling + recovery probing (github.com/hiddify/hmrd_multi_resolver_dns)
+	TypeMasterDNS      = "masterdns"      // H
+	TypeSoar           = "soar"           // H
+	TypeSmartDNSPool   = "smart_dns_pool" // H: legacy service
 	TypeTrustTunnel    = "trusttunnel"
 	TypeOlcRTC         = "olcrtc"
 	TypeVetrOFF        = "vetroff"
-	TypeBond           = "bond"
 )
 
 const (
@@ -182,8 +183,10 @@ func ProxyDisplayName(proxyType string) string {
 		return "DNSTT"
 	case TypeGooseRelay:
 		return "GooseRelay"
-	case TypeMasterDNS:
-		return "MasterDNS"
+	case TypeMasterDNS: // H
+		return "MasterDNS" // H
+	case TypeSoar: // H
+		return "Soar" // H
 	case TypeTrustTunnel:
 		return "TrustTunnel"
 	case TypeOlcRTC:

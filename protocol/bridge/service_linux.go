@@ -44,7 +44,7 @@ func NewService(options ServiceOptions) (*Service, error) {
 		serviceLogger = logger.NOP()
 	}
 	instance := &Service{
-		serviceBase: serviceBase{
+		serviceBase: {
 			logger:            serviceLogger,
 			mtu:               options.MTU,
 			inet4Port:         options.Inet4Port,

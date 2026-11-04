@@ -20,3 +20,11 @@ type FinalMaskItem struct {
 func (o *FinalMaskOptions) IsEmpty() bool {
 	return o == nil || len(o.TCP) == 0 && len(o.UDP) == 0
 }
+
+// FinalMaskValue accepts both spellings, preserving the fork's legacy precedence.
+func (o DialerOptions) FinalMaskValue() *FinalMaskOptions {
+	if o.FinalMask != nil {
+		return o.FinalMask
+	}
+	return o.FinalMaskXray
+}

@@ -13,8 +13,6 @@ import (
 	connectip "github.com/Diniboy1123/connect-ip-go"
 )
 
-const DefaultConnectURI = "https://cloudflareaccess.com" // H
-
 // HTTP versions of the tunnel (vhttp).
 const (
 	ModeHTTP3 = "h3"

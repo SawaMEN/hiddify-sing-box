@@ -27,9 +27,10 @@ import (
 	"github.com/sagernet/sing-box/protocol/group"
 	"github.com/sagernet/sing-box/protocol/group/balancer"
 	"github.com/sagernet/sing-box/protocol/hiddify/dnstt"
-	"github.com/sagernet/sing-box/protocol/hiddify/masterdns"
 	"github.com/sagernet/sing-box/protocol/hiddify/gooserelay"
 	"github.com/sagernet/sing-box/protocol/hiddify/hinvalid"
+	"github.com/sagernet/sing-box/protocol/hiddify/masterdns"
+	"github.com/sagernet/sing-box/protocol/hiddify/soar" // H
 	"github.com/sagernet/sing-box/protocol/hiddify/xray"
 	"github.com/sagernet/sing-box/protocol/http"
 	"github.com/sagernet/sing-box/protocol/masque"
@@ -137,8 +138,9 @@ func OutboundRegistry() *outbound.Registry {
 	hinvalid.RegisterOutbound(registry)
 	xray.RegisterOutbound(registry)
 	dnstt.RegisterOutbound(registry)
-	masterdns.RegisterOutbound(registry)
 	gooserelay.RegisterOutbound(registry)
+	masterdns.RegisterOutbound(registry)
+	soar.RegisterOutbound(registry) // H
 	balancer.RegisterLoadBalance(registry)
 	registerMASQUEOutbound(registry)
 	legacyWireguard.RegisterOutbound(registry) // H
@@ -195,11 +197,11 @@ func DNSTransportRegistry() *dns.TransportRegistry {
 
 func ServiceRegistry() *service.Registry {
 	registry := service.NewRegistry()
+	smartdnspool.RegisterService(registry) // H: legacy service configurations
 
 	api.RegisterService(registry)
 	resolved.RegisterService(registry)
 	ssmapi.RegisterService(registry)
-	smartdnspool.RegisterService(registry) // H
 
 	registerQUICServices(registry)
 	registerDERPService(registry)

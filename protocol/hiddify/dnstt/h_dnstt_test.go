@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/common/dnspool"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
@@ -22,12 +23,6 @@ import (
 )
 
 const testPubKey = "0000000000000000000000000000000000000000000000000000000000000000"
-
-var loadResolversOnce sync.Once
-
-func ensureResolvers() {
-	loadResolversOnce.Do(loadResolvers)
-}
 
 func validOptions() option.DnsttOptions {
 	return option.DnsttOptions{
@@ -87,31 +82,26 @@ func TestH_DnsttGetConfigResolvers(t *testing.T) {
 
 func TestH_DnsttAutoResolvers(t *testing.T) {
 	t.Parallel()
-	ensureResolvers()
-	require.NotEmpty(t, countryResolvers)
-	require.NotEmpty(t, resolverCountry)
-	for country, list := range countryResolvers {
-		for _, ip := range list {
-			require.Equal(t, country, resolverCountry[ip])
-			break
-		}
-	}
+	builtin := dnspool.BuiltinResolvers()
+	require.NotEmpty(t, builtin)
 
 	for _, auto := range []string{"auto", ""} {
 		resolvers, err := getConfigResolvers(option.DnsttOptions{Resolvers: []string{auto, "4.4.4.4:53"}})
 		require.NoError(t, err)
-		require.Len(t, resolvers, len(resolverCountry)+1)
+		require.GreaterOrEqual(t, len(resolvers), len(builtin)+1)
 		seen := map[string]bool{}
 		for _, r := range resolvers[:len(resolvers)-1] {
 			require.True(t, r.Auto)
 			require.Equal(t, dnstt.ResolverTypeUDP, r.Resolver.ResolverType)
 			require.True(t, strings.HasSuffix(r.Resolver.ResolverAddr, ":53"), r.Resolver.ResolverAddr)
 			ip := strings.TrimSuffix(r.Resolver.ResolverAddr, ":53")
-			_, known := resolverCountry[ip]
-			require.True(t, known, ip)
-			seen[ip] = true
+			if _, known := builtin[ip]; known {
+				seen[ip] = true
+			} else {
+				require.Equal(t, dnspool.TierDiscovery, r.Tier, "additional candidates come from discovery")
+			}
 		}
-		require.Len(t, seen, len(resolverCountry))
+		require.Len(t, seen, len(builtin))
 		last := resolvers[len(resolvers)-1]
 		require.False(t, last.Auto)
 		require.Equal(t, "4.4.4.4:53", last.Resolver.ResolverAddr)
@@ -148,7 +138,7 @@ func TestH_DnsttNewOutboundDefaults(t *testing.T) {
 	require.Len(t, out.candidateResolvers, 1)
 	require.Empty(t, out.resolvers)
 	require.Empty(t, out.tunnels)
-	require.Nil(t, out.mdMgr)
+	require.Nil(t, out.pool)
 
 	options := validOptions()
 	options.RecordType = "cname"
@@ -163,19 +153,21 @@ func TestH_DnsttNewOutboundDefaults(t *testing.T) {
 func TestH_DnsttNotStarted(t *testing.T) {
 	t.Parallel()
 	out := newTestOutbound(t, validOptions())
-	require.False(t, out.IsReady())
+	require.False(t, adapter.IsReady(out))
 	_, err := out.DialContext(context.Background(), N.NetworkTCP, M.ParseSocksaddr("1.1.1.1:80"))
 	require.ErrorContains(t, err, "not started")
 	_, err = out.ListenPacket(context.Background(), M.ParseSocksaddr("1.1.1.1:53"))
 	require.ErrorContains(t, err, "not started")
 
-	require.Contains(t, out.DisplayType(), "Connecting")
+	require.Equal(t, "DNSTT", adapter.DisplayType(out), "the status is shown on its own")
 	out.started = -1
-	require.Contains(t, out.DisplayType(), "Failed")
+	require.Equal(t, adapter.StatusFailed, out.Status())
+	require.Regexp(t, `^DNSTT: none of the \d+ resolvers passed the test$`, adapter.DisplayType(out), "a failed one says why")
 	out.started = 1
 	out.resolvers = make([]dnstt.Resolver, 3)
-	require.True(t, out.IsReady())
-	require.Contains(t, out.DisplayType(), "3 resolvers")
+	require.True(t, adapter.IsReady(out))
+	require.Equal(t, "DNSTT · 3 resolvers", adapter.DisplayType(out))
+	require.NoError(t, adapter.StatusError(out))
 
 	_, err = out.ListenPacket(context.Background(), M.ParseSocksaddr("1.1.1.1:53"))
 	require.ErrorContains(t, err, "UoT is not enabled")
@@ -184,9 +176,9 @@ func TestH_DnsttNotStarted(t *testing.T) {
 func TestH_DnsttSmartPool(t *testing.T) {
 	t.Parallel()
 	options := validOptions()
-	options.SmartPool = &option.SmartPoolOptions{Enabled: true}
+	options.SmartPool = &option.SmartPoolOptions{Enabled: true, LoadBalance: "lowest_latency"}
 	out := newTestOutbound(t, options)
-	require.NotNil(t, out.mdMgr)
+	require.NotNil(t, out.pool)
 	require.Len(t, out.resolvers, 1)
 	require.Len(t, out.tunnels, 1)
 	require.Nil(t, out.tunnels[0])
@@ -202,22 +194,6 @@ func TestH_DnsttResolverURL(t *testing.T) {
 	require.Equal(t, "1.1.1.1:53", resolverURL(dnstt.Resolver{ResolverType: dnstt.ResolverTypeUDP, ResolverAddr: "1.1.1.1:53"}))
 	require.Equal(t, "dot://1.1.1.1:853", resolverURL(dnstt.Resolver{ResolverType: dnstt.ResolverTypeDOT, ResolverAddr: "1.1.1.1:853"}))
 	require.Equal(t, "https://dns.example/q", resolverURL(dnstt.Resolver{ResolverType: dnstt.ResolverTypeDOH, ResolverAddr: "https://dns.example/q"}))
-}
-
-func TestH_DnsttRecordTypeAndQuery(t *testing.T) {
-	t.Parallel()
-	for in, want := range map[string]uint16{
-		"a": dns.TypeA, "aaaa": dns.TypeAAAA, "cname": dns.TypeCNAME, "mx": dns.TypeMX,
-		"ns": dns.TypeNS, "ptr": dns.TypePTR, "soa": dns.TypeSOA, "srv": dns.TypeSRV,
-		"txt": dns.TypeTXT, "bogus": dns.TypeA, "": dns.TypeA,
-	} {
-		require.Equal(t, want, getDnsRecordType(in), in)
-	}
-	msg := buildDNSQuery("example.com", dns.TypeTXT)
-	require.True(t, msg.RecursionDesired)
-	require.Len(t, msg.Question, 1)
-	require.Equal(t, "example.com.", msg.Question[0].Name)
-	require.Equal(t, dns.TypeTXT, msg.Question[0].Qtype)
 }
 
 type memoryCache struct {
@@ -243,12 +219,12 @@ func TestH_DnsttHistoryPersistence(t *testing.T) {
 	t.Parallel()
 	out := newTestOutbound(t, validOptions())
 	require.Empty(t, out.loadHistory().ResolverRate)
-	out.saveHistory(&History{ResolverRate: map[string]int{"x": 1}})
+	out.saveHistory(&dnspool.History{ResolverRate: map[string]int{"x": 1}})
 
 	cache := &memoryCache{data: map[string]*adapter.SavedBinary{}}
 	out.cache = cache
 	require.Empty(t, out.loadHistory().ResolverRate)
-	out.saveHistory(&History{ResolverRate: map[string]int{"1.1.1.1:53": 5, "9.9.9.9:53": -3}})
+	out.saveHistory(&dnspool.History{ResolverRate: map[string]int{"1.1.1.1:53": 5, "9.9.9.9:53": -3}})
 	require.Contains(t, cache.data, "dnstt_resolverstxt")
 	require.Equal(t, map[string]int{"1.1.1.1:53": 5, "9.9.9.9:53": -3}, out.loadHistory().ResolverRate)
 
@@ -315,11 +291,29 @@ func TestH_DnsttResolveUDPLocal(t *testing.T) {
 }
 
 func TestH_DnsttResolveUnsupportedResolverType(t *testing.T) {
-	t.Skip("BUG: Resolve ignores the error from getTCPBasedResolverConnection and calls WriteTo on a nil conn, panicking (protocol/hiddify/dnstt/tester.go:274)")
 	t.Parallel()
 	out := newTestOutbound(t, validOptions())
 	require.NotPanics(t, func() {
 		_, err := out.Resolve(dnstt.Resolver{ResolverType: "bogus", ResolverAddr: "127.0.0.1:1"}, "example.com", dns.TypeA)
 		require.Error(t, err)
 	})
+}
+
+// record-type reaches the tunnel; it was only used to name the saved resolver list
+func TestH_DnsttRecordType(t *testing.T) {
+	tServer, err := newTunnelServer(option.DnsttOptions{Domain: "t.example.com", PublicKey: testPubKey, RecordType: "cname"})
+	require.NoError(t, err)
+	require.Equal(t, "cname", tServer.RecordType)
+}
+
+// the resolver sockets get the dialer's socket control, so bind_interface and the platform's
+// protect apply to them
+func TestH_DnsttResolverSocketControl(t *testing.T) {
+	options := validOptions()
+	options.BindInterface = "lo0"
+	out := newTestOutbound(t, options)
+	require.NotEmpty(t, out.candidateResolvers)
+	for _, resolver := range out.candidateResolvers {
+		require.NotNil(t, resolver.Resolver.DialerControl)
+	}
 }

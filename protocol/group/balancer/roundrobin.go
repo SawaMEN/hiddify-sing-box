@@ -34,22 +34,18 @@ func NewRoundRobin(outbounds []adapter.Outbound, options option.BalancerOutbound
 
 		sortedOutbounds:      cOutbounds,
 		maxAcceptableIndex:   acceptable,
-		delayAcceptableRatio: options.DelayAcceptableRatio,
+		delayAcceptableRatio: acceptableRatio(options),
 		idx:                  idx,
 	}
 }
 
-// Now reports the outbound selected for the next TCP connection without
-// advancing round-robin state.
+// Now returns the member the next TCP connection goes to.
 func (s *RoundRobin) Now() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	network := N.NetworkTCP
-	length := s.maxAcceptableIndex[network] + 1
-	if length <= 0 || len(s.sortedOutbounds[network]) < length {
+	next := s.Select(adapter.InboundContext{}, N.NetworkTCP, false)
+	if next == nil {
 		return ""
 	}
-	return s.sortedOutbounds[network][(s.idx[network]+1)%length].Tag()
+	return next.Tag()
 }
 
 func (s *RoundRobin) UpdateOutboundsInfo(history map[string]*adapter.URLTestHistory) bool {

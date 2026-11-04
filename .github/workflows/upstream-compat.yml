@@ -1,0 +1,57 @@
+name: Upstream compatibility
+on:
+  pull_request:
+    branches: [main]
+concurrency:
+  group: upstream-compat-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          submodules: recursive
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Set production tags
+        run: |
+          echo "BUILD_TAGS=$(sed -n 's/^TAGS ?= //p' Makefile)" >> "$GITHUB_ENV"
+          echo "LDFLAGS_SHARED=$(cat release/LDFLAGS)" >> "$GITHUB_ENV"
+      - name: Vet production build
+        run: go vet -mod=mod -tags "$BUILD_TAGS" ./...
+      - name: Race regressions
+        run: go test -mod=mod -race -tags "$BUILD_TAGS" -ldflags "$LDFLAGS_SHARED" ./common/monitoring ./common/dnspool ./common/tls ./common/urltest ./dns ./route/... ./hiddify/finalmask ./hiddify/ipinfo ./schema ./protocol/hiddify/dnstt ./protocol/hiddify/masterdns ./protocol/hiddify/soar ./protocol/warp ./protocol/masque ./transport/masque ./common/cloudflare ./protocol/group/balancer ./service/smart_dns_pool ./transport/v2rayxdrive ./option -timeout 15m
+      - name: Full production test suite
+        run: go test -mod=mod -tags "$BUILD_TAGS" -ldflags "$LDFLAGS_SHARED" -exec sudo ./... -timeout 15m
+      - name: Fetch Xray interoperability binaries
+        run: |
+          mkdir -p /tmp/xray-latest /tmp/xray-26.3
+          latest=$(curl --fail --silent --show-error https://api.github.com/repos/XTLS/Xray-core/releases/latest | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')
+          curl --fail --location --retry 3 "https://github.com/XTLS/Xray-core/releases/download/$latest/Xray-linux-64.zip" -o /tmp/xray-latest.zip
+          curl --fail --location --retry 3 https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip -o /tmp/xray-26.3.zip
+          unzip -q /tmp/xray-latest.zip -d /tmp/xray-latest
+          unzip -q /tmp/xray-26.3.zip -d /tmp/xray-26.3
+          chmod +x /tmp/xray-latest/xray /tmp/xray-26.3/xray
+      - name: Xray interoperability regressions
+        env:
+          HIDDIFY_XRAY: /tmp/xray-latest/xray:/tmp/xray-26.3/xray
+        run: go test -mod=mod -tags "$BUILD_TAGS" -ldflags "$LDFLAGS_SHARED" -run TestH_Xray . -timeout 15m
+      - name: Generate schema and module metadata
+        if: always()
+        run: |
+          mkdir -p /tmp/sync-generated/test
+          cp go.mod go.sum /tmp/sync-generated/
+          cp test/go.mod test/go.sum /tmp/sync-generated/test/
+          go run -mod=mod -tags "$BUILD_TAGS" -ldflags "$LDFLAGS_SHARED" ./cmd/sing-box schema -o docs/schema.json
+          cp docs/schema.json /tmp/sync-generated/schema.json
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: sync-generated
+          path: /tmp/sync-generated
+          retention-days: 3

@@ -1,7 +1,9 @@
 package option
 
 import (
+	"context"
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -16,8 +18,19 @@ import (
 	mDNS "github.com/miekg/dns"
 )
 
-// Keep the old exported name for ray2sing while retaining JSON list semantics.
-type LegacyListable[T any] = badoption.Listable[T]
+type LegacyListable[T any] []T
+
+func (l *LegacyListable[T]) UnmarshalJSONContext(ctx context.Context, content []byte) error {
+	return (*badoption.Listable[T])(l).UnmarshalJSONContext(ctx, content)
+}
+
+func (l LegacyListable[T]) DescribeSchema(builder schema.Builder) (*schema.Node, error) {
+	elementNode, err := builder.Describe(reflect.TypeFor[T]())
+	if err != nil {
+		return nil, err
+	}
+	return &schema.Node{Type: "array", Items: elementNode}, nil
+}
 
 type NetworkList string
 

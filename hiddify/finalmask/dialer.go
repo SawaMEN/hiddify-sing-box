@@ -77,8 +77,8 @@ func (m *Masks) ListenPacket(ctx context.Context, destination M.Socksaddr, dial 
 
 // WrapConnServer applies the tcp masks to an accepted connection, as an Xray server does.
 func (m *Masks) WrapConnServer(conn net.Conn) (net.Conn, error) {
-	for i := len(m.tcp) - 1; i >= 0; i-- {
-		masked, err := m.tcp[i].WrapConnServer(conn)
+	for _, v := range slices.Backward(m.tcp) {
+		masked, err := v.WrapConnServer(conn)
 		if err != nil {
 			conn.Close()
 			return nil, err
@@ -134,7 +134,7 @@ func dialUDPFunc(dial DialFunc, listen ListenPacketFunc) func(context.Context, x
 func xrayDestination(network xnet.Network, destination M.Socksaddr) xnet.Destination {
 	dest := xnet.Destination{Network: network, Port: xnet.Port(destination.Port)}
 	switch {
-	case destination.IsFqdn():
+	case destination.IsDomain():
 		dest.Address = xnet.DomainAddress(destination.Fqdn)
 	case destination.IsIP():
 		dest.Address = xnet.IPAddress(destination.Addr.Unmap().AsSlice())

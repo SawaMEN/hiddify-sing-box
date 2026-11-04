@@ -52,11 +52,11 @@ type Balancer struct {
 
 	availbleOutbounds []adapter.Outbound
 	close             chan struct{}
+	closeOnce         sync.Once
 	interruptGroup    *interrupt.Group
-	members           map[string]*interrupt.Group // H
-	dead              map[string]bool             // H
-	settled           atomic.Bool                 // H
-	closeOnce         sync.Once                   // H
+	members           map[string]*interrupt.Group // the connections of each member
+	dead              map[string]bool             // the members whose last test failed
+	settled           atomic.Bool                 // the connections of the first choice were moved
 }
 
 func NewLoadBalance(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.BalancerOutboundOptions) (adapter.Outbound, error) {
@@ -72,9 +72,7 @@ func NewLoadBalance(ctx context.Context, router adapter.Router, logger log.Conte
 		interruptExternalConnections: options.InterruptExistConnections,
 		options:                      options,
 		interruptGroup:               interrupt.NewGroup(),
-		members:                      make(map[string]*interrupt.Group), // H
-		dead:                         make(map[string]bool),             // H
-		close:                        make(chan struct{}),               // H
+		close:                        make(chan struct{}),
 	}
 	if len(outbound.tags) == 0 {
 		return nil, E.New("missing tags")
@@ -102,9 +100,11 @@ func (s *Balancer) Start() error {
 		}
 		outbounds = append(outbounds, detour)
 	}
-	s.availbleOutbounds = outbounds // H
-	for _, member := range outbounds {
-		s.members[member.Tag()] = interrupt.NewGroup() // H
+	s.availbleOutbounds = outbounds
+	s.members = make(map[string]*interrupt.Group, len(outbounds))
+	s.dead = make(map[string]bool, len(outbounds))
+	for _, detour := range outbounds {
+		s.members[detour.Tag()] = interrupt.NewGroup()
 	}
 	if s.options.Strategy == "" {
 		s.options.Strategy = StrategyRoundRobin
@@ -115,22 +115,30 @@ func (s *Balancer) Start() error {
 	case StrategyConsistentHashing:
 		s.strategyFn = NewConsistentHashing(outbounds, s.options)
 	case StrategyStickySessions:
-		s.strategyFn = NewStickySession(outbounds, s.options)
+		sticky, err := NewStickySession(outbounds, s.options) // H
+		if err != nil {                                       // H
+			return err // H
+		} // H
+		s.strategyFn = sticky // H
 	case StrategyLowestDelay:
 		s.strategyFn = NewLowestDelay(outbounds, s.options)
 	case StrategyPool: // H
-		var err error
-		s.strategyFn, err = NewPool(outbounds, s.options)
-		if err != nil {
-			return err
-		}
+		pool, err := NewPool(outbounds, s.options) // H
+		if err != nil {                            // H
+			return err // H
+		} // H
+		s.strategyFn = pool // H
 	default:
 		return E.New("unknown load balance strategy: ", s.options.Strategy)
 	}
-
-	if s.monitor != nil { // H: apply saved monitoring data before initial connections
-		s.update(s.monitor.OutboundsHistory(s.Tag()))
+	if s.monitor != nil {
+		s.strategyFn.UpdateOutboundsInfo(s.monitor.OutboundsHistory(s.Tag())) // the cached results choose the first member
 	}
+	if lowest, ok := s.strategyFn.(*LowestDelay); ok { // H: the LOWEST log, from here on: the first choice is logged as the start
+		lowest.logger, lowest.tag = s.logger, s.Tag() // H
+		s.logger.Info("LOWEST ", s.Tag(), ": starts on ", lowest.Now())
+	} // H
+
 	return nil
 }
 
@@ -141,37 +149,42 @@ func (s *Balancer) PostStart() error {
 }
 
 func (s *Balancer) worker() {
-	if s.monitor == nil { // H
-		return
-	}
 	observer, err := s.monitor.SubscribeGroup(s.Tag())
 	if err != nil {
 		s.logger.Error("failed to observe monitoring group: ", err)
 		return
 	}
 	defer s.monitor.UnsubscribeGroup(s.Tag(), observer)
-	settleTimer := time.NewTimer(settleWindow) // H
-	defer settleTimer.Stop()                   // H
+	settle := time.NewTimer(settleWindow)
+	defer settle.Stop()
+	settling := false
+
 	for {
 		select {
 		case <-s.close:
 			return
+
 		case <-s.ctx.Done():
 			return
-		case <-settleTimer.C: // H
-			s.settle(s.monitor.OutboundsHistory(s.Tag())) // H
+		case <-settle.C:
+			settling = true
+			s.settle(s.monitor.OutboundsHistory(s.Tag()))
 		case _, ok := <-observer:
 			if !ok {
 				return
 			}
-			history := s.monitor.OutboundsHistory(s.Tag())
-			s.update(history) // H: only close connections through dead members
+			outbounds := s.monitor.OutboundsHistory(s.Tag())
+			s.update(outbounds)
+			if settling {
+				s.settle(outbounds)
+			}
+
 		}
 	}
 }
 
 func (s *Balancer) Close() error {
-	s.closeOnce.Do(func() { close(s.close) }) // H
+	s.closeOnce.Do(func() { close(s.close) })
 	return nil
 }
 
@@ -195,6 +208,8 @@ func (s *Balancer) Selected(network string) adapter.Outbound {
 	return outbound
 }
 
+// AttachConnection tracks a connection of the route that cannot be attributed to a member; the
+// member's own connection under it is tracked by its group, and closing that closes this one.
 func (s *Balancer) AttachConnection(closer io.Closer) func() {
 	return s.interruptGroup.Add(closer, true)
 }
@@ -214,7 +229,7 @@ func (s *Balancer) DialContext(ctx context.Context, network string, destination 
 
 	conn, err := outbound.DialContext(ctx, network, destination)
 	if err == nil {
-		return s.interruptGroup.NewConn(s.memberGroup(outbound.Tag()).NewConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), interrupt.IsExternalConnectionFromContext(ctx)), nil // H
+		return s.memberGroup(outbound.Tag()).NewConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), nil
 	}
 	s.logger.ErrorContext(ctx, err)
 	s.monitor.InvalidateTest(outbound.Tag())
@@ -237,7 +252,7 @@ func (s *Balancer) ListenPacket(ctx context.Context, destination M.Socksaddr) (n
 
 	conn, err := outbound.ListenPacket(ctx, destination)
 	if err == nil {
-		return s.interruptGroup.NewPacketConn(s.memberGroup(outbound.Tag()).NewPacketConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), interrupt.IsExternalConnectionFromContext(ctx)), nil // H
+		return s.memberGroup(outbound.Tag()).NewPacketConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), nil
 	}
 	s.logger.ErrorContext(ctx, err)
 	s.monitor.InvalidateTest(outbound.Tag())
@@ -245,14 +260,14 @@ func (s *Balancer) ListenPacket(ctx context.Context, destination M.Socksaddr) (n
 }
 
 func (s *Balancer) NewConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
-	ctx = interrupt.ContextWithIsExternalConnection(ctx, true) // H
+	ctx = interrupt.ContextWithIsExternalConnection(ctx, true)
 	selected := s.strategyFn.Select(metadata, metadata.Network, true)
 	if selected == nil {
 		N.CloseOnHandshakeFailure(conn, onClose, E.New("missing supported outbound"))
 		return
 	}
 	metadata.SetRealOutbound(selected.Tag())
-	conn = s.interruptGroup.NewConn(s.memberGroup(selected.Tag()).NewConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), interrupt.IsExternalConnectionFromContext(ctx)) // H
+	conn = s.memberGroup(selected.Tag()).NewConn(conn, interrupt.IsExternalConnectionFromContext(ctx))
 	if outboundHandler, isHandler := selected.(adapter.ConnectionHandler); isHandler {
 		outboundHandler.NewConnection(ctx, conn, metadata, onClose)
 	} else {
@@ -261,14 +276,14 @@ func (s *Balancer) NewConnection(ctx context.Context, conn net.Conn, metadata ad
 }
 
 func (s *Balancer) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
-	ctx = interrupt.ContextWithIsExternalConnection(ctx, true) // H
+	ctx = interrupt.ContextWithIsExternalConnection(ctx, true)
 	selected := s.strategyFn.Select(metadata, metadata.Network, true)
 	if selected == nil {
 		N.CloseOnHandshakeFailure(conn, onClose, E.New("missing supported outbound"))
 		return
 	}
 	metadata.SetRealOutbound(selected.Tag())
-	conn = s.interruptGroup.NewSingPacketConn(s.memberGroup(selected.Tag()).NewSingPacketConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), interrupt.IsExternalConnectionFromContext(ctx)) // H
+	conn = s.memberGroup(selected.Tag()).NewSingPacketConn(conn, interrupt.IsExternalConnectionFromContext(ctx))
 	if outboundHandler, isHandler := selected.(adapter.PacketConnectionHandler); isHandler {
 		outboundHandler.NewPacketConnection(ctx, conn, metadata, onClose)
 	} else {

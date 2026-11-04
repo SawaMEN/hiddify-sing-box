@@ -44,7 +44,7 @@ Noise رمز می‌شوند، پس نه resolver و نه فیلتر نمی‌ت
   خراب شود بسته و دوباره ساخته می‌شود. با `smart_pool` پرسش‌ها به یک مجموعهٔ resolver محلی
   می‌روند که آن‌ها را میان resolverهای کارا پخش می‌کند، برای resolverی که محدودیت نرخ اعمال
   می‌کند آهسته‌تر می‌فرستد و resolverی را که پاسخ نمی‌دهد کنار می‌گذارد
-  ([مجموعهٔ هوشمند DNS](../dns/smart-dns-pool.fa.md) را ببینید).
+  ([مجموعهٔ هوشمند resolver](../dns/smart-dns-pool.fa.md) را ببینید).
 - **درون تونل.** داده‌ها برای اطمینان روی KCP، برای رمزنگاری روی Noise و روی smux می‌روند تا
   اتصال‌های زیادی یک تونل را به اشتراک بگذارند.
 - **مقصد.** این خروجی تعیین نمی‌کند اتصال به کجا برود. همهٔ اتصال‌ها به سرور DNSTT شما
@@ -89,7 +89,7 @@ Noise رمز می‌شوند، پس نه resolver و نه فیلتر نمی‌ت
 | `record-type` | string | `"txt"` | نوع رکورد پاسخ‌هایی که داده را از سرور برمی‌گردانند: `txt`، `cname`، `a`، `aaaa`، `mx`، `ns` یا `srv`. باید با سرور یکی باشد. مقدار دیگر از TXT استفاده می‌کند. هر نوع رکورد سابقهٔ ذخیره‌شدهٔ resolverهای خودش را دارد. |
 | `utls` | string | `""` | اثرانگشت TLS برای DoH و DoT، مثلاً `"Chrome"`، `"Firefox"`، `"iOS"` یا `"random"`. خالی یعنی TLS خود Go. |
 | `single-resolver` | bool | `false` | یک تونل برای هر resolver، به‌جای یک تونل روی همهٔ آن‌ها. |
-| `smart_pool` | bool | `false` | پرسش‌ها را از یک مجموعهٔ resolver محلی بفرست، همان‌طور که بالا گفته شد. |
+| `smart_pool` | bool یا object | `false`؛ با چند resolver خودبه‌خود روشن | پرسش‌ها را از مجموعهٔ resolver خود خروجی بفرست، همان‌طور که بالا گفته شد: `true`، یا یک شیء با `load_balance`، `deadline`، `per_attempt`، `probe_interval`، `down_after` و `duplicate` ([مجموعهٔ هوشمند resolver](../dns/smart-dns-pool.fa.md) را ببینید). یک تونل روی یک resolver کار می‌کند، پس با بیش از یکی مجموعه روشن است، این فیلد هر چه باشد. |
 | `dnstt-compat` | bool | `false` | قالب سیمی اصلی DNSTT، برای سرور اصلی DNSTT. |
 | `clientid-size` | int | `2` | اندازهٔ شناسهٔ کلاینت به بایت. با `dnstt-compat` نادیده گرفته می‌شود و ۸ است. باید با سرور یکی باشد. |
 | `max-qname-len` | int | `101` (با `dnstt-compat`، `253`) | بیشترین طول نام پرسش. |
@@ -105,7 +105,7 @@ Noise رمز می‌شوند، پس نه resolver و نه فیلتر نمی‌ت
 | `session-check-interval` | duration | `20s` | هر چند وقت تونل زنده بودن نشستش را بررسی می‌کند. |
 | `handshake-timeout` | duration | `15s` | بیشترین زمان دست‌دهی Noise. |
 | `udp-timeout` | duration | `500ms` | برای resolverهای UDP ساده: مدت انتظار برای هر پاسخ. |
-| `udp-workers` | int | `100` | برای resolverهای UDP ساده: تعداد پرسش‌های هم‌زمان در جریان. |
+| `udp-workers` | int | `100`؛ با `smart_pool`: `300` | برای resolverهای UDP ساده: تعداد پرسش‌های هم‌زمان در جریان. با `smart_pool`، به سوی مجموعه، هر worker یک سوکت نگه می‌دارد. |
 | `udp-shared-socket` | bool | `false` | برای resolverهای UDP ساده: همهٔ پرسش‌ها از یک سوکت، به‌جای یک سوکت برای هر پرسش. |
 | `udp-accept-errors` | bool | `false` | برای resolverهای UDP ساده: پاسخ‌های دارای کد خطا را بپذیر و دور نریز. |
 | `tunnel-per-resolver` | int | | منسوخ است و نادیده گرفته می‌شود. |
@@ -118,7 +118,7 @@ Noise رمز می‌شوند، پس نه resolver و نه فیلتر نمی‌ت
 
 ## همچنین ببینید
 
-- [مجموعهٔ هوشمند DNS](../dns/smart-dns-pool.fa.md)
+- [مجموعهٔ هوشمند resolver](../dns/smart-dns-pool.fa.md)
 - [پایش](../groups/monitoring.fa.md)
 
 </div>

@@ -1,7 +1,6 @@
 package balancer
 
 import (
-	"math"
 	"sync"
 
 	"github.com/sagernet/sing-box/adapter"
@@ -18,6 +17,7 @@ type ConsistentHashing struct {
 	maxAcceptableDelay   map[string]uint16
 	mu                   sync.Mutex
 	delayAcceptableRatio float64
+	alive                map[string]string
 }
 
 func NewConsistentHashing(outbounds []adapter.Outbound, options option.BalancerOutboundOptions) *ConsistentHashing {
@@ -27,60 +27,62 @@ func NewConsistentHashing(outbounds []adapter.Outbound, options option.BalancerO
 		outbounds:            cOutbounds,
 		hash:                 maphash.NewHasher[string](),
 		maxRetry:             options.MaxRetry,
-		delayAcceptableRatio: options.DelayAcceptableRatio,
+		delayAcceptableRatio: acceptableRatio(options),
 	}
 }
 
 var _ Strategy = (*ConsistentHashing)(nil)
 
-func (receiver *ConsistentHashing) Now() string {
+func (s *ConsistentHashing) Now() string {
 	return ""
 }
 
-func (receiver *ConsistentHashing) UpdateOutboundsInfo(history map[string]*adapter.URLTestHistory) bool {
-	_, minDelay := getMinDelay(receiver.outbounds, history)
+func (s *ConsistentHashing) UpdateOutboundsInfo(history map[string]*adapter.URLTestHistory) bool {
+	_, minDelay := getMinDelay(s.outbounds, history)
 	delayMap := getDelayMap(history)
 	res := map[string]uint16{}
 	for net, d := range minDelay {
-		acceptableDelay := uint16(math.Min(65535, math.Max(100, float64(d))*receiver.delayAcceptableRatio))
-		res[net] = acceptableDelay
+		res[net] = getMaxAcceptableDelay(d, s.delayAcceptableRatio)
 	}
-	receiver.mu.Lock()
-	receiver.delays = delayMap
-	receiver.maxAcceptableDelay = res
-	receiver.mu.Unlock()
-	return true
+	alive := aliveSet(s.outbounds, delayMap, res)
+	s.mu.Lock()
+	changed := aliveSetChanged(s.alive, alive) // not every update: interrupt_exist_connections would close all connections each time
+	s.delays = delayMap
+	s.maxAcceptableDelay = res
+	s.alive = alive
+	s.mu.Unlock()
+	return changed
 }
 
-func (receiver *ConsistentHashing) Select(metadata adapter.InboundContext, net string, touch bool) adapter.Outbound {
-	receiver.mu.Lock()
-	defer receiver.mu.Unlock()
+func (s *ConsistentHashing) Select(metadata adapter.InboundContext, net string, touch bool) adapter.Outbound {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if net != N.NetworkTCP && net != N.NetworkUDP {
 		net = N.NetworkTCP
 	}
-	key := receiver.hash.Hash(getKey(&metadata))
-	buckets := int32(len(receiver.outbounds[net]))
-	for i := 0; i < receiver.maxRetry; i, key = i+1, key+1 {
+	key := s.hash.Hash(getKey(&metadata))
+	buckets := int32(len(s.outbounds[net]))
+	for i := 0; i < s.maxRetry; i, key = i+1, key+1 {
 		idx := jumpHash(key, buckets)
-		proxy := receiver.outbounds[net][idx]
-		if receiver.Alive(proxy, net) {
+		proxy := s.outbounds[net][idx]
+		if s.Alive(proxy, net) {
 			return proxy
 		}
 	}
 
 	// when availability is poor, traverse the entire list to get the available nodes
-	for _, proxy := range receiver.outbounds[net] {
-		if receiver.Alive(proxy, net) {
+	for _, proxy := range s.outbounds[net] {
+		if s.Alive(proxy, net) {
 			return proxy
 		}
 	}
 	idx := jumpHash(key, buckets)
-	return receiver.outbounds[net][idx]
+	return s.outbounds[net][idx]
 }
 
-func (receiver *ConsistentHashing) Alive(proxy adapter.Outbound, net string) bool {
-	if delay, ok := receiver.delays[proxy.Tag()]; ok {
-		return delay <= receiver.maxAcceptableDelay[net]
+func (s *ConsistentHashing) Alive(proxy adapter.Outbound, net string) bool {
+	if delay, ok := s.delays[proxy.Tag()]; ok {
+		return delay <= s.maxAcceptableDelay[net]
 	}
 	return false
 }

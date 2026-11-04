@@ -33,7 +33,7 @@ func TestH_ResolvedUnavailableErrors(t *testing.T) {
 	for _, name := range []string{"UnknownMethod", "UnknownInterface", "ServiceUnknown", "NameHasNoOwner", "Spawn.ServiceNotFound", "AccessDenied", "NoReply", "Timeout", "UnknownProperty"} {
 		want := name == "UnknownMethod" || name == "UnknownInterface" || name == "ServiceUnknown" || name == "NameHasNoOwner" || name == "Spawn.ServiceNotFound"
 		value := dbus.Error{Name: "org.freedesktop.DBus.Error." + name, Body: []any{"test"}}
-		for _, err := range []error{value, &value, fmt.Errorf("wrapped: %w", value), fmt.Errorf("wrapped: %w", &value)} {
+		for _, err := range []error{value, &value, fmt.Errorf("wrapped: %w", value), fmt.Errorf("wrapped: %w", error(&value))} {
 			if got := isResolvedUnavailableError(err); got != want {
 				t.Errorf("%s: %v, want %v", name, got, want)
 			}

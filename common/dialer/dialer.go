@@ -70,7 +70,7 @@ func NewWithOptions(options Options) (N.Dialer, error) {
 	}
 	// H: Xray-style final mask, inside the resolve dialer so its interfaces stay visible
 	//nolint:staticcheck // TLSFragment is intentionally read to support legacy subscriptions.
-	maskOptions, err := withTLSFragment(dialOptions.FinalMask, dialOptions.TLSFragment, dialOptions.TCPFastOpen)
+	maskOptions, err := withTLSFragment(dialOptions.FinalMaskValue(), dialOptions.TLSFragment, dialOptions.TCPFastOpen)
 	if err != nil {
 		return nil, err
 	}

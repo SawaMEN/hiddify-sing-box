@@ -48,15 +48,21 @@ func TestH_BalancerLowestDelayTolerance(t *testing.T) {
 	require.False(t, s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": timeout(), "b": timeout(), "c": timeout()}), "with every member dead, nothing moves")
 	require.Equal(t, "c", s.Now())
 
-	// a fresh result beats a cached one of the same member, since the cache adds 20 s
+	// a cached pick is left for the first real ping that works, however slow
 	s = NewLowestDelay(outs(newFake("a"), newFake("b")), option.BalancerOutboundOptions{Tolerance: 100})
 	require.False(t, s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": cached(40), "b": cached(300)}))
 	require.Equal(t, "a", s.Now())
-	require.True(t, s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": cached(40), "b": his(300)}), "the first fresh result wins over the cache")
+	require.True(t, s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": cached(40), "b": his(300)}), "a real ping takes the cached pick")
+	require.Equal(t, "b", s.Now())
+	require.True(t, s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": his(35), "b": his(300)}), "a real ping faster by the tolerance")
+	require.Equal(t, "a", s.Now())
+	require.False(t, s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": his(40), "b": his(35)}), "tolerance is the option's")
+	require.Equal(t, "a", s.Now())
+	require.True(t, s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": his(400), "b": his(35)}))
+	require.Equal(t, "b", s.Now())
+	require.False(t, s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": his(40), "b": his(35)}), "tolerance is the option's")
 	require.Equal(t, "b", s.Now())
 	require.True(t, s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": his(40), "b": his(300)}))
-	require.Equal(t, "a", s.Now())
-	require.False(t, s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": his(40), "b": his(30)}), "tolerance is the option's")
 	require.Equal(t, "a", s.Now())
 }
 

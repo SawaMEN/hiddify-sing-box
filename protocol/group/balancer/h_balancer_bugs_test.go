@@ -7,6 +7,7 @@ import (
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
+	"github.com/sagernet/sing/common"
 	N "github.com/sagernet/sing/common/network"
 
 	"github.com/stretchr/testify/require"
@@ -59,7 +60,7 @@ func TestH_BalancerHashingCachedDelayOverflow(t *testing.T) {
 	}
 	consistent := NewConsistentHashing(outs(newFake("a"), newFake("b")), option.BalancerOutboundOptions{DelayAcceptableRatio: 3, MaxRetry: 3})
 	consistent.UpdateOutboundsInfo(history)
-	sticky := NewStickySession(outs(newFake("a"), newFake("b")), option.BalancerOutboundOptions{DelayAcceptableRatio: 3, MaxRetry: 3})
+	sticky := common.Must1(NewStickySession(outs(newFake("a"), newFake("b")), option.BalancerOutboundOptions{DelayAcceptableRatio: 3, MaxRetry: 3}))
 	sticky.UpdateOutboundsInfo(history)
 	for _, tag := range []string{"a", "b"} {
 		require.True(t, consistent.Alive(newFake(tag), N.NetworkTCP), tag)

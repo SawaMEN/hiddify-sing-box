@@ -16,17 +16,17 @@ import (
 )
 
 type _V2RayTransportOptions struct {
-	XDriveOptions      V2RayXDriveOptions      `json:"-"`
-	Type               string                  `json:"type" enum:"http,ws,quic,grpc,httpupgrade,xhttp,raw,mkcp,kcp"`
+	Type               string                  `json:"type" enum:"http,ws,quic,grpc,httpupgrade,xhttp,raw,mkcp,kcp,xdrive"`
 	HTTPOptions        V2RayHTTPOptions        `json:"-"`
 	WebsocketOptions   V2RayWebsocketOptions   `json:"-"`
 	QUICOptions        V2RayQUICOptions        `json:"-"`
-	KCPOptions         V2RayKCPOptions         `json:"-"`
 	GRPCOptions        V2RayGRPCOptions        `json:"-"`
 	HTTPUpgradeOptions V2RayHTTPUpgradeOptions `json:"-"`
-	XHTTPOptions       V2RayXHTTPOptions       `json:"-"` // H
-	DNSTTOptions       DnsttOptions            `json:"-"` // H
-	RawOptions         V2RayRawOptions         `json:"-"` // H
+	XHTTPOptions       V2RayXHTTPOptions       `json:"-"` //H
+	DNSTTOptions       DnsttOptions            `json:"-"` //H
+	RawOptions         V2RayRawOptions         `json:"-"` //H
+	KCPOptions         V2RayKCPOptions         `json:"-"` //H
+	XDriveOptions      V2RayXDriveOptions      `json:"-"` //H
 }
 
 type V2RayTransportOptions _V2RayTransportOptions
@@ -34,24 +34,24 @@ type V2RayTransportOptions _V2RayTransportOptions
 func (o V2RayTransportOptions) MarshalJSON() ([]byte, error) {
 	var v any
 	switch o.Type {
-	case "xdrive":
-		v = o.XDriveOptions
 	case C.V2RayTransportTypeHTTP:
 		v = o.HTTPOptions
 	case C.V2RayTransportTypeWebsocket:
 		v = o.WebsocketOptions
 	case C.V2RayTransportTypeQUIC:
 		v = o.QUICOptions
-	case C.V2RayTransportTypeKCP, C.V2RayTransportTypeKCPAlias:
-		v = o.KCPOptions
 	case C.V2RayTransportTypeGRPC:
 		v = o.GRPCOptions
 	case C.V2RayTransportTypeHTTPUpgrade:
 		v = o.HTTPUpgradeOptions
 	case C.V2RayTransportTypeXHTTP:
 		v = o.XHTTPOptions
-	case C.V2RayTransportTypeRaw: // H
-		v = o.RawOptions // H
+	case C.V2RayTransportTypeRaw: //H
+		v = o.RawOptions //H
+	case C.V2RayTransportTypeKCP, C.V2RayTransportTypeKCPAlias: //H
+		v = o.KCPOptions //H
+	case C.V2RayTransportTypeXDrive: //H
+		v = o.XDriveOptions //H
 
 	case "":
 		return nil, E.New("missing transport type")
@@ -68,17 +68,12 @@ func (o *V2RayTransportOptions) UnmarshalJSON(bytes []byte) error {
 	}
 	var v any
 	switch o.Type {
-	case "xdrive":
-		v = &o.XDriveOptions
 	case C.V2RayTransportTypeHTTP:
 		v = &o.HTTPOptions
 	case C.V2RayTransportTypeWebsocket:
 		v = &o.WebsocketOptions
 	case C.V2RayTransportTypeQUIC:
 		v = &o.QUICOptions
-	case C.V2RayTransportTypeKCP, C.V2RayTransportTypeKCPAlias:
-		o.Type = C.V2RayTransportTypeKCP
-		v = &o.KCPOptions
 	case C.V2RayTransportTypeGRPC:
 		v = &o.GRPCOptions
 	case C.V2RayTransportTypeHTTPUpgrade:
@@ -87,6 +82,11 @@ func (o *V2RayTransportOptions) UnmarshalJSON(bytes []byte) error {
 		v = &o.XHTTPOptions
 	case C.V2RayTransportTypeRaw:
 		v = &o.RawOptions
+	case C.V2RayTransportTypeKCP, C.V2RayTransportTypeKCPAlias: //H
+		o.Type = C.V2RayTransportTypeKCP //H
+		v = &o.KCPOptions                //H
+	case C.V2RayTransportTypeXDrive: //H
+		v = &o.XDriveOptions //H
 	default:
 		return E.New("unknown transport type: " + o.Type)
 	}
@@ -100,15 +100,15 @@ func (o *V2RayTransportOptions) UnmarshalJSON(bytes []byte) error {
 func (o V2RayTransportOptions) DescribeSchema(builder schema.Builder) (*schema.Node, error) {
 	return builder.Define("V2RayTransport", func() (*schema.Node, error) {
 		return schema.DiscriminatedUnion(builder, "type", true, []schema.UnionVariant{
-			{Value: "xdrive", StructType: reflect.TypeFor[V2RayXDriveOptions]()},
 			{Value: C.V2RayTransportTypeHTTP, StructType: reflect.TypeFor[V2RayHTTPOptions]()},
 			{Value: C.V2RayTransportTypeWebsocket, StructType: reflect.TypeFor[V2RayWebsocketOptions]()},
 			{Value: C.V2RayTransportTypeQUIC, StructType: reflect.TypeFor[V2RayQUICOptions]()},
 			{Value: C.V2RayTransportTypeGRPC, StructType: reflect.TypeFor[V2RayGRPCOptions]()},
 			{Value: C.V2RayTransportTypeHTTPUpgrade, StructType: reflect.TypeFor[V2RayHTTPUpgradeOptions]()},
-			{Value: C.V2RayTransportTypeXHTTP, StructType: reflect.TypeFor[V2RayXHTTPOptions]()}, // H
-			{Value: C.V2RayTransportTypeRaw, StructType: reflect.TypeFor[V2RayRawOptions]()},     // H
-			{Value: C.V2RayTransportTypeKCP, StructType: reflect.TypeFor[V2RayKCPOptions]()},     // H
+			{Value: C.V2RayTransportTypeXHTTP, StructType: reflect.TypeFor[V2RayXHTTPOptions]()},   //H
+			{Value: C.V2RayTransportTypeRaw, StructType: reflect.TypeFor[V2RayRawOptions]()},       //H
+			{Value: C.V2RayTransportTypeKCP, StructType: reflect.TypeFor[V2RayKCPOptions]()},       //H
+			{Value: C.V2RayTransportTypeXDrive, StructType: reflect.TypeFor[V2RayXDriveOptions]()}, //H
 		}, nil)
 	})
 }

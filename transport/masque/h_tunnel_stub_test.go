@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/sagernet/sing-box/log"
-	tun "github.com/sagernet/sing-tun"
+	"github.com/sagernet/sing-tun"
 
 	"github.com/stretchr/testify/require"
 )

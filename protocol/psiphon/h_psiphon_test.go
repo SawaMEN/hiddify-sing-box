@@ -106,7 +106,7 @@ func TestH_PsiphonOutboundBeforeStart(t *testing.T) {
 	require.Equal(t, 10, *out.psiphon.config.EstablishTunnelTimeoutSeconds)
 	require.False(t, out.IsReady())
 	require.Equal(t, "connecting...", out.psiphon.State())
-	require.Contains(t, out.DisplayType(), "Connecting")
+	require.Equal(t, "Psiphon", adapter.DisplayType(out))
 
 	_, err := out.DialContext(context.Background(), N.NetworkTCP, M.ParseSocksaddr("1.1.1.1:443"))
 	require.ErrorContains(t, err, "controller not initialized")
@@ -263,8 +263,8 @@ func TestH_PsiphonCloseIsIdempotentAndPreventsLateStart(t *testing.T) {
 
 func TestH_PsiphonRejectsDetourConflicts(t *testing.T) {
 	for _, options := range []option.PsiphonOutboundOptions{
-		{DialerOptions: option.DialerOptions{Detour: "main"}, UpstreamProxyURL: "http://127.0.0.1:1080"},
-		{DialerOptions: option.DialerOptions{Detour: "main"}, ConduitPairingID: "pair"},
+		{Detour: "main", UpstreamProxyURL: "http://127.0.0.1:1080"},
+		{Detour: "main", ConduitPairingID: "pair"},
 	} {
 		_, err := NewOutbound(context.Background(), nil, log.NewNOPFactory().Logger(), "stage", options)
 		require.Error(t, err)
@@ -293,7 +293,7 @@ func TestH_PsiphonExplicitAndroidDetourKeepsProtectedBridge(t *testing.T) {
 	ctx := service.ContextWith[adapter.PlatformInterface](context.Background(), &hProtectedAndroidPlatform{})
 	ctx = service.ContextWith[adapter.OutboundManager](ctx, &hPsiphonOutboundManager{})
 	out, err := NewOutbound(ctx, nil, log.NewNOPFactory().Logger(), "chain-psiphon", option.PsiphonOutboundOptions{
-		DataDirectory: t.TempDir(), DialerOptions: option.DialerOptions{Detour: "proxy"},
+		DataDirectory: t.TempDir(), Detour: "proxy",
 	})
 	require.NoError(t, err)
 	h := out.(*Outbound)

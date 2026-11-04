@@ -53,6 +53,25 @@ a working server goes on. Connections are closed in two cases only:
 `interrupt_exist_connections` says whether the connections that came in from inbounds are
 closed too in these cases; connections opened inside sing-box always are.
 
+### During a test cycle
+
+The results of a regular test cycle arrive one by one. `lowest-delay` and `round-robin` do not
+take each as it comes: while a cycle runs, they keep the members they use as long as these
+answer in this run, and choose again with all the results when the cycle ends. A member in use
+that fails, or that has no result of this run yet (at start, the cached or the first member),
+is replaced at once by the best member known so far, until the cycle ends and the best of all is
+chosen. `lowest-delay` holds only until the cycle has tested the member in use: from then on a
+faster member takes the selection at once, as outside a cycle. Holding for the whole cycle kept
+a member chosen while the fast one did not answer (a failed test) long after the fast one
+answered again. Tests outside a cycle, such as a test the user asks for, apply at once.
+
+The first cycle after start, and one after a network change, are not held: there is no selection
+worth keeping yet, and each result is taken as it comes, after the debounce of the group events.
+
+hiddify-core shows a `round-robin` group in the app as its fastest member, and keeps that member
+until another one is faster by more than the larger of 50 ms and a tenth of its delay, or it
+stops answering; during a regular cycle, until it stops answering.
+
 ### Strategies
 
 - **`round-robin`** (default): members are sorted by delay, and connections take turns among
@@ -63,15 +82,21 @@ closed too in these cases; connections opened inside sing-box always are.
   faster by more than `tolerance` and by more than `tolerance_ratio` of the selected member's
   delay, whichever is larger, so the jitter between two close servers does not move the
   group. A member that failed its test is left at once for the fastest live one; when no
-  member is live, the selection stays.
+  member is live, the selection stays. A member that took the selection with a real ping stays
+  for 30 s while it answers, whatever faster result comes in, then the best known takes it: the
+  first cycle's results arrive one by one, and the selection hopped at each faster one. A ping
+  cached from the previous run decides nothing and is not shown: it only orders the members
+  until the real pings arrive (the first choice at start, and the order the cycle tests them
+  in). A cached pick is left for a better cached one and for the first real ping that works,
+  however slow; a cached ping never takes a member whose real ping answers.
 - **`consistent-hashing`**: the member is chosen from the destination: its registrable domain
   (for example `example.com` for `www.example.com`) or its IP address. The same destination
   always gets the same member while that member is alive. If it is dead, the group tries up to
   `max_retry` other picks from the hash, then the first alive member in the list. If none is
   alive, it uses the hashed member anyway.
-- **`sticky-sessions`**: the member is chosen from the source address and the destination
-  together. A new pair gets a random member, and the group remembers it, for up to 1,000 pairs,
-  for `ttl`. A remembered member that is dead is replaced with another alive member, picked the
+- **`sticky-sessions`**: the member is chosen from what `sticky_hash` names, the source address
+  and the destination unless set. A new key gets a random member, and the group remembers it, for
+  up to 1,000 keys, for `ttl`. A remembered member that is dead is replaced with another alive member, picked the
   same way as above.
 - **`pool`**: a fixed number of slots (`pool`, 3 by default, at most the number of members),
   each held by a working member. A connection goes to the slot picked by a hash of what
@@ -80,11 +105,11 @@ closed too in these cases; connections opened inside sing-box always are.
   - A dead member is replaced in its slot by a working member outside the pool. While there is
     none, the slot is skipped: its connections spread over the working slots, the same way each
     time, and come back when the member answers again.
-  - With `pool_tolerance` 0, the slots keep the first working members in config order. With
-    more, a member outside replaces a slot member only when it is faster by more than that many
-    milliseconds.
+  - With `tolerance` unset, the slots keep the first working members in config order. With it,
+    a member outside replaces a slot member only when it is faster by more than `tolerance` and
+    `tolerance_ratio` of the slot member's delay, as for `lowest-delay`.
   - `sticky_hash` is a list of `process`, `domain` (the registrable domain), `source_ip`,
-    `dest_ip` and `dest_port`; the default is `["process", "domain"]`. `["none"]` sends
+    `dest_ip` and `dest_port`; the pool's default is `["process", "domain"]`. `["none"]` sends
     connections round-robin over the working slots.
   - Refilling a slot does not interrupt connections.
 
@@ -105,13 +130,13 @@ closed too in these cases; connections opened inside sing-box always are.
 | `outbounds` | list of strings | required | Tags of the members. |
 | `strategy` | string | `"round-robin"` | `round-robin`, `lowest-delay`, `consistent-hashing`, `sticky-sessions` or `pool`. |
 | `pool` | int | `3` | For `pool`: the number of slots. |
-| `pool_tolerance` | int | `0` | For `pool`: how much faster, in milliseconds, a member outside the pool must be to take a slot. At most `15000`. |
-| `sticky_hash` | list of strings | `["process", "domain"]` | For `pool`: what a connection sticks to its slot by. `["none"]` turns sticking off. |
+| `sticky_hash` | list of strings | pool `["process", "domain"]`, sticky-sessions `["source_ip", "domain"]` | For `pool` and `sticky-sessions`: what a connection sticks to its member by. `["none"]` turns sticking off. |
 | `delay_acceptable_ratio` | number | `2` | How much slower than the fastest member a member may be and still be used. `2` means up to twice the fastest delay. Unset or `0` is `2`. |
 | `max_retry` | int | `0` | For `consistent-hashing` and `sticky-sessions`: how many other hash picks to try before going down the list. |
 | `ttl` | duration | `0` (no expiry) | For `sticky-sessions`: how long a pair keeps its member. |
 | `interrupt_exist_connections` | bool | `false` | When a member dies, or at the one move after start, also close the connections that came in from inbounds. Without it, only connections opened inside sing-box are closed. |
 | `tolerance` | int | `50` | For `lowest-delay`: how much faster, in milliseconds, another member must be to take the selection. |
+| `pool_tolerance` | int | `0` | Legacy alias for pool tolerance when `tolerance` is unset. |
 | `tolerance_ratio` | number | `0.1` | For `lowest-delay`: how much faster, as a share of the selected member's delay, another member must be to take the selection. The larger of the two tolerances applies. |
 
 ## See also

@@ -22,6 +22,7 @@ func TestH_ProxyDisplayNameHiddifyTypes(t *testing.T) {
 		TypeBalancer:       "Balancer",
 		TypeDNSTT:          "DNSTT",
 		TypeGooseRelay:     "GooseRelay",
+		TypeMasterDNS:      "MasterDNS",
 		TypeTrustTunnel:    "TrustTunnel",
 	}
 	for proxyType, expected := range cases {
@@ -47,7 +48,7 @@ func TestH_HiddifyTypeValues(t *testing.T) {
 		"TypeBalancer":        TypeBalancer,
 		"TypeDNSTT":           TypeDNSTT,
 		"TypeGooseRelay":      TypeGooseRelay,
-		"TypeSmartDNSPool":    TypeSmartDNSPool,
+		"TypeMasterDNS":       TypeMasterDNS,
 		"TypeTrustTunnel":     TypeTrustTunnel,
 		"TypeLegacyWireGuard": TypeLegacyWireGuard,
 	}

@@ -7,12 +7,13 @@ import (
 	"strings"
 	"time"
 
-	multidns "github.com/hiddify/hmrd_multi_resolver_dns"
 	"github.com/sagernet/sing-box/common/dialer"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
+
+	multidns "github.com/hiddify/hmrd_multi_resolver_dns"
 )
 
 // PoolOptions tune a resolver pool, from an outbound's smart_pool block. Zero values take the

@@ -1,29 +1,37 @@
-# Upstream Hiddify v5 synchronization
+# Hiddify v5 synchronization — 2026-11-04
 
-## Source and preservation
+## Source
 
-- Upstream: `hiddify/hiddify-sing-box`, branch `v5`, commit `004371d6be2395ee4379054a8cf113f339dbe231` (latest verified on 2026-11-02).
-- Initial fork baseline: `0337a5e570823b826634111dba8b6d3dd6e804c6`, original `main` `1b8cf92b812e925851afeadfb11329fe0bce25b0`.
-- Git merge commit: `d74e42fbb4e3dc7f39e967bcde348c870cbaf5cb` with both fork and upstream parents.
-- The guarded Git merge verified that 314 paths exclusive to the fork were not lost. No unresolved content conflicts.
-- Main protocol implementations `vetroff`, `openflux`, `olcrtc`, `fptn`, `pingtunnel`, and the fork's `option/vetroff.go`, `option/xdrive.go`, and WARP scanner implementation were verified identical by Git blob SHA on the review branch and original `main`.
+- Upstream: `hiddify/hiddify-sing-box:v5`, `f5614e84a4fb39fbcc423835bdcd113142bd470f`.
+- Previous synchronized upstream: `004371d6be2395ee4379054a8cf113f339dbe231`.
+- Fork baseline: `9df34013f49cf301a42e0254c2df8fc6cbe746e8` (`main`).
+- All 36 new upstream commits are included. The fork delta was rebased locally onto the new upstream tip. The integrated tree is published as a compatibility commit on the existing fork history; this source SHA is the baseline for the next synchronization.
 
-## Upstream adaptations integrated after the merge
+## Changes
 
-- IPv6 probe and `IPv6Capability` service to support `ipv6_by_outbound` and `ipv6_unavailable_via` rules, plus upstream regression tests.
-- Sequential DNS failover with per-member time budgets, error TTL, recovery tracking and regression tests. Existing `multi`, parallel, stable and fastest modes retained.
-- Monitor selected-outbound priority on startup and selector changes, staged on-demand retries and bounded worker timeouts, without replacing the fork's existing monitoring registry, worker queues or IP-info behavior.
-- MASQUE/WARP TLS enhancements, device settings and transport rejection detection from the compatible upstream merge; the fork's existing functional outbound lifecycle, WARP scanner and public API were retained without replacement.
-- Cloudflare Trace body fetch integrated into the existing IP provider, without overwriting custom IP information providers.
+- Soar DNS tunnel and shared discovery/refilling for DNS pools.
+- Monitoring joins simultaneous tests, records failure reasons and stabilizes lowest-delay selection; balancer selection rules are exported.
+- WARP restart/failover safety, refused MASQUE-device recovery and detailed status errors; status marks are rendered by the app.
+- Shared resolver handling and adaptive pools for DNSTT and the new MasterDNS outbound, including duplication, rate-limit recovery, benchmarks and regression tests.
+- Verified and learned IPv6 capability per outbound, declared capability, cached state and route fallback instead of assuming that opening a proxy connection proves remote IPv6 works.
+- Hot-reload monitoring retests, staged results and idle recovery; retain the fork's atomic lifecycle state and rollback when a bounded task queue is full.
+- Xray 26.10.31 finalmask, merge/OOB, legacy XDNS configuration support and Xray fingerprint aliases.
+- Canonical Xray XDrive storage transport replaces the duplicated storage implementation. Google Drive, S3, templates and local storage remain available; retain the old `front_address`/`front_port`, JSON-encoded template strings and inbound `storage_dialer` options.
+- TCP Fast Open dependency `tfo-go v2.4.2` matches the Go 1.27 internal socket API; the Windows hot-reload traffic test retains TCP Fast Open.
+- Go 1.27.3 and updated upstream dependencies, including the upstream Psiphon TLS pin `30b2320c` to prevent its Go 1.27 initialization panic. Restore `godebug multipathtcp=0` as required by the network dialer defaults.
 
-## Deliberate compatibility limits
+## Fork compatibility
 
-- Full upstream MASQUE auto-re-registration and tunnel-state lifecycle is deferred because it relies on an incompatible scanner and tunnel stack; attempting to replace only the outbound failed compilation. The original fork MASQUE implementation and scanner are preserved.
-- The fork's custom monitoring event state machine remains authoritative. Staged retry timeouts and late-result rejection were ported, but the upstream-specific interim/tentative event publishing and group-confirmed-result model were not copied wholesale because those depend on a different scheduler and would overwrite the fork's custom event logic.
-- Go 1.26.10's `badlinkname` support and `runtime/pprof.parseProcSelfMaps` linker issue are pre-existing in the fork. The guarded merge validation compiled and tested all normal runtime packages under production-like tags *except* those existing incompatible linker paths; it vetted `boxdd`, compiled `libbox`, and skipped the privileged Linux namespace test on an unprivileged runner.
+VetrOFFProxy, OpenFlux, OLCRTC, FPTN, PingTunnel, custom Sudoku, Snell and the existing WARP scanner remain in the fork. Existing `smart_dns_pool` service configurations remain accepted while DNS tunnels can use the new per-outbound pool. XDrive remains registered in ordinary fork builds; `with_xdrive` also enables its upstream integration tests. Both `final_mask` and upstream `finalmask` configuration spellings are supported, with the legacy key taking precedence.
+
+WARP/MASQUE now uses the latest upstream device-pool, refusal recovery and scope-owned lifecycle. The fork retains explicit registration-detour policy, IPv4/IPv6 profile validation and its adapted gVisor stack. Standalone `masque` requires an enrolled `device`; automatic registration uses a `warp` endpoint with `mode: masque`. The fork's `IsReady` adapter contract and legacy `pool_tolerance` configuration are retained alongside optional detailed status. Live WARP/Psiphon checks require network access and their documented opt-in environment variables.
+
+## Integration regressions
+
+- Monitoring publishes completion before its result, so a subsequent URL stage starts a fresh test instead of joining a settled test; completion signals belong to their execution.
+- MASQUE unwraps mapped IPv4 destinations and uses its IPv6 local address for IPv6 UDP. The fork's gVisor forwarder Start/Close ownership is retained.
+- DNS auto-resolver tests cover both bundled and dynamically discovered candidates.
 
 ## Validation
 
-- Initial guarded upstream Git merge: [successful GitHub Actions run](https://github.com/SawaMEN/hiddify-sing-box/actions/runs/41416486829); compilation, custom protocol tests and short regressions passed.
-- All post-merge adaptation changes are subject to the repository's [standard Test](https://github.com/SawaMEN/hiddify-sing-box/actions/workflows/test.yml) and [Lint](https://github.com/SawaMEN/hiddify-sing-box/actions/workflows/lint.yml) checks on pull request #15.
-- Do not merge the review branch unless the final CI checks pass and functional regression risks are reviewed.
+The pull request runs the standard platform Test and Lint workflows plus production-tag vet, race regressions and the full production-tag suite in `Upstream compatibility`. The exact-head CI results are attached to PR #17. Local regression checks cover monitoring, balancer, WARP/MASQUE, DNSTT/MasterDNS, Soar, IP lookup, schema and options. Schema and module metadata are generated from the integrated source, rather than copied over the fork's options.

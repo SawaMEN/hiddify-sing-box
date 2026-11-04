@@ -75,7 +75,7 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 		fallbackDelay:  time.Duration(options.FallbackDelay),
 		dialer:         outboundDialer.(dialer.ParallelInterfaceDialer),
 		isEmpty: reflect.DeepEqual(options.DialerOptions, option.DialerOptions{
-			AbstractDialerOptions: option.AbstractDialerOptions{UDPFragmentDefault: true},
+			UDPFragmentDefault: true,
 		}),
 	}
 	// H: restored; send a PROXY protocol header (version 1 or 2) on TCP connections

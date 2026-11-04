@@ -117,7 +117,6 @@ func TestH_TunnelStackListenPacketIPv4(t *testing.T) {
 }
 
 func TestH_TunnelStackListenPacketIPv6(t *testing.T) {
-	t.Skip("BUG: stackDevice.ListenPacket binds IPv6 destinations to inet4Address (device_stack.go IPv6 branch)")
 	tunnel := hNewStackTunnel(t)
 	packetConn, err := tunnel.ListenPacket(context.Background(), M.ParseSocksaddr("[2001:db8::9]:123"))
 	require.NoError(t, err)
@@ -144,4 +143,41 @@ func TestH_TunnelMissingAddressFamily(t *testing.T) {
 	defer tunnel.Close()
 	_, err = tunnel.DialContext(context.Background(), N.NetworkTCP, M.ParseSocksaddr("[2001:db8::1]:443"))
 	require.ErrorContains(t, err, "missing IPv6 local address")
+}
+
+// MASQUE in MASQUE: the inner tunnel dials the endpoint as an IPv4-mapped address
+// ([::ffff:162.159.198.2]:443), which an IPv4-only outer tunnel refused as IPv6.
+func TestH_TunnelIPv4MappedDestination(t *testing.T) {
+	tunnel, err := NewTunnel(context.Background(), log.NewNOPFactory().NewLogger("masque"), TunnelOptions{
+		Address: []netip.Prefix{netip.MustParsePrefix("172.16.0.2/32")},
+	})
+	require.NoError(t, err)
+	defer tunnel.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	_, err = tunnel.DialContext(ctx, N.NetworkTCP, M.ParseSocksaddr("[::ffff:162.159.198.2]:443"))
+	require.Error(t, err, "nothing answers")
+	require.NotContains(t, err.Error(), "missing IPv6 local address")
+}
+
+// the tunnel's device takes the configured MTU, within the IPv6 minimum and 9000
+func TestH_TunnelMTU(t *testing.T) {
+	newTunnel := func(mtu uint32) (*Tunnel, error) {
+		return NewTunnel(context.Background(), log.NewNOPFactory().NewLogger("masque"), TunnelOptions{
+			Address: []netip.Prefix{netip.MustParsePrefix("172.16.0.2/32")},
+			MTU:     mtu,
+		})
+	}
+	for _, mtu := range []uint32{0, 1400} {
+		tunnel, err := newTunnel(mtu)
+		require.NoError(t, err)
+		deviceMTU, err := tunnel.tunDevice.MTU()
+		require.NoError(t, err)
+		require.Equal(t, int(max(mtu, DefaultMTU)), deviceMTU)
+		tunnel.Close()
+	}
+	for _, mtu := range []uint32{1000, 9001} {
+		_, err := newTunnel(mtu)
+		require.Error(t, err, mtu)
+	}
 }

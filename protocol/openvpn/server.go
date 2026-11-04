@@ -241,7 +241,7 @@ func (s *ServerEndpoint) Start(stage adapter.StartStage, scope *adapter.Scope) e
 	}
 	serverOptions.Transport.Listener = streamListener
 	serverOptions.Transport.PacketConn = packetConn
-	serverOptions.IncomingPacketHeadroom = s.device.FrontHeadroom
+	serverOptions.DataChannel.PacketHeadroom = s.device.FrontHeadroom() // H: supported by sing-openvpn v5
 	server, err := ovpn.NewServer(serverOptions)
 	if err != nil {
 		if packetConn != nil {

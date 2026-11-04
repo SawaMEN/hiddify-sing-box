@@ -17,8 +17,8 @@ import (
 	N "github.com/sagernet/sing/common/network"
 )
 
-// masqueIncluded tells auto mode that MASQUE is in the build.
-const masqueIncluded = true
+// included reports the capability of the state compiled into this endpoint.
+func (*masqueLinkState) included() bool { return true }
 
 // connectMASQUE runs a MASQUE tunnel to WARP with the device of profile as the inner endpoint.
 // The tunnel looks up endpoints with the scanner and reconnects by itself.
@@ -39,6 +39,9 @@ func (w *WARPEndpoint) connectMASQUE(done <-chan struct{}, profile *warpProfile)
 		w.fail(err)
 		return
 	}
+	if profile.inline {
+		inner.SetOnRejected(func(err error) { w.linkDeviceRefused(err) })
+	}
 	if err = adapter.StartLate(w.scope, "outbound/masque["+w.tag+"]", inner); err != nil {
 		w.fail(E.Cause(err, "start WARP MASQUE tunnel"))
 		return
@@ -51,9 +54,7 @@ func (w *WARPEndpoint) connectMASQUE(done <-chan struct{}, profile *warpProfile)
 	}
 	w.mtx.Lock()
 	w.endpoint = inner
-	// This MASQUE outbound variant has no scanner status API. Keep WARP's
-	// own state rather than referencing a removed method and breaking builds.
-	w.scanStatusOf = func() *warpscan.Status { return w.scanStatus }
+	w.scanStatusOf = func() *warpscan.Status { return inner.ScanStatus() }
 	w.mtx.Unlock()
 }
 

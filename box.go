@@ -531,11 +531,9 @@ func New(options Options) (*Box, error) {
 		})
 		timeService.TimeService = ntpService
 	}
-	scope := adapter.NewScope(ctx, logFactory.Logger()) //H
-	scope.Add(logFactory.Close) // scope owns the logger even if startup never runs //H
 	return &Box{
 		ctx:                 ctx,
-		scope:               scope, //H
+		scope:               adapter.NewScope(ctx, logFactory.Logger()), // H
 		network:             networkManager,
 		endpoint:            endpointManager,
 		inbound:             inboundManager,
@@ -612,6 +610,7 @@ func (s *Box) preStart() error {
 	if err != nil {
 		return E.Cause(err, "start logger")
 	}
+	s.scope.Add(s.logFactory.Close)
 	applyDebugOptions(s.debugOptions)
 	debugHTTPServer, err := startDebugHTTPServer(s.debugOptions)
 	if err != nil {
@@ -730,7 +729,8 @@ func (s *Box) Close() error {
 	default:
 		close(s.done)
 	}
-	return s.scope.Close() // the logger is closed once by its owning scope //H
+	err := s.scope.Close()
+	return E.Errors(err, s.logFactory.Close())
 }
 
 func (s *Box) closeWithTimeout(name string, timeout time.Duration, closeFn func() error) (err error) {

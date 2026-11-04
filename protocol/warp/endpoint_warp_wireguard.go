@@ -9,6 +9,7 @@ import (
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	wg "github.com/sagernet/sing-box/protocol/wireguard"
+	"github.com/sagernet/sing/common/json/badoption"
 )
 
 func createWARPWireGuardEndpoint(
@@ -22,7 +23,7 @@ func createWARPWireGuardEndpoint(
 	peerPort uint16,
 	peerPublicKey string,
 ) (adapter.Endpoint, error) {
-	addresses, err := warpInterfaceAddresses(config.Interface.Addresses.V4, config.Interface.Addresses.V6)
+	addresses, err := warpInterfaceAddresses(config)
 	if err != nil {
 		return nil, err
 	}
@@ -36,14 +37,14 @@ func createWARPWireGuardEndpoint(
 		AWG:           options.AWG,
 		DialerOptions: options.DialerOptions,
 		Address:       addresses,
-		FallbackAddress: options.FallbackAddress,
 		PrivateKey:    config.PrivateKey,
 		Peers: []option.WireGuardPeer{
 			{
-				Address:   peerAddr,
-				Port:      peerPort,
-				PublicKey: peerPublicKey,
-				AllowedIPs: option.LegacyListable[netip.Prefix]{
+				Address:                     peerAddr,
+				Port:                        peerPort,
+				PublicKey:                   peerPublicKey,
+				PersistentKeepaliveInterval: warpKeepalive, // H
+				AllowedIPs: badoption.Listable[netip.Prefix]{
 					netip.MustParsePrefix("0.0.0.0/0"),
 					netip.MustParsePrefix("::/0"),
 				},

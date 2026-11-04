@@ -19,10 +19,6 @@ type AwgEndpointOptions struct {
 	DialerOptions
 }
 
-// AwgRange is retained for ray2sing's AmneziaWG parameter conversion.
-// It is an alias, so the current string-based AWG config representation is unchanged.
-type AwgRange = string
-
 type AwgOptions struct {
 	IP                     string `json:"ip,omitempty"`
 	ID                     string `json:"id,omitempty"`

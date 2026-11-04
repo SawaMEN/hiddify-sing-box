@@ -124,11 +124,6 @@ func TestH_ProtocolFieldExtensions(t *testing.T) {
 	require.Equal(t, 1.5, balancer.DelayAcceptableRatio)
 	require.Equal(t, time.Minute, time.Duration(balancer.TTL))
 
-	pool := hRoundTrip[SmartDNSPoolServiceOptions](t, `{"listen":"127.0.0.1","listen_port":19876,"upstreams":[{"type":"udp","address":"1.1.1.1:53","weight":2}],"load_balance":"weighted","deadline":"5s"}`)
-	require.Len(t, pool.Upstreams, 1)
-	require.Equal(t, 2, pool.Upstreams[0].Weight)
-	require.Equal(t, 5*time.Second, time.Duration(pool.Deadline))
-
 	dnstt := hRoundTrip[DnsttOptions](t, `{"pubkey":"pk","domain":"t.example","resolvers":["auto","8.8.8.8"],"max-qname-len":101,"idle-timeout":"10s","smart_pool":true}`)
 	require.Equal(t, "pk", dnstt.PublicKey)
 	require.NotNil(t, dnstt.MaxQnameLen)
@@ -136,6 +131,91 @@ func TestH_ProtocolFieldExtensions(t *testing.T) {
 	require.NotNil(t, dnstt.IdleTimeout)
 	require.True(t, dnstt.SmartPool.IsEnabled())
 	require.Nil(t, dnstt.RPS)
+}
+
+// smart_pool is written as a bare boolean (the old form) or as an object with the pool's settings.
+func TestH_SmartPoolOptions(t *testing.T) {
+	t.Parallel()
+	var none *SmartPoolOptions
+	require.False(t, none.IsEnabled())
+
+	off, err := hUnmarshal[DnsttOptions](t, `{"smart_pool":false}`)
+	require.NoError(t, err)
+	require.NotNil(t, off.SmartPool)
+	require.False(t, off.SmartPool.IsEnabled())
+
+	full := hRoundTrip[DnsttOptions](t, `{"smart_pool":{"enabled":true,"load_balance":"weighted","deadline":"5s","per_attempt":"2s","probe_interval":"7s","down_after":3}}`)
+	require.True(t, full.SmartPool.IsEnabled())
+	require.Equal(t, "weighted", full.SmartPool.LoadBalance)
+	require.Equal(t, 5*time.Second, time.Duration(full.SmartPool.Deadline))
+	require.Equal(t, 2*time.Second, time.Duration(full.SmartPool.PerAttempt))
+	require.Equal(t, 7*time.Second, time.Duration(full.SmartPool.ProbeInterval))
+	require.Equal(t, 3, full.SmartPool.DownAfter)
+
+	md := hRoundTrip[MasterDNSOptions](t, `{"domains":["v.example.com"],"resolvers":["auto"],"key":"k","smart_pool":true}`)
+	require.True(t, md.SmartPool.IsEnabled())
+	md, err = hUnmarshal[MasterDNSOptions](t, `{"smart_pool":{"enabled":true,"down_after":"many"}}`)
+	require.Error(t, err)
+	_, err = hUnmarshal[MasterDNSOptions](t, `{"smart_pool":"yes"}`)
+	require.Error(t, err)
+}
+
+func TestH_MasterDNSOptions(t *testing.T) {
+	t.Parallel()
+	md := hRoundTrip[MasterDNSOptions](t, `{"domains":"v.example.com","resolvers":["8.8.8.8","1.1.1.1:5353"],"encryption":"aes-256-gcm","key":"k","mode":"tcp","balancing":"least-loss","packet_duplication":3,"mtu_test_timeout":"2s","auto_remove_low_mtu_resolvers":false,"ready_timeout":"10s","udp_over_tcp":{"enabled":true}}`)
+	require.Equal(t, []string{"v.example.com"}, []string(md.Domains))
+	require.Equal(t, []string{"8.8.8.8", "1.1.1.1:5353"}, []string(md.Resolvers))
+	require.Equal(t, "aes-256-gcm", md.Encryption)
+	require.Equal(t, "tcp", md.Mode)
+	require.Equal(t, 3, md.PacketDuplication)
+	require.Equal(t, 2*time.Second, time.Duration(md.MTUTestTimeout))
+	require.NotNil(t, md.AutoRemoveLowMTUResolvers)
+	require.False(t, *md.AutoRemoveLowMTUResolvers)
+	require.Nil(t, md.RecheckInactiveResolvers)
+	require.Equal(t, 10*time.Second, time.Duration(md.ReadyTimeout))
+	require.True(t, md.UDPOverTCP.Enabled)
+}
+
+func TestH_SoarOptions(t *testing.T) {
+	t.Parallel()
+	so := hRoundTrip[SoarOptions](t, `{"domain":"t.example.com","public_key":"k","resolvers":"8.8.8.8","tcp":"auto","safe_qname":101,"max_answer":512,"hold":"1s","max_path_window":16,"stream_window":262144,"session_idle":"60s","connect_timeout":"30s"}`)
+	require.Equal(t, "t.example.com", so.Domain)
+	require.Equal(t, []string{"8.8.8.8"}, []string(so.Resolvers))
+	require.Equal(t, time.Second, time.Duration(so.Hold))
+	require.Equal(t, 262144, so.StreamWindow)
+	// the pool is on unless turned off
+	require.Nil(t, so.SmartPool)
+	require.True(t, so.SmartPool.IsEnabledOr(true))
+	so = hRoundTrip[SoarOptions](t, `{"domain":"t.example.com","smart_pool":false}`)
+	require.False(t, so.SmartPool.IsEnabledOr(true))
+	so = hRoundTrip[SoarOptions](t, `{"domain":"t.example.com","smart_pool":{"enabled":true,"load_balance":"weighted"}}`)
+	require.True(t, so.SmartPool.IsEnabledOr(false))
+	require.False(t, (*SmartPoolOptions)(nil).IsEnabledOr(false))
+}
+
+// The discovery block of smart_pool, the same for every DNS tunnel.
+func TestH_SmartPoolDiscoveryOptions(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, ResolverDiscoveryOptions{}, (*SmartPoolOptions)(nil).DiscoveryOptions())
+	require.Equal(t, ResolverDiscoveryOptions{}, (&SmartPoolOptions{Enabled: true}).DiscoveryOptions())
+	for _, content := range []string{
+		`{"smart_pool":{"enabled":true,"discovery":{"country":"ir","sample_ranges":8,"want":4,"concurrency":2,"pace":"100ms"}}}`,
+	} {
+		md := hRoundTrip[MasterDNSOptions](t, content)
+		so := hRoundTrip[SoarOptions](t, content)
+		dn := hRoundTrip[DnsttOptions](t, content)
+		for _, pool := range []*SmartPoolOptions{md.SmartPool, so.SmartPool, dn.SmartPool} {
+			discovery := pool.DiscoveryOptions()
+			require.Equal(t, "ir", discovery.Country)
+			require.Equal(t, 8, discovery.SampleRanges)
+			require.Equal(t, 4, discovery.Want)
+			require.Equal(t, 2, discovery.Concurrency)
+			require.Equal(t, 100*time.Millisecond, time.Duration(discovery.Pace))
+		}
+	}
+	so := hRoundTrip[SoarOptions](t, `{"smart_pool":{"enabled":false,"discovery":{"country":"cn"}}}`)
+	require.False(t, so.SmartPool.IsEnabledOr(true))
+	require.Equal(t, "cn", so.SmartPool.DiscoveryOptions().Country)
 }
 
 func TestH_DNSServerOptionsHiddify(t *testing.T) {

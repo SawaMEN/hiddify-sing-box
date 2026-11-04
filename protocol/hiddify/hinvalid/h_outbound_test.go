@@ -6,6 +6,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/sagernet/sing-box/adapter"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
@@ -45,20 +46,18 @@ func TestH_HInvalidBlocksEverything(t *testing.T) {
 	require.ErrorIs(t, err, syscall.EPERM)
 }
 
+// An invalid config is failed, and its display type says why.
 func TestH_HInvalidDisplayTypeIncludesError(t *testing.T) {
 	t.Parallel()
 	out := newTestOutbound(t, "broken", errors.New("bad uuid"))
-	require.Contains(t, out.DisplayType(), "bad uuid")
-}
-
-func TestH_HInvalidDisplayTypeName(t *testing.T) {
-	t.Parallel()
-	out := newTestOutbound(t, "broken", errors.New("bad uuid"))
-	require.Equal(t, "Invalid bad uuid", out.DisplayType())
+	require.Equal(t, adapter.StatusFailed, out.Status())
+	require.EqualError(t, adapter.StatusError(out), "bad uuid")
+	require.Equal(t, "Invalid: bad uuid", adapter.DisplayType(out))
 }
 
 func TestH_HInvalidDisplayTypeNilError(t *testing.T) {
 	t.Parallel()
 	out := newTestOutbound(t, "broken", nil)
-	require.NotPanics(t, func() { _ = out.DisplayType() })
+	require.Equal(t, adapter.StatusReady, out.Status())
+	require.Equal(t, "Invalid", adapter.DisplayType(out))
 }

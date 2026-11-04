@@ -8,6 +8,8 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
+	"github.com/sagernet/sing-box/common/dialer"
+	"github.com/sagernet/sing-box/common/dnspool"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
@@ -18,13 +20,11 @@ import (
 	"github.com/sagernet/sing/common/uot"
 	"github.com/sagernet/sing/service"
 
-	multidns "github.com/hiddify/hmrd_multi_resolver_dns"
 	dnstt "github.com/net2share/vaydns/client"
 )
 
 func RegisterOutbound(registry *outbound.Registry) {
 	outbound.Register[option.DnsttOptions](registry, C.TypeDNSTT, NewOutbound)
-	loadResolvers()
 }
 
 var _ adapter.Outbound = (*Outbound)(nil)
@@ -43,18 +43,18 @@ type Outbound struct {
 	uotClient          *uot.Client
 	started            int
 
-	mdMgr *multidns.Manager // smart pool, set when options.SmartPool
+	pool *dnspool.Pool // the outbound's own resolver pool, set when options.SmartPool is enabled
 
 	options option.DnsttOptions
 }
 
-func (receiver *Outbound) PreStart() error {
-	receiver.cache = service.FromContext[adapter.CacheFile](receiver.ctx)
+func (h *Outbound) PreStart() error {
+	h.cache = service.FromContext[adapter.CacheFile](h.ctx)
 	return nil
 }
 
-func (receiver *Outbound) PostStart() error {
-	go receiver.startTestResolver()
+func (h *Outbound) PostStart() error {
+	go h.startTestResolver()
 	return nil
 }
 
@@ -70,6 +70,20 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 
 	if len(resolvers) == 0 {
 		return nil, E.New("at least one resolver is required")
+	}
+	// the resolver sockets are opened by the DNSTT client, not through a sing-box dialer: give
+	// them the socket control of one (bind_interface, routing_mark, the platform's protect), or
+	// on a VPN their queries loop back into the tunnel
+	defaultDialer, err := dialer.NewDefault(ctx, options.DialerOptions)
+	if err != nil {
+		return nil, err
+	}
+	dialerControl, _ := defaultDialer.UDPListenerControl()
+	for i := range resolvers {
+		resolvers[i].Resolver.DialerControl = dialerControl
+	}
+	if options.Detour != "" {
+		logger.Warn("dnstt: detour is not supported, the DNS queries go out directly")
 	}
 	if options.RecordType == "" {
 		options.RecordType = "txt"
@@ -101,67 +115,91 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 	}
 
 	if options.SmartPool.IsEnabled() {
-		mgr, addr, err := multidns.StartLocal(multidns.Options{})
+		dial, err := dnspool.DialFunc(ctx, options.DialerOptions)
 		if err != nil {
 			return nil, err
 		}
-		out.mdMgr = mgr
-		out.resolvers = []dnstt.Resolver{{ResolverType: dnstt.ResolverTypeUDP, ResolverAddr: addr}}
+		poolOptions := dnspool.PoolOptionsFrom(options.SmartPool)
+		// DNSTT's KCP times its retransmissions by the round trip and loses more from a query
+		// held for capacity than from one failed at once: measured on one resolver limited to 30
+		// queries a second, 82 kbps held against 173 failing fast
+		poolOptions.FailFast = true
+		pool, err := dnspool.StartPool(logger, tag, poolOptions, dial)
+		if err != nil {
+			return nil, err
+		}
+		out.pool = pool
+		out.resolvers = []dnstt.Resolver{{ResolverType: dnstt.ResolverTypeUDP, ResolverAddr: pool.Addr()}}
 		out.tunnels = []*dnstt.Tunnel{nil}
-		logger.InfoContext(ctx, "dnstt smart_pool listening on ", addr)
+		logger.InfoContext(ctx, "dnstt smart_pool listening on ", pool.Addr())
 	}
 
 	return out, nil
 }
 
-func (receiver *Outbound) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-	if !receiver.IsReady() {
+func (h *Outbound) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
+	if !h.isReady() {
 		return nil, E.New("outbound is not started")
 	}
-	if receiver.options.SingleResolver {
-		return receiver.OpenStreamSingleResolver(ctx)
+	if h.options.SingleResolver {
+		return h.OpenStreamSingleResolver(ctx)
 	}
-	return receiver.OpenStream(ctx)
+	return h.OpenStream(ctx)
 }
 
-func (receiver *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
-	if !receiver.IsReady() {
+func (h *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
+	if !h.isReady() {
 		return nil, E.New("outbound is not started")
 	}
 	ctx, metadata := adapter.ExtendContext(ctx)
-	metadata.Outbound = receiver.Tag()
+	metadata.Outbound = h.Tag()
 	metadata.Destination = destination
-	if receiver.uotClient != nil {
-		receiver.logger.InfoContext(ctx, "outbound UoT packet connection to ", destination)
-		return receiver.uotClient.ListenPacket(ctx, destination)
+	if h.uotClient != nil {
+		h.logger.InfoContext(ctx, "outbound UoT packet connection to ", destination)
+		return h.uotClient.ListenPacket(ctx, destination)
 	}
 	return nil, E.New("UoT is not enabled for this outbound")
 }
 
-func (receiver *Outbound) IsReady() bool {
-	return receiver.started > 0
+func (h *Outbound) isReady() bool {
+	return h.started > 0
 }
 
-func (receiver *Outbound) DisplayType() string {
-	str := C.ProxyDisplayName(receiver.Type())
-	if receiver.started == 0 {
-		str += " ⚠️ Connecting..."
-	} else if receiver.started < 0 {
-		str += " ❌ Failed!"
-	} else {
-		str += fmt.Sprint(" ✔️ ", len(receiver.resolvers), " resolvers")
+// Status is failed once every resolver failed its test. //H
+func (h *Outbound) Status() adapter.Status {
+	switch {
+	case h.started > 0:
+		return adapter.StatusReady
+	case h.started < 0:
+		return adapter.StatusFailed
+	}
+	return adapter.StatusConnecting
+}
+
+// StatusError is why it failed: no resolver passed its test. //H
+func (h *Outbound) StatusError() error {
+	if h.started < 0 {
+		return E.New("none of the ", len(h.candidateResolvers), " resolvers passed the test")
+	}
+	return nil
+}
+
+func (h *Outbound) DisplayType() string {
+	str := C.ProxyDisplayName(h.Type()) // the status is shown on its own
+	if h.started > 0 {
+		str += fmt.Sprint(" · ", len(h.resolvers), " resolvers")
 	}
 	return str
 }
 
-func (receiver *Outbound) Close() error {
-	for _, t := range receiver.tunnels {
+func (h *Outbound) Close() error {
+	for _, t := range h.tunnels {
 		if t != nil {
 			t.Close()
 		}
 	}
-	if receiver.mdMgr != nil {
-		_ = receiver.mdMgr.Close()
+	if h.pool != nil {
+		_ = h.pool.Close()
 	}
 	return nil
 }

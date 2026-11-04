@@ -240,6 +240,11 @@ func (w *WARPEndpoint) obtainProfile(done <-chan struct{}, kind string) *warpPro
 	if kind != kindMASQUE && w.options.WARPConfig != nil && w.options.WARPConfig.PrivateKey != "" {
 		return &warpProfile{Kind: kind, WireGuard: w.options.WARPConfig, inline: true}
 	}
+	if kind == kindMASQUE {
+		if profile := w.linkMASQUEProfile(); profile != nil { // a masque:// link's device, until Cloudflare refuses it
+			return profile
+		}
+	}
 	_, recreated := w.recreated.Load(kind)
 	if !w.options.Profile.Recreate || recreated {
 		if profile := w.profiles.usable(kind); profile != nil {
@@ -355,7 +360,7 @@ func (w *WARPEndpoint) chooseMode(done <-chan struct{}) string {
 			return ""
 		}
 	}
-	if masqueIncluded {
+	if w.masqueLinkState.included() {
 		if w.obtainProfile(done, kindMASQUE) == nil {
 			return ""
 		}
@@ -369,7 +374,7 @@ func (w *WARPEndpoint) chooseMode(done <-chan struct{}) string {
 	default:
 	}
 	for _, mode := range []string{modeWireGuard, modeAWG, modeMASQUE} {
-		if !w.modeFailed(mode) && (mode != modeMASQUE || masqueIncluded) {
+		if !w.modeFailed(mode) && (mode != modeMASQUE || w.masqueLinkState.included()) {
 			w.logger.WarnContext(w.ctx, "WARP auto mode: no tunnel answered, using ", mode)
 			return mode
 		}
@@ -423,7 +428,7 @@ func (w *WARPEndpoint) raceModes(done <-chan struct{}) string {
 		peer := netip.AddrPortFrom(addr, port)
 		probes[mode] = func(ctx context.Context) (time.Duration, error) { return probe(ctx, peer) }
 	}
-	if masqueIncluded {
+	if w.masqueLinkState.included() {
 		if profile := w.profiles.usable(kindMASQUE); profile != nil {
 			probes[modeMASQUE] = func(ctx context.Context) (time.Duration, error) { return w.probeMASQUE(ctx, profile) }
 		}

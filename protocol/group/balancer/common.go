@@ -1,14 +1,15 @@
 package balancer
 
 import (
-	"fmt"
 	"math"
 	"net"
 	"net/netip"
 	"sort"
+	"strings"
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/monitoring"
+	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common"
 	N "github.com/sagernet/sing/common/network"
 
@@ -52,16 +53,6 @@ func getKey(metadata *adapter.InboundContext) string {
 	return destinationAddr.String()
 }
 
-func getKeyWithSrcAndDst(metadata *adapter.InboundContext) string {
-	dst := getKey(metadata)
-	src := ""
-	if metadata != nil {
-		src = metadata.Source.Addr.String()
-	}
-
-	return fmt.Sprintf("%s%s", src, dst)
-}
-
 func jumpHash(key uint64, buckets int32) int32 {
 	var b, j int64
 
@@ -87,6 +78,17 @@ func getModifiedDelay(his *adapter.URLTestHistory) uint16 {
 		delay += 20000
 	}
 	return delay
+}
+
+// getMaxAcceptableDelay returns the largest delay still accepted next to minDelay. It stays
+// below TimeoutDelay, so a timed out outbound is never accepted and a large ratio cannot
+// overflow uint16.
+func getMaxAcceptableDelay(minDelay uint16, delayAcceptableRatio float64) uint16 {
+	maxAcceptableDelay := math.Max(100, float64(minDelay)) * delayAcceptableRatio
+	if maxAcceptableDelay >= float64(monitoring.TimeoutDelay) {
+		return monitoring.TimeoutDelay - 1
+	}
+	return uint16(maxAcceptableDelay)
 }
 
 func getTagDelay(tag string, history map[string]*adapter.URLTestHistory) uint16 {
@@ -136,12 +138,12 @@ func getAcceptableIndex(sortedOutbounds map[string][]adapter.Outbound, history m
 	for net, outs := range sortedOutbounds {
 		minDelay := getTagDelay(outs[0].Tag(), history)
 
-		maxAcceptableDelay := float64(math.Max(100, float64(minDelay))) * delayAcceptableRatio
+		maxAcceptableDelay := getMaxAcceptableDelay(minDelay, delayAcceptableRatio)
 
 		maxAvailableIndex := 0
 		for i, outbound := range outs {
 			delay := getTagDelay(outbound.Tag(), history)
-			if float64(delay) <= maxAcceptableDelay { // Avoid uint16 overflow for cached latency penalties.
+			if delay <= maxAcceptableDelay {
 				maxAvailableIndex = i
 			}
 		}
@@ -173,12 +175,48 @@ func getMinDelay(outbounds map[string][]adapter.Outbound, history map[string]*ad
 func getDelayMap(history map[string]*adapter.URLTestHistory) map[string]uint16 {
 	delayMap := make(map[string]uint16)
 	for tag, his := range history {
-		if his != nil {
-			delayMap[tag] = getModifiedDelay(his)
-		} else {
-			delayMap[tag] = monitoring.TimeoutDelay
-		}
+		delayMap[tag] = getModifiedDelay(his)
 	}
 
 	return delayMap
+}
+
+// aliveSet names the members within the acceptable delay, per network, so a strategy can tell
+// whether an update changed which members it uses.
+func aliveSet(outbounds map[string][]adapter.Outbound, delays map[string]uint16, maxAcceptableDelay map[string]uint16) map[string]string {
+	result := make(map[string]string, len(outbounds))
+	for network, members := range outbounds {
+		var alive strings.Builder
+		for _, member := range members {
+			if delay, loaded := delays[member.Tag()]; loaded && delay <= maxAcceptableDelay[network] {
+				alive.WriteString(member.Tag())
+				alive.WriteByte(0)
+			}
+		}
+		result[network] = alive.String()
+	}
+	return result
+}
+
+func aliveSetChanged(previous, current map[string]string) bool {
+	if previous == nil {
+		return true
+	}
+	for network, alive := range current {
+		if previous[network] != alive {
+			return true
+		}
+	}
+	return false
+}
+
+// defaultDelayAcceptableRatio is used when delay_acceptable_ratio is unset: at 0 no member is within
+// the acceptable delay, so round robin used only the fastest and the hashing strategies none.
+const defaultDelayAcceptableRatio = 2
+
+func acceptableRatio(options option.BalancerOutboundOptions) float64 {
+	if options.DelayAcceptableRatio <= 0 {
+		return defaultDelayAcceptableRatio
+	}
+	return options.DelayAcceptableRatio
 }

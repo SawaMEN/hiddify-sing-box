@@ -62,13 +62,14 @@ func ConnectTunnel(ctx context.Context, dialer N.Dialer, tlsConfig aTLS.Config, 
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
+	udpConn = WholePacketConn(udpConn) // H: a full QUIC packet was cut off through Shadowsocks
 	conn, err := qtls.Dial(
 		ctx,
 		bufio.NewBindPacketConn(udpConn, quicEndpoint),
 		tlsConfig,
 		quicConfig,
 	)
-	if _, ok := errors.AsType[*tls.ECHRejectionError](err); ok { // H: retry without rejected ECH
+	if _, ok := errors.AsType[*tls.ECHRejectionError](err); ok {
 		if capable, ok := tlsConfig.(interface{ SetECHConfigList([]byte) }); ok {
 			capable.SetECHConfigList(nil)
 		}
@@ -149,7 +150,7 @@ func newHTTP2Client(dialer N.Dialer, baseTLSConfig aTLS.Config, endpoint *net.TC
 				conn, err := dialTLS(ctx)
 				if _, ok := errors.AsType[*tls.ECHRejectionError](err); ok {
 					// The peer does not accept the offered ECH config (WARP does not). Drop it and
-					// retry once rather than failing the tunnel. // H
+					// retry once rather than failing the tunnel. //H
 					if capable, ok := tlsConfig.(interface{ SetECHConfigList([]byte) }); ok {
 						capable.SetECHConfigList(nil)
 					}

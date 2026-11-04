@@ -36,7 +36,7 @@ type WireGuardPeer struct {
 	Port                        uint16                           `json:"port,omitempty"`
 	PublicKey                   string                           `json:"public_key,omitempty"`
 	PreSharedKey                string                           `json:"pre_shared_key,omitempty"`
-	AllowedIPs                  LegacyListable[netip.Prefix] `json:"allowed_ips,omitempty"`
+	AllowedIPs                  badoption.Listable[netip.Prefix] `json:"allowed_ips,omitempty"`
 	PersistentKeepaliveInterval uint16                           `json:"persistent_keepalive_interval,omitempty"`
 	Reserved                    []uint8                          `json:"reserved,omitempty"`
 }
@@ -52,7 +52,6 @@ type WARPEndpointOptions struct { // H
 	Scanner     *WARPScannerOptions `json:"scanner,omitempty"`
 	MASQUE      *WARPMASQUEOptions  `json:"masque,omitempty"`
 	RotatePorts *bool               `json:"rotate_ports,omitempty"`
-	FallbackAddress badoption.Listable[netip.Addr] `json:"fallback_address,omitempty"`
 	DialerOptions
 
 	UniqueIdentifier string `json:"unique_identifier,omitempty"`
@@ -96,17 +95,3 @@ type LegacyWireGuardPeer struct { // H
 	AllowedIPs   badoption.Listable[netip.Prefix] `json:"allowed_ips,omitempty"`
 	Reserved     []uint8                          `json:"reserved,omitempty"`
 }
-
-// WARPMASQUEOptions selects WARP over MASQUE in the unified WARP endpoint.
-type WARPMASQUEOptions struct {
-	Enabled              bool                     `json:"enabled,omitempty"`
-	VHTTP                string                   `json:"vhttp,omitempty"`
-	TLS                  MASQUEOutboundTLSOptions `json:"tls,omitempty"`
-	UseIPv6              bool                     `json:"use_ipv6,omitempty"`
-	UDPKeepalivePeriod   badoption.Duration       `json:"udp_keepalive_period,omitempty"`
-	UDPInitialPacketSize uint16                   `json:"udp_initial_packet_size,omitempty"`
-	ReconnectDelay       badoption.Duration       `json:"reconnect_delay,omitempty"`
-	ServerName           string                   `json:"server_name,omitempty"`
-}
-
-func (o *WARPMASQUEOptions) IsEnabled() bool { return o != nil && o.Enabled }

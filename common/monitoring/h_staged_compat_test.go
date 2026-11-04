@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing/common/json/badoption"
 )
 
@@ -26,10 +27,10 @@ func TestH_OnDemandTimeouts(t *testing.T) {
 }
 
 func TestH_StagedURLTestBoundedFailure(t *testing.T) {
-	m := &OutboundMonitoring{onDemand: []time.Duration{20 * time.Millisecond, 100 * time.Millisecond}}
+	m := &OutboundMonitoring{logger: log.NewNOPFactory().NewLogger("test"), onDemand: []time.Duration{20 * time.Millisecond, 100 * time.Millisecond}}
 	out := &fakeOutbound{tag: "unreachable"}
 	start := time.Now()
-	delay, err := m.stagedURLTest(context.Background(), "https://example.invalid/generate_204", out, nil)
+	delay, err := m.stagedURLTest(context.Background(), "https://example.invalid/generate_204", out, nil, false)
 	if err == nil || !errors.Is(err, context.DeadlineExceeded) && delay != TimeoutDelay {
 		t.Fatalf("unreachable outbound should fail: delay=%d, err=%v", delay, err)
 	}

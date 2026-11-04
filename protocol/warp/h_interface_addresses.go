@@ -9,7 +9,7 @@ import (
 
 // warpInterfaceAddresses accepts IPv4-only and IPv6-only WARP profiles,
 // rather than panicking when an optional address is missing.
-func warpInterfaceAddresses(ipv4, ipv6 string) (badoption.Listable[netip.Prefix], error) {
+func warpInterfaceAddressPair(ipv4, ipv6 string) (badoption.Listable[netip.Prefix], error) {
 	var result badoption.Listable[netip.Prefix]
 	if ipv4 != "" {
 		addr, err := netip.ParseAddr(ipv4)

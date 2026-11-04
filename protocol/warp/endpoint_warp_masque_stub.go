@@ -10,7 +10,8 @@ import (
 	E "github.com/sagernet/sing/common/exceptions"
 )
 
-const masqueIncluded = false
+// included reports the capability of the state compiled into this endpoint.
+func (*masqueLinkState) included() bool { return false }
 
 var errMASQUENotIncluded = E.New(`WARP over MASQUE is not included in this build, rebuild with -tags with_masque`)
 
@@ -25,3 +26,16 @@ func registerMASQUEProfile(ctx context.Context, profile *option.WARPProfile) (*w
 func (w *WARPEndpoint) probeMASQUE(ctx context.Context, profile *warpProfile) (time.Duration, error) {
 	return 0, errMASQUENotIncluded
 }
+
+func validateMASQUEDevice(options *option.WARPEndpointOptions) error {
+	if options.MASQUE != nil && options.MASQUE.Device != nil {
+		return errMASQUENotIncluded
+	}
+	return nil
+}
+
+func (w *WARPEndpoint) linkMASQUEProfile() *warpProfile {
+	return nil
+}
+
+type masqueLinkState struct{}

@@ -91,7 +91,6 @@ func TestH_DefaultQuicConfig(t *testing.T) {
 	config = DefaultQuicConfig(0, 1242)
 	require.Equal(t, uint16(1242), config.InitialPacketSize)
 	require.True(t, config.DisablePathMTUDiscovery)
-	_ = config
 }
 
 func TestH_ParsePortMapping(t *testing.T) {
@@ -128,7 +127,6 @@ func TestH_ParsePortMapping(t *testing.T) {
 }
 
 func TestH_ParsePortMappingIPv6(t *testing.T) {
-	t.Skip("BUG: parsePortMapping splits on ':' before handling brackets, so documented IPv6 bind addresses like [::1] are always rejected")
 	mapping, err := ParsePortMapping("[::1]:8080:10.0.0.1:80")
 	require.NoError(t, err)
 	require.Equal(t, "::1", mapping.BindAddress)

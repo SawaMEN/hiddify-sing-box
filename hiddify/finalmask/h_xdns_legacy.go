@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	E "github.com/sagernet/sing/common/exceptions"
+
 	"google.golang.org/protobuf/proto"
 )
 
