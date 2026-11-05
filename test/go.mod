@@ -337,3 +337,5 @@ replace github.com/amnezia-vpn/amneziawg-go => github.com/hiddifydeveloper/amnez
 replace masterdnsvpn-go => ../replace/MasterDnsVPN
 
 replace github.com/getlantern/soar => ../replace/soar
+
+replace github.com/sagernet/sing => ../replace/sing
