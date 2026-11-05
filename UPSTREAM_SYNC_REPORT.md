@@ -2,12 +2,14 @@
 
 ## Source
 
-- Upstream: `hiddify/hiddify-sing-box:v5`, `1614c5edb52dd44a4cc079201ba1e790fdfad8a0`.
-- Previous synchronized upstream: `004371d6be2395ee4379054a8cf113f339dbe231`.
-- Fork baseline: `9df34013f49cf301a42e0254c2df8fc6cbe746e8` (`main`).
-- All 37 new upstream commits are included. The fork delta was rebased locally onto the new upstream tip. The integrated tree is published as a compatibility commit on the existing fork history; this source SHA is the baseline for the next synchronization.
+- Upstream: `hiddify/hiddify-sing-box:v5`, `6a545ead13f09130c7c802fa948b9d22f33c5000`.
+- Previous synchronized upstream: `1614c5edb52dd44a4cc079201ba1e790fdfad8a0`.
+- Fork baseline: `3d4545afd0b6b27048b88a697a1dfae9a4bedae7` (`main`).
+- All 3 new upstream commits since the previous synchronization are included without upstream merge commits. The fork's stack ownership callbacks and previous Bond/XHTTP compatibility repairs are retained.
 
 ## Changes
+
+- Latest lifecycle fixes: close UDP sockets when their local address family changes; update AWG netstack close safety; pin the hiddify/sing cached-buffer double-release fix in both Go modules.
 
 - Mirage TLS record splitting from the latest upstream commit, using the pinned MIT-licensed library, is included.
 
@@ -30,6 +32,8 @@ WARP/MASQUE now uses the latest upstream device-pool, refusal recovery and scope
 
 ## Integration regressions
 
+- Address-change, cached-buffer and AWG close regressions reproduce the old failures before the update. After the update, cached-connection and device regressions pass five race runs, and AWG close passes three race runs. These packages are included in continuous race coverage.
+
 - Successful sub-millisecond URL tests are recorded as 1 ms; zero remains reserved for an unmeasured result, preventing unnecessary staged retries.
 
 - Monitoring publishes completion before its result, so a subsequent URL stage starts a fresh test instead of joining a settled test; completion signals belong to their execution.
@@ -37,5 +41,7 @@ WARP/MASQUE now uses the latest upstream device-pool, refusal recovery and scope
 - DNS auto-resolver tests cover both bundled and dynamically discovered candidates.
 
 ## Validation
+
+This follow-up synchronizes upstream `6a545ead` after PR #19. Local before/after evidence covers all three upstream lifecycle fixes. Full platform Test/Lint, Snell interoperability, production vet/race/full tests and Xray interoperability run on the follow-up PR. The earlier main-branch Snell failure is retried separately to distinguish a transient official-server timeout from a code regression.
 
 The pull request runs the standard platform Test and Lint workflows plus production-tag vet, race regressions and the full production-tag suite in `Upstream compatibility`. The original synchronization was superseded by PR #18 and retained in main. Finishing changes update the source baseline and repair the remaining CI regressions; exact-head results are in GitHub Actions. Local regression checks cover monitoring, balancer, WARP/MASQUE, DNSTT/MasterDNS, Soar, IP lookup, schema and options. Schema and module metadata are generated from the integrated source, rather than copied over the fork's options.
