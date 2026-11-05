@@ -86,3 +86,32 @@ func TestH_XHTTPClosedFlagRace(t *testing.T) {
 	wait.Wait()
 	_ = option.V2RayXHTTPBaseOptions{}
 }
+
+// A request may finish after its caller has returned on cancellation.
+func TestH_XHTTPOpenStreamCanceledBeforeResponse(t *testing.T) {
+	client := hDialerClient(t, "2")
+	started := make(chan struct{})
+	release := make(chan struct{})
+	client.client.Transport = hErrorRoundTripper(func(*http.Request) (*http.Response, error) {
+		close(started)
+		<-release
+		return nil, context.Canceled
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() {
+		_, _, _, err := client.OpenStream(ctx, "http://localhost/xh/session", "session", nil, false)
+		result <- err
+	}()
+	<-started
+	cancel()
+	require.ErrorIs(t, <-result, context.Canceled)
+	close(release)
+	require.Eventually(t, client.IsClosed, time.Second, time.Millisecond)
+}
+
+type hErrorRoundTripper func(*http.Request) (*http.Response, error)
+
+func (f hErrorRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
