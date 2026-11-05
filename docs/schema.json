@@ -6160,6 +6160,19 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 4294967295
+            },
+            "fallback_address": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/IPAddress"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/IPAddress"
+                  }
+                }
+              ]
             }
           },
           "required": [
@@ -23900,10 +23913,10 @@
     "User": {
       "type": "object",
       "properties": {
-        "Username": {
+        "username": {
           "type": "string"
         },
-        "Password": {
+        "password": {
           "type": "string"
         }
       },

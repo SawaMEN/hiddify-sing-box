@@ -38,10 +38,10 @@ func createWARPAwgEndpoint(
 		Awg:              *options.AWG,
 		Peers: []option.AwgPeerOptions{
 			{
-				Address:   peerAddr,
-				Port:      peerPort,
-				PublicKey: peerPublicKey,
- PersistentKeepaliveInterval: warpKeepalive, //H
+				Address:                     peerAddr,      // H
+				Port:                        peerPort,      // H
+				PublicKey:                   peerPublicKey, // H
+				PersistentKeepaliveInterval: warpKeepalive, // H
 				AllowedIPs: badoption.Listable[netip.Prefix]{
 					netip.MustParsePrefix("0.0.0.0/0"),
 					netip.MustParsePrefix("::/0"),
@@ -49,5 +49,7 @@ func createWARPAwgEndpoint(
 			},
 		},
 		DialerOptions: options.DialerOptions,
+
+		FallbackAddress: options.FallbackAddress, // H: preserve explicit fallback addresses
 	})
 }
