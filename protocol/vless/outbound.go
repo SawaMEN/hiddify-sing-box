@@ -199,6 +199,19 @@ func (h *Outbound) Close() error {
 	return common.Close(common.PtrOrNil(h.multiplexDialer), h.transport)
 }
 
+// handshakeOnceConn makes raw socket shutdown idempotent across cancellation,
+// handshake errors, and the resulting encrypted connection's lifecycle.
+type handshakeOnceConn struct {
+	net.Conn
+	once sync.Once
+	closeErr error
+}
+
+func (c *handshakeOnceConn) Close() error {
+	c.once.Do(func() { c.closeErr = c.Conn.Close() })
+	return c.closeErr
+}
+
 type vlessDialer Outbound
 
 func (h *vlessDialer) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
@@ -250,9 +263,10 @@ func (h *vlessDialer) DialContext(ctx context.Context, network string, destinati
 
 	// Apply encryption if configured
 	if h.encryption != nil {
-		rawConn := conn
-		var closeOnce sync.Once
-		closeRaw := func() { closeOnce.Do(func() { _ = rawConn.Close() }) }
+		// Both the handshake and cancellation path may close the raw socket.
+		// Share one idempotent owner to prevent duplicate closes.
+		rawConn := &handshakeOnceConn{Conn: conn}
+		closeRaw := func() { _ = rawConn.Close() }
 		// Handshake blocks on reads: cancel the raw socket once if ctx ends.
 		stopHandshake := context.AfterFunc(ctx, closeRaw)
 		encryptedConn, handshakeErr := h.encryption.Handshake(rawConn)
@@ -357,9 +371,10 @@ func (h *vlessDialer) ListenPacket(ctx context.Context, destination M.Socksaddr)
 	}
 	// Apply encryption if configured
 	if h.encryption != nil {
-		rawConn := conn
-		var closeOnce sync.Once
-		closeRaw := func() { closeOnce.Do(func() { _ = rawConn.Close() }) }
+		// Both the handshake and cancellation path may close the raw socket.
+		// Share one idempotent owner to prevent duplicate closes.
+		rawConn := &handshakeOnceConn{Conn: conn}
+		closeRaw := func() { _ = rawConn.Close() }
 		// Handshake blocks on reads: cancel the raw socket once if ctx ends.
 		stopHandshake := context.AfterFunc(ctx, closeRaw)
 		encryptedConn, handshakeErr := h.encryption.Handshake(rawConn)
