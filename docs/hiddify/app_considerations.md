@@ -6,6 +6,8 @@ do about it. Items marked **Required** break or misbehave until they are handled
 
 ## Build
 
+- **sing cached-buffer fix (2026-11-05).** Initialize the new `replace/sing` submodule at `e1f78e792da34ce99fe2279729dea3b0a09efa9d`. The root and test modules already replace `github.com/sagernet/sing` with this fork. **Required to receive this fix:** hiddify-core, ray2sing and other consuming Go modules must also add `replace github.com/sagernet/sing => ./hiddify-sing-box/replace/sing` (adjust the local path if necessary). Go does not inherit a dependency's `replace` directives. This prevents concurrent cached-connection reads and close from releasing the same buffer twice; no app configuration or API changes are needed.
+
 - **Submodules.** The core now uses six forks under `replace/`, each a git submodule on its own
   branch: `wireguard-go` (v5), `sing-tun` (dev), `gvisor` (go), `amneziawg-go` (v5), `sing-mux`
   (v5), plus the existing ones. `go.mod` and `test/go.mod` point at them with `replace`.

@@ -11,7 +11,7 @@
 
 - Latest lifecycle fixes: close UDP sockets when their local address family changes; update AWG netstack close safety; pin the hiddify/sing cached-buffer double-release fix in both Go modules.
 
-- Mirage TLS record splitting from the latest upstream commit, using the pinned MIT-licensed library, is included.
+- Mirage TLS record splitting, using the pinned MIT-licensed library, is included.
 
 - Soar DNS tunnel and shared discovery/refilling for DNS pools.
 - Monitoring joins simultaneous tests, records failure reasons and stabilizes lowest-delay selection; balancer selection rules are exported.
@@ -42,6 +42,8 @@ WARP/MASQUE now uses the latest upstream device-pool, refusal recovery and scope
 
 ## Validation
 
-This follow-up synchronizes upstream `6a545ead` after PR #19. Local before/after evidence covers all three upstream lifecycle fixes. Full platform Test/Lint, Snell interoperability, production vet/race/full tests and Xray interoperability run on the follow-up PR. The earlier main-branch Snell failure is retried separately to distinguish a transient official-server timeout from a code regression.
+PR #20 passed all five workflows on code head `2798b3da4edc24ae29c01c4c741c50335df77130`: Linux/macOS/Windows tests, all ten lint targets, official Snell integration, VetrOFFProxy, and production-tag vet, expanded race regressions, full tests, Xray latest/v26.3.27 interoperability and schema generation. The merged source tree matches the tested tree.
 
-The pull request runs the standard platform Test and Lint workflows plus production-tag vet, race regressions and the full production-tag suite in `Upstream compatibility`. The original synchronization was superseded by PR #18 and retained in main. Finishing changes update the source baseline and repair the remaining CI regressions; exact-head results are in GitHub Actions. Local regression checks cover monitoring, balancer, WARP/MASQUE, DNSTT/MasterDNS, Soar, IP lookup, schema and options. Schema and module metadata are generated from the integrated source, rather than copied over the fork's options.
+All three new lifecycle regressions fail before the update and pass afterwards. Local cached-connection and device tests pass five race runs, AWG close passes three, and the full WireGuard race suite passes. Both root and test Go modules resolve sing to the same pinned fork. Local lint reports zero issues. The earlier main-branch official Snell timeout passed a retry without code changes and passes again on the new dependency.
+
+Embedding Go modules must mirror the new sing replacement as described in [App considerations](docs/hiddify/app_considerations.md). Documentation-only follow-up changes do not alter the validated source or dependency pins.
