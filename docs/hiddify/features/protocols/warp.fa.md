@@ -147,6 +147,7 @@ WARP شما را با WireGuard، با AmneziaWG وقتی `awg` را تنظیم 
 | `mtu` | number | پیش‌فرض WireGuard | MTU تونل. |
 | `mtu_discovery` | bool | `true` | [کشف MTU](wireguard-hiddify.fa.md) در تونل WireGuard یا AmneziaWG. `false` همان `mtu` را نگه می‌دارد. |
 | `rotate_ports` | bool | `true` | بدون اسکنر و `server_port`، وقتی پورت در حال استفاده دست‌دادنی نگیرد، پورت بعدی پروفایل امتحان می‌شود. |
+| `fallback_address` | IP یا فهرست IP | خالی | آدرس‌های جایگزین صریح به گزینه‌های تونل WireGuard/AmneziaWG منتقل می‌شوند؛ برای پیکربندی‌های موجود WARP در WARP حفظ شده است. |
 | `fallback_address` | فهرست IP | ندارد | نشانی‌های WARP دیگر، که وقتی نشانی در حال استفاده دست‌دادنی نگیرد، به نوبت روی همان پورت امتحان می‌شوند (WireGuard و AmneziaWG). |
 | `system` | bool | `false` | استفاده از اینترفیس سیستمی، مانند endpoint `wireguard`. |
 | `name` | string | | نام اینترفیس وقتی `system` روشن است. |

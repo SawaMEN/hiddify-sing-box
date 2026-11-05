@@ -88,7 +88,8 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 	if method == c.options.GetNormalizedUplinkHTTPMethod() && !c.options.NoGRPCHeader {
 		req.Header.Set("Content-Type", "application/grpc")
 	}
-	wrc = &WaitReadCloser{ctx: ctx, Wait: make(chan struct{})}
+	stream := &WaitReadCloser{ctx: ctx, Wait: make(chan struct{})} // H
+	wrc = stream                                                   // H
 	resultCh := make(chan error, 1)
 	go func() {
 		resp, err := c.client.Do(req)
@@ -97,14 +98,14 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 				c.closed.Store(true)
 			}
 			gotConn.Close()
-			wrc.Close()
+			stream.Close() // H
 			resultCh <- err
 			return
 		}
 		if resp.StatusCode != http.StatusOK || uploadOnly {
 			io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
-			wrc.Close()
+			stream.Close() // H
 			if resp.StatusCode != http.StatusOK {
 				resultCh <- fmt.Errorf("xhttp stream rejected: HTTP %d", resp.StatusCode)
 			} else {
@@ -112,7 +113,7 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 			}
 			return
 		}
-		wrc.(*WaitReadCloser).Set(resp.Body)
+		stream.Set(resp.Body) // H
 		resultCh <- nil
 	}()
 	if body == nil && !uploadOnly {

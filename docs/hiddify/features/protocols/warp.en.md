@@ -245,6 +245,7 @@ keeps the current endpoint. The first handshake of each endpoint also counts as 
 | `mtu` | number | WireGuard default | Tunnel MTU. |
 | `mtu_discovery` | bool | `true` | [MTU discovery](wireguard-hiddify.en.md) of the WireGuard or AmneziaWG tunnel. `false` keeps `mtu`. |
 | `rotate_ports` | bool | `true` | Without the scanner and `server_port`, try the profile's next port when the one in use gets no handshake. |
+| `fallback_address` | IP or list of IPs | empty | Explicit fallback addresses forwarded to the WireGuard/AmneziaWG tunnel options; retained for existing WARP-in-WARP configurations. |
 | `fallback_address` | list of IPs | none | Other WARP addresses, tried in turn on the same port when the one in use gets no handshake (WireGuard and AmneziaWG). |
 | `system` | bool | `false` | Use a system interface, as in the `wireguard` endpoint. |
 | `name` | string | | Interface name when `system` is on. |

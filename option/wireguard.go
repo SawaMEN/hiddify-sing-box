@@ -60,6 +60,8 @@ type WARPEndpointOptions struct { // H
 	AWG   *AwgOptions          `json:"awg,omitempty"`
 	*C.WARPConfig
 	MTU uint32 `json:"mtu,omitempty"`
+
+	FallbackAddress badoption.Listable[netip.Addr] `json:"fallback_address,omitempty"` // H: legacy WARP-in-WARP policy
 }
 
 type WARPProfile struct { // H
