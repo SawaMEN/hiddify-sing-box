@@ -4,11 +4,17 @@ on:
     paths:
       - 'protocol/snell/**'
       - 'option/snell.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'replace/sing'
       - '.github/workflows/snell-quic.yml'
   pull_request:
     paths:
       - 'protocol/snell/**'
       - 'option/snell.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'replace/sing'
       - '.github/workflows/snell-quic.yml'
 jobs:
   snell:
