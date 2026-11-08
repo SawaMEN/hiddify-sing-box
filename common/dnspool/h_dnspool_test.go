@@ -2,7 +2,10 @@ package dnspool
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
+	"syscall"
 	"sync"
 	"testing"
 	"time"
@@ -240,4 +243,37 @@ func TestH_DnspoolPool(t *testing.T) {
 	require.Equal(t, PoolOptions{}, PoolOptionsFrom(nil))
 	from := PoolOptionsFrom(&option.SmartPoolOptions{Enabled: true, LoadBalance: "weighted", Deadline: badoption.Duration(time.Second), DownAfter: 3, Duplicate: 2})
 	require.Equal(t, PoolOptions{LoadBalance: "weighted", Deadline: time.Second, DownAfter: 3, Duplicate: 2}, from)
+}
+
+func TestH_DnspoolLocalBindRetry(t *testing.T) {
+	t.Parallel()
+	attempts := 0
+	start := func(multidns.Options) (*multidns.Manager, string, error) {
+		attempts++
+		if attempts <= 2 {
+			return nil, "", fmt.Errorf("bind tcp loopback: %w", syscall.EADDRINUSE)
+		}
+		return nil, "127.0.0.1:5300", nil
+	}
+	_, addr, err := startLocalWithRetry(multidns.Options{}, start)
+	require.NoError(t, err)
+	require.Equal(t, "127.0.0.1:5300", addr)
+	require.Equal(t, 3, attempts)
+
+	attempts = 0
+	otherFailure := errors.New("permission denied")
+	_, _, err = startLocalWithRetry(multidns.Options{}, func(multidns.Options) (*multidns.Manager, string, error) {
+		attempts++
+		return nil, "", otherFailure
+	})
+	require.ErrorIs(t, err, otherFailure)
+	require.Equal(t, 1, attempts, "unrelated startup errors must not be retried")
+
+	attempts = 0
+	_, _, err = startLocalWithRetry(multidns.Options{}, func(multidns.Options) (*multidns.Manager, string, error) {
+		attempts++
+		return nil, "", syscall.EADDRINUSE
+	})
+	require.ErrorIs(t, err, syscall.EADDRINUSE)
+	require.Equal(t, 5, attempts, "bind retries must be bounded")
 }
