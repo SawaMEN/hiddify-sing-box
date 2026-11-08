@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
@@ -124,5 +125,64 @@ func TestXUIPanelBalancerRejectsNullCost(t *testing.T) {
 	_, err := newBalanceState(context.Background(), option.XrayBalancerOptions{Strategy: "leastLoad", ProbeURL: "http://127.0.0.1/probe", Settings: []byte(`{"costs":[null]}`)})
 	if err == nil {
 		t.Fatal("null cost accepted")
+	}
+}
+
+func TestXUIPanelLeastLoadAdvancedSettings(t *testing.T) {
+	ctx := context.Background()
+	state, err := newBalanceState(ctx, option.XrayBalancerOptions{
+		Strategy: "leastLoad",
+		ProbeURL: "https://example.org/",
+		Fallback: "backup",
+		Settings: []byte(`{"costs":[{"match":"a","value":9}],"maxRTT":"1s","expected":1,"tolerance":0.5}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer state.Close()
+	state.record("a", 10*time.Millisecond, nil)
+	state.record("b", 20*time.Millisecond, nil)
+	tag, err := state.pick([]string{"a", "b"})
+	if err != nil || tag != "b" {
+		t.Fatalf("cost-weighted leastLoad should prefer b, got %q: %v", tag, err)
+	}
+	state.record("b", 0, fmt.Errorf("offline"))
+	tag, err = state.pick([]string{"a", "b"})
+	if err != nil || tag != "a" {
+		t.Fatalf("failed outbound still selected: %q: %v", tag, err)
+	}
+
+	baselines, err := newBalanceState(ctx, option.XrayBalancerOptions{
+		Strategy: "leastLoad",
+		ProbeURL: "https://example.org/",
+		Fallback: "backup",
+		Settings: []byte(`{"baselines":["1ms"]}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer baselines.Close()
+	baselines.record("a", 40*time.Millisecond, nil)
+	tag, err = baselines.pick([]string{"a"})
+	if err != nil || tag != "backup" {
+		t.Fatalf("fallback must handle rejected baseline: %q: %v", tag, err)
+	}
+}
+
+func TestXUIPanelLeastLoadRejectsMalformedSettings(t *testing.T) {
+	for _, settings := range []string{
+		`{"costs":[null]}`,
+		`{"costs":[{"match":"(","regexp":true}]}`,
+		`{"maxRTT":"nonsense"}`,
+		`{"baselines":["not-duration"]}`,
+		`{"unknown":1}`,
+	} {
+		if _, err := newBalanceState(context.Background(), option.XrayBalancerOptions{
+			Strategy: "leastLoad",
+			ProbeURL: "https://example.org/",
+			Settings: []byte(settings),
+		}); err == nil {
+			t.Fatalf("accepted malformed settings: %s", settings)
+		}
 	}
 }

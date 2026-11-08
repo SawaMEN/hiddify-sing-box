@@ -1,15 +1,18 @@
 package group
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"math/rand"
 	"net"
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,10 +31,12 @@ type probeSample struct {
 }
 
 type balanceReport struct {
-	alive   bool
-	delay   time.Duration
-	score   float64
-	updated time.Time
+	alive    bool
+	delay    time.Duration
+	score    float64
+	total    int
+	failures int
+	updated  time.Time
 }
 
 type balanceCost struct {
@@ -41,7 +46,11 @@ type balanceCost struct {
 }
 
 type balanceState struct {
-	ctx     context.Context
+	leastExpected  int
+	leastMaxRTT    time.Duration
+	leastTolerance float64
+	leastBaselines []time.Duration
+	ctx            context.Context
 	cancel  context.CancelFunc
 	config  option.XrayBalancerOptions
 	history *urltest.HistoryStorage
@@ -94,16 +103,48 @@ func newBalanceState(ctx context.Context, options option.XrayBalancerOptions) (*
 		return nil, fmt.Errorf("unsupported balancer probe method: %q", options.Method)
 	}
 	var costs []balanceCost
+	var leastExpected int
+	var leastMaxRTT time.Duration
+	var leastTolerance float64
+	var leastBaselines []time.Duration
 	if options.Strategy == "leastload" && len(options.Settings) > 0 {
 		var settings struct {
+			Baselines []string `json:"baselines"`
+			Expected  int      `json:"expected"`
+			MaxRTT    string   `json:"maxRTT"`
+			Tolerance float64  `json:"tolerance"`
 			Costs []*struct {
 				Match  string  `json:"match"`
 				Regexp bool   `json:"regexp"`
 				Value  float64 `json:"value"`
 			} `json:"costs"`
 		}
-		if err := json.Unmarshal(options.Settings, &settings); err != nil {
+		decoder := json.NewDecoder(bytes.NewReader(options.Settings))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&settings); err != nil {
 			return nil, fmt.Errorf("invalid leastLoad settings: %w", err)
+		}
+		var trailing any
+		if err := decoder.Decode(&trailing); err != io.EOF {
+			return nil, fmt.Errorf("invalid leastLoad settings: trailing data")
+		}
+		leastExpected = max(settings.Expected, 0)
+		leastTolerance = min(max(settings.Tolerance, 0), 1)
+		if settings.MaxRTT != "" {
+			value, err := time.ParseDuration(settings.MaxRTT)
+			if err != nil {
+				return nil, fmt.Errorf("invalid leastLoad maxRTT: %w", err)
+			}
+			leastMaxRTT = max(value, 0)
+		}
+		for _, baseline := range settings.Baselines {
+			value, err := time.ParseDuration(baseline)
+			if err != nil {
+				return nil, fmt.Errorf("invalid leastLoad baseline: %w", err)
+			}
+			if value > 0 {
+				leastBaselines = append(leastBaselines, value)
+			}
 		}
 		for _, cost := range settings.Costs {
 			if cost == nil {
@@ -122,7 +163,11 @@ func newBalanceState(ctx context.Context, options option.XrayBalancerOptions) (*
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	return &balanceState{
-		ctx:     ctx,
+		leastExpected:  leastExpected,
+		leastMaxRTT:    leastMaxRTT,
+		leastTolerance: leastTolerance,
+		leastBaselines: leastBaselines,
+		ctx:            ctx,
 		cancel:  cancel,
 		config:  options,
 		history: service.PtrFromContext[urltest.HistoryStorage](ctx),
@@ -140,9 +185,17 @@ func (b *balanceState) scoreFor(tag string, delay time.Duration) float64 {
 			match = cost.regexp.MatchString(tag)
 		}
 		if match {
-			if cost.value > 0 {
-				score *= math.Sqrt(cost.value)
+			weight := cost.value
+			if weight <= 0 {
+				weight = 1
+				value := regexp.MustCompile(`[0-9]+(?:\.[0-9]+)?`).FindString(cost.match)
+				if value != "" {
+					if parsed, err := strconv.ParseFloat(value, 64); err == nil && parsed > 0 {
+						weight = parsed
+					}
+				}
 			}
+			score *= math.Sqrt(weight)
 			break
 		}
 	}
@@ -158,6 +211,14 @@ func (b *balanceState) pick(tags []string) (string, error) {
 		if b.config.ProbeURL != "" {
 			if !observed || !report.alive {
 				continue
+			}
+			if b.config.Strategy == "leastload" {
+				if b.leastMaxRTT > 0 && report.delay >= b.leastMaxRTT {
+					continue
+				}
+				if b.leastTolerance > 0 && report.total > 0 && float64(report.failures)/float64(report.total) > b.leastTolerance {
+					continue
+				}
 			}
 			if b.config.Burst && time.Since(report.updated) > b.config.Interval.Build()*time.Duration(b.config.Sampling)*2 {
 				continue
@@ -190,6 +251,30 @@ func (b *balanceState) pick(tags []string) (string, error) {
 			}
 			return candidates[i] < candidates[j]
 		})
+		if b.config.Strategy == "leastload" {
+			count := min(max(b.leastExpected, 1), len(candidates))
+			if len(b.leastBaselines) > 0 {
+				count = 0
+				for _, baseline := range b.leastBaselines {
+					for count < len(candidates) && b.reports[candidates[count]].score < float64(baseline) {
+						count++
+					}
+					if count >= max(b.leastExpected, 1) {
+						break
+					}
+				}
+				if b.leastExpected > 0 {
+					count = max(count, min(b.leastExpected, len(candidates)))
+				}
+			}
+			if count == 0 {
+				if b.config.Fallback != "" {
+					return b.config.Fallback, nil
+				}
+				return "", fmt.Errorf("leastLoad has no qualifying outbound")
+			}
+			return candidates[rand.Intn(count)], nil
+		}
 		return candidates[0], nil
 	}
 	return "", fmt.Errorf("unsupported balancer strategy")
@@ -317,8 +402,14 @@ func (b *balanceState) record(tag string, delay time.Duration, err error) {
 	b.samples[tag] = samples
 	alive := err == nil
 	score := b.scoreFor(tag, delay)
+	failures := 0
+	for _, sample := range samples {
+		if sample.failed {
+			failures++
+		}
+	}
 	if b.config.Burst {
-		alive = false
+		alive = failures < len(samples)
 		var good int
 		var sum time.Duration
 		for _, sample := range samples {
@@ -328,12 +419,22 @@ func (b *balanceState) record(tag string, delay time.Duration, err error) {
 			}
 		}
 		if good > 0 {
-			alive = true
 			delay = sum / time.Duration(good)
-			score = b.scoreFor(tag, delay)
+			var variance float64
+			for _, sample := range samples {
+				if !sample.failed {
+					diff := float64(sample.delay - delay)
+					variance += diff * diff
+				}
+			}
+			deviation := float64(delay) / 2
+			if good > 1 {
+				deviation = math.Sqrt(variance / float64(good-1))
+			}
+			score = b.scoreFor(tag, time.Duration(deviation))
 		}
 	}
-	b.reports[tag] = balanceReport{alive: alive, delay: delay, score: score, updated: time.Now()}
+	b.reports[tag] = balanceReport{alive: alive, delay: delay, score: score, total: len(samples), failures: failures, updated: time.Now()}
 	b.mu.Unlock()
 	if b.history != nil {
 		measured := uint16(min(max(delay.Milliseconds(), 0), 65535))
