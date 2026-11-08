@@ -34,6 +34,9 @@ type RealityServerConfig struct {
 }
 
 func NewRealityServer(ctx context.Context, logger log.ContextLogger, options option.InboundTLSOptions) (ServerConfig, error) {
+	if options.Reality != nil && options.Reality.Mldsa65Seed != "" {
+		return nil, E.New("REALITY mldsa65_seed requires ML-DSA-65 signing support in the uTLS dependency")
+	}
 	var tlsConfig utls.RealityConfig
 
 	if options.CertificateProvider != nil {

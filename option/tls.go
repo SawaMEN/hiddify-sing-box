@@ -221,6 +221,7 @@ type RealityLimitFallback struct {
 }
 
 type InboundRealityOptions struct {
+	Mldsa65Seed           string                         `json:"mldsa65_seed,omitempty"`
 	Enabled               bool                           `json:"enabled,omitempty"`
 	Handshake             InboundRealityHandshakeOptions `json:"handshake,omitempty"`
 	PrivateKey            string                         `json:"private_key,omitempty"`
@@ -282,6 +283,7 @@ func (o *OutboundUTLSOptions) IsUnsafe() bool {
 }
 
 type OutboundRealityOptions struct {
+	Mldsa65Verify string `json:"mldsa65_verify,omitempty"`
 	Enabled   bool   `json:"enabled,omitempty"`
 	PublicKey string `json:"public_key,omitempty"`
 	ShortID   string `json:"short_id,omitempty"`
