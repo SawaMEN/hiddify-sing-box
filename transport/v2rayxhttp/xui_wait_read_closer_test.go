@@ -41,7 +41,7 @@ func TestXUIWaitReadCloserRejectsNilBody(t *testing.T) {
 }
 
 func TestXUIWaitReadCloserSetCloseRace(t *testing.T) {
-	for i := 0; i < 128; i++ {
+	for range 128 {
 		w := &WaitReadCloser{ctx: context.Background(), Wait: make(chan struct{})}
 		first := &xuiCloseCountReader{Reader: bytes.NewReader([]byte("one"))}
 		var group sync.WaitGroup
