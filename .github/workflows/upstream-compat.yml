@@ -1,7 +1,10 @@
 name: Upstream compatibility
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 concurrency:
   group: upstream-compat-${{ github.ref }}
   cancel-in-progress: true
