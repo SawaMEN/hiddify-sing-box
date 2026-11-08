@@ -1,10 +1,11 @@
 package inbound
 
 import (
+	"slices"
+
 	"github.com/sagernet/sing-box/hiddify/finalmask"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
-	"slices"
 )
 
 // Validate at construction so `check` fails before any socket is opened.
