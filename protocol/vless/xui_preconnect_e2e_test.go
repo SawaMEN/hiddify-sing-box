@@ -75,7 +75,7 @@ func TestXUIPanelVisionPreconnectRoundTrip(t *testing.T) {
 	outbound := &Outbound{logger: logger.NOP(), dialer: physical, client: client, serverAddr: M.ParseSocksaddrHostPort("127.0.0.1", uint16(addr.Port)), tlsConfig: config, vision: true}
 	outbound.preconnect = newPreconnectPool(ctx, 2, (*vlessDialer)(outbound).dialServer)
 	defer outbound.Close()
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		conn, err := (*vlessDialer)(outbound).DialContext(ctx, "tcp", M.ParseSocksaddrHostPort("example.invalid", 80))
 		if err != nil {
 			t.Fatal(err)
