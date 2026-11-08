@@ -81,3 +81,22 @@ func TestXUIPanelEncryptionHandshakeFailure(t *testing.T) {
 		}
 	}
 }
+
+func TestXUIPanelListenPacketEarlyErrorClosesTransport(t *testing.T) {
+	// The packetaddr destination validation happens after the transport
+	// connection is established; a rejected destination must not leak it.
+	raw := &xuiHandshakeConn{}
+	h := &vlessDialer{
+		logger:     logger.NOP(),
+		dialer:     xuiHandshakeDialer{conn: raw},
+		packetAddr: true,
+	}
+	destination := M.ParseSocksaddrHostPort("example.invalid", 443)
+	packetConn, err := h.ListenPacket(context.Background(), destination)
+	if packetConn != nil || err == nil || !strings.Contains(err.Error(), "domain destination") {
+		t.Fatalf("unexpected packet result: %v %v", packetConn, err)
+	}
+	if raw.closes != 1 {
+		t.Fatalf("transport closed %d times, want exactly once", raw.closes)
+	}
+}

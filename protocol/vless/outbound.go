@@ -365,7 +365,7 @@ func (h *vlessDialer) DialContext(ctx context.Context, network string, destinati
 	}
 }
 
-func (h *vlessDialer) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
+func (h *vlessDialer) ListenPacket(ctx context.Context, destination M.Socksaddr) (result net.PacketConn, returnErr error) {
 	h.logger.InfoContext(ctx, "outbound packet connection to ", destination)
 	ctx, metadata := adapter.ExtendContext(ctx)
 	metadata.Outbound = h.Tag()
@@ -408,6 +408,14 @@ func (h *vlessDialer) ListenPacket(ctx context.Context, destination M.Socksaddr)
 		}
 		conn = encryptedConn
 	}
+	defer func() {
+		// Once encryption has succeeded, this method owns the connection
+		// until a packet wrapper is returned. Avoid leaking it when a later
+		// packetaddr or protocol initialization step fails.
+		if returnErr != nil && conn != nil {
+			_ = conn.Close()
+		}
+	}()
 	if h.xudp {
 		return h.client.DialEarlyXUDPPacketConn(conn, destination)
 	} else if h.packetAddr {
