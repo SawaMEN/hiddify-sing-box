@@ -295,3 +295,16 @@ func (s *StatsService) loadOrCreateCounter(name string) *atomic.Int64 {
 	s.counters[name] = counter
 	return counter
 }
+
+// RoutedOutboundConnection counts physical outbound I/O with outbound directions.
+func (s *StatsService) RoutedOutboundConnection(ctx context.Context, conn net.Conn, outbound adapter.Outbound) net.Conn {
+	tag := outbound.Tag()
+	if tag == "" || !s.outbounds[tag] {
+		return conn
+	}
+	s.access.Lock()
+	up := s.loadOrCreateCounter("outbound>>>" + tag + ">>>traffic>>>uplink")
+	down := s.loadOrCreateCounter("outbound>>>" + tag + ">>>traffic>>>downlink")
+	s.access.Unlock()
+	return bufio.NewInt64CounterConn(conn, []*atomic.Int64{down}, []*atomic.Int64{up})
+}
