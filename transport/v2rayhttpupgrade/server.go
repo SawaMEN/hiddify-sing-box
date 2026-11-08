@@ -17,6 +17,8 @@ import (
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/transport/v2rayhttp"
 	"github.com/sagernet/sing/common"
+	"github.com/sagernet/sing/common/buf"
+	"github.com/sagernet/sing/common/bufio"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
@@ -110,10 +112,21 @@ func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		s.invalidRequest(writer, request, http.StatusInternalServerError, E.New("invalid connection, maybe HTTP/2"))
 		return
 	}
-	conn, _, err := hijacker.Hijack()
+	conn, reader, err := hijacker.Hijack()
 	if err != nil {
 		s.invalidRequest(writer, request, http.StatusInternalServerError, E.Cause(err, "hijack failed"))
 		return
+	}
+	// net/http may already have read the first proxy bytes after the upgrade.
+	// Keep those bytes ahead of the underlying socket stream.
+	if n := reader.Reader.Buffered(); n > 0 {
+		buffer := buf.NewSize(n)
+		if _, err := buffer.ReadFullFrom(reader.Reader, n); err != nil {
+			buffer.Release()
+			conn.Close()
+			return
+		}
+		conn = bufio.NewCachedConn(conn, buffer)
 	}
 	s.handler.NewConnectionEx(v2rayhttp.DupContext(request.Context()), conn, badhttp.SourceAddress(request), M.Socksaddr{}, nil)
 }
