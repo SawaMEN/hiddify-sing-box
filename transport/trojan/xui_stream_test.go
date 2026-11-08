@@ -30,6 +30,7 @@ func (h *xuiTrojanHandler) NewConnectionEx(_ context.Context, c net.Conn, _, _ M
 	h.payload = make([]byte, 5)
 	_, h.err = io.ReadFull(c, h.payload)
 }
+
 func (h *xuiTrojanHandler) NewPacketConnectionEx(context.Context, N.PacketConn, M.Socksaddr, M.Socksaddr, N.CloseHandlerFunc) {
 	panic("unused")
 }

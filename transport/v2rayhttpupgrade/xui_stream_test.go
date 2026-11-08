@@ -68,6 +68,7 @@ type xuiUpgradeDialer struct{ conn net.Conn }
 func (d xuiUpgradeDialer) DialContext(context.Context, string, M.Socksaddr) (net.Conn, error) {
 	return d.conn, nil
 }
+
 func (d xuiUpgradeDialer) ListenPacket(context.Context, M.Socksaddr) (net.PacketConn, error) {
 	panic("unused")
 }
