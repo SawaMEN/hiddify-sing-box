@@ -176,10 +176,10 @@ type Connection struct {
 	closer         io.Closer
 	rd             time.Time
 	wd             time.Time // write deadline
-	since      int64
-	dataInput  *signal.Notifier
-	dataOutput *signal.Notifier
-	Config     *Config
+	since          int64
+	dataInput      *signal.Notifier
+	dataOutput     *signal.Notifier
+	Config         *Config
 
 	state            State
 	stateBeginTime   atomic.Uint32

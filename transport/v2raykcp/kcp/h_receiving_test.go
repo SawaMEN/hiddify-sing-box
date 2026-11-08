@@ -33,9 +33,9 @@ func TestH_ReceivingWorkerReadRelease(t *testing.T) {
 
 func TestXUIPanelKCPReleaseCleansWindowAndRejectsLateSegments(t *testing.T) {
 	worker := &ReceivingWorker{
-		window: NewReceivingWindow(),
+		window:     NewReceivingWindow(),
 		windowSize: 8,
-		acklist: &AckList{},
+		acklist:    &AckList{},
 	}
 	pending := NewDataSegment()
 	pending.Number = 1
