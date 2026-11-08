@@ -203,7 +203,7 @@ func (h *Outbound) Close() error {
 // handshake errors, and the resulting encrypted connection's lifecycle.
 type handshakeOnceConn struct {
 	net.Conn
-	once sync.Once
+	once     sync.Once
 	closeErr error
 }
 
