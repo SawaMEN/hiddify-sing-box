@@ -151,26 +151,40 @@ func NewReceivingWorker(kcp *Connection) *ReceivingWorker {
 
 func (w *ReceivingWorker) Release() {
 	w.Lock()
+	defer w.Unlock()
+	if w.released {
+		return
+	}
+	w.released = true
 	buf.ReleaseMulti(w.leftOver)
 	w.leftOver = nil
-	w.released = true // Hiddify: a Read still running must not keep data after this
-	w.Unlock()
+	// Release out-of-order segments as well as the partially read packet.
+	for number, segment := range w.window.cache {
+		segment.Release()
+		delete(w.window.cache, number)
+	}
 }
 
 func (w *ReceivingWorker) ProcessSendingNext(number uint32) {
 	w.Lock()
 	defer w.Unlock()
-
+	if w.released {
+		return
+	}
 	w.acklist.Clear(number)
 }
 
 func (w *ReceivingWorker) ProcessSegment(seg *DataSegment) {
 	w.Lock()
 	defer w.Unlock()
-
+	if w.released {
+		seg.Release()
+		return
+	}
 	number := seg.Number
 	idx := number - w.nextNumber
 	if idx >= w.windowSize {
+		seg.Release()
 		return
 	}
 	w.acklist.Clear(seg.SendingNext)
@@ -182,9 +196,15 @@ func (w *ReceivingWorker) ProcessSegment(seg *DataSegment) {
 }
 
 func (w *ReceivingWorker) ReadMultiBuffer() buf.MultiBuffer {
-	// Hiddify: leftOver is read under the lock, as Release frees it from another goroutine
 	w.Lock()
 	defer w.Unlock()
+	return w.readMultiBufferLocked()
+}
+
+func (w *ReceivingWorker) readMultiBufferLocked() buf.MultiBuffer {
+	if w.released {
+		return nil
+	}
 	if w.leftOver != nil {
 		mb := w.leftOver
 		w.leftOver = nil
@@ -206,20 +226,17 @@ func (w *ReceivingWorker) ReadMultiBuffer() buf.MultiBuffer {
 }
 
 func (w *ReceivingWorker) Read(b []byte) int {
-	mb := w.ReadMultiBuffer()
+	w.Lock()
+	defer w.Unlock()
+	// Hold ownership of the packet throughout the read. Release may run
+	// concurrently from the terminating connection.
+	mb := w.readMultiBufferLocked()
 	if mb.IsEmpty() {
 		return 0
 	}
 	mb, nBytes := buf.SplitBytes(mb, b)
 	if !mb.IsEmpty() {
-		// Hiddify: under the lock, and dropped if the worker was released meanwhile
-		w.Lock()
-		if w.released {
-			buf.ReleaseMulti(mb)
-		} else {
-			w.leftOver = mb
-		}
-		w.Unlock()
+		w.leftOver = mb
 	}
 	return nBytes
 }
@@ -227,7 +244,7 @@ func (w *ReceivingWorker) Read(b []byte) int {
 func (w *ReceivingWorker) IsDataAvailable() bool {
 	w.RLock()
 	defer w.RUnlock()
-	return w.window.Has(w.nextNumber)
+	return !w.released && w.window.Has(w.nextNumber)
 }
 
 func (w *ReceivingWorker) NextNumber() uint32 {
@@ -240,7 +257,9 @@ func (w *ReceivingWorker) NextNumber() uint32 {
 func (w *ReceivingWorker) Flush(current uint32) {
 	w.Lock()
 	defer w.Unlock()
-
+	if w.released {
+		return
+	}
 	w.acklist.Flush(current, w.conn.roundTrip.Timeout())
 }
 
@@ -262,6 +281,5 @@ func (*ReceivingWorker) CloseRead() {
 func (w *ReceivingWorker) UpdateNecessary() bool {
 	w.RLock()
 	defer w.RUnlock()
-
-	return len(w.acklist.numbers) > 0
+	return !w.released && len(w.acklist.numbers) > 0
 }
