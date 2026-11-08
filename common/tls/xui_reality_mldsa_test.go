@@ -11,8 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
 	"github.com/sagernet/sing-box/option"
+
+	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
 )
 
 func TestXUIPanelRealityMLDSAKeyValidation(t *testing.T) {
