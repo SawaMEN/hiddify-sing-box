@@ -17,6 +17,11 @@ type WaitReadCloser struct {
 }
 
 func (w *WaitReadCloser) Set(rc io.ReadCloser) {
+	if rc == nil {
+		// A failed HTTP request has no body to publish. Leave waiters to
+		// cancellation/Close instead of publishing a nil reader.
+		return
+	}
 	w.access.Lock()
 	if w.closed || w.ReadCloser != nil {
 		w.access.Unlock()
