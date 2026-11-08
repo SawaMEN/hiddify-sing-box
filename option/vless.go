@@ -16,6 +16,7 @@ type VLESSUser struct {
 }
 
 type VLESSOutboundOptions struct {
+	Testpre uint32 `json:"testpre,omitempty"`
 	DialerOptions
 	ServerOptions
 	UUID       string      `json:"uuid"`
