@@ -445,14 +445,16 @@ func (c *visionConnWrapper) ReaderReplaceable() bool {
 	if replacer, ok := c.Conn.(N.ReaderWithUpstream); ok {
 		return replacer.ReaderReplaceable()
 	}
-	return true
+	// Never skip an opaque wrapper: it may be an active encryption layer.
+	return false
 }
 
 func (c *visionConnWrapper) WriterReplaceable() bool {
 	if replacer, ok := c.Conn.(N.WriterWithUpstream); ok {
 		return replacer.WriterReplaceable()
 	}
-	return true
+	// Never skip an opaque wrapper: it may be an active encryption layer.
+	return false
 }
 
 // isVisionTLSConn returns true when the provided connection exposes TLS semantics Vision expects.
