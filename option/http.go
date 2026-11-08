@@ -143,20 +143,20 @@ func httpVersionsVariant(versions []int, http2Options HTTP2Options, http3Options
 	case slices.Contains(versions, 2):
 		return http2Options
 	default:
-		return nil
+		return struct{}{}
 	}
 }
 
 func httpVersionVariant(version int, http2Options HTTP2Options, http3Options QUICOptions) any {
 	switch version {
 	case 1:
-		return nil
+		return struct{}{}
 	case 0, 2:
 		return http2Options
 	case 3:
 		return http3Options
 	default:
-		return nil
+		return struct{}{}
 	}
 }
 

@@ -84,6 +84,7 @@ func NewRuleAction(logger logger.ContextLogger, action option.RuleAction) (adapt
 		sniffAction := &RuleActionSniff{
 			SnifferNames: action.SniffOptions.Sniffer,
 			Timeout:      time.Duration(action.SniffOptions.Timeout),
+			OverrideDestination: action.SniffOptions.OverrideDestination,
 		}
 		return sniffAction, sniffAction.build()
 	case C.RuleActionTypeResolve:
