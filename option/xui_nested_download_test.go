@@ -1,12 +1,18 @@
 package option
 
-import (
-	"testing"
-)
+import "testing"
+
+func xuiDownloadEndpoint(port uint16) *V2RayXHTTPDownloadOptions {
+	node := &V2RayXHTTPDownloadOptions{}
+	node.Server = "127.0.0.1"
+	node.ServerPort = port
+	return node
+}
 
 func TestXUIPanelNestedDownloadResolve(t *testing.T) {
-	inner := &V2RayXHTTPDownloadOptions{ServerOptions: {Server: "127.0.0.1", ServerPort: 443}}
-	outer := &V2RayXHTTPDownloadOptions{ServerOptions: {Server: "127.0.0.1", ServerPort: 444}, Download: inner}
+	inner := xuiDownloadEndpoint(443)
+	outer := xuiDownloadEndpoint(444)
+	outer.Download = inner
 	cfg := &V2RayXHTTPOptions{Mode: "packet-up", Download: outer}
 	got, err := cfg.ResolveDownload()
 	if err != nil || got != inner {
@@ -35,10 +41,10 @@ func TestXUIPanelNestedDownloadResolve(t *testing.T) {
 
 func TestXUIPanelNestedDownloadDepthLimit(t *testing.T) {
 	cfg := &V2RayXHTTPOptions{Mode: "packet-up"}
-	root := &V2RayXHTTPDownloadOptions{ServerOptions: {Server: "127.0.0.1", ServerPort: 443}}
+	root := xuiDownloadEndpoint(443)
 	cfg.Download = root
 	for range 8 {
-		root.Download = &V2RayXHTTPDownloadOptions{ServerOptions: {Server: "127.0.0.1", ServerPort: 443}}
+		root.Download = xuiDownloadEndpoint(443)
 		root = root.Download
 	}
 	if _, err := cfg.ResolveDownload(); err == nil {
