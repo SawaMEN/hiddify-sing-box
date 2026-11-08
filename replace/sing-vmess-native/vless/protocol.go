@@ -68,7 +68,7 @@ func ReadRequest(reader io.Reader) (*Request, error) {
 		return nil, err
 	}
 
-	if request.Command != vmess.CommandMux {
+	if request.Command != vmess.CommandMux && request.Command != CommandReverse {
 		request.Destination, err = vmess.AddressSerializer.ReadAddrPort(reader)
 		if err != nil {
 			return nil, err
@@ -141,7 +141,7 @@ func WriteRequest(writer io.Writer, request Request, payload []byte) error {
 		requestLen += addonsLen
 	}
 	requestLen += 1 // command
-	if request.Command != vmess.CommandMux {
+	if request.Command != vmess.CommandMux && request.Command != CommandReverse {
 		requestLen += vmess.AddressSerializer.AddrPortLen(request.Destination)
 	}
 	requestLen += len(payload)
@@ -161,7 +161,7 @@ func WriteRequest(writer io.Writer, request Request, payload []byte) error {
 		buffer.WriteByte(request.Command),
 	)
 
-	if request.Command != vmess.CommandMux {
+	if request.Command != vmess.CommandMux && request.Command != CommandReverse {
 		err := vmess.AddressSerializer.WriteAddrPort(buffer, request.Destination)
 		if err != nil {
 			return err
@@ -193,7 +193,7 @@ func EncodeRequest(request Request, buffer *buf.Buffer) error {
 		buffer.WriteByte(request.Command),
 	)
 
-	if request.Command != vmess.CommandMux {
+	if request.Command != vmess.CommandMux && request.Command != CommandReverse {
 		err := vmess.AddressSerializer.WriteAddrPort(buffer, request.Destination)
 		if err != nil {
 			return err
@@ -216,7 +216,7 @@ func RequestLen(request Request) int {
 		requestLen += addonsLen
 	}
 	requestLen += 1 // command
-	if request.Command != vmess.CommandMux {
+	if request.Command != vmess.CommandMux && request.Command != CommandReverse {
 		requestLen += vmess.AddressSerializer.AddrPortLen(request.Destination)
 	}
 	return requestLen
@@ -293,3 +293,6 @@ func ReadResponse(reader io.Reader) error {
 	}
 	return nil
 }
+
+// CommandReverse is the authenticated VLESS reverse-mux command.
+const CommandReverse byte = 4

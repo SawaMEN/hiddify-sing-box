@@ -19,9 +19,10 @@ import (
 )
 
 type Client struct {
-	key    [16]byte
-	flow   string
-	logger logger.Logger
+	key      [16]byte
+	flow     string
+	logger   logger.Logger
+	testseed [4]uint32
 }
 
 func NewClient(userId string, flow string, logger logger.Logger) (*Client, error) {
@@ -34,7 +35,7 @@ func NewClient(userId string, flow string, logger logger.Logger) (*Client, error
 	default:
 		return nil, E.New("unsupported flow: " + flow)
 	}
-	return &Client{user, flow, logger}, nil
+	return &Client{key: user, flow: flow, logger: logger, testseed: [4]uint32{900, 500, 900, 256}}, nil
 }
 
 func (c *Client) prepareConn(conn net.Conn, tlsConn net.Conn) (net.Conn, error) {
@@ -49,6 +50,7 @@ func (c *Client) prepareConnWithOptions(conn net.Conn, tlsConn net.Conn, canSpli
 		if err != nil {
 			return nil, E.Cause(err, "initialize vision")
 		}
+		protocolConn.testseed = c.testseed
 		conn = protocolConn
 	}
 	return conn, nil
@@ -290,4 +292,8 @@ func (c *PacketConn) NeedAdditionalReadDeadline() bool {
 
 func (c *PacketConn) Upstream() any {
 	return c.Conn
+}
+
+func (c *Client) DialEarlyReverseConnWithOptions(conn, base net.Conn, splice bool) (net.Conn, error) {
+	return c.prepareConnWithOptions(NewConn(conn, c.key, CommandReverse, M.Socksaddr{}, c.flow), base, splice)
 }

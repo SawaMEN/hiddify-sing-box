@@ -19,21 +19,26 @@ import (
 	N "github.com/sagernet/sing/common/network"
 )
 
-var tlsRegistry []func(conn net.Conn) (loaded bool, netConn net.Conn, reflectType reflect.Type, reflectPointer uintptr)
+var tlsRegistry []func(conn net.Conn) (loaded bool, netConn net.Conn, reflectType reflect.Type, reflectPointer unsafe.Pointer)
 
 func init() {
-	tlsRegistry = append(tlsRegistry, func(conn net.Conn) (loaded bool, netConn net.Conn, reflectType reflect.Type, reflectPointer uintptr) {
+	tlsRegistry = append(tlsRegistry, func(conn net.Conn) (loaded bool, netConn net.Conn, reflectType reflect.Type, reflectPointer unsafe.Pointer) {
 		tlsConn, loaded := N.CastReader[*tls.Conn](conn)
 		if !loaded {
 			return
 		}
-		return true, tlsConn.NetConn(), reflect.TypeOf(tlsConn).Elem(), uintptr(unsafe.Pointer(tlsConn))
+		return true, tlsConn.NetConn(), reflect.TypeOf(tlsConn).Elem(), unsafe.Pointer(tlsConn)
 	})
 }
 
 const xrayChunkSize = 8192
 
 type VisionConn struct {
+	filterAccess  sync.Mutex
+	readAccess    sync.Mutex
+	readPrefix    []byte
+	readHeader    [5]byte
+	readHeaderLen int
 	net.Conn
 	reader      *bufio.ChunkReader
 	writer      N.VectorisedWriter
@@ -45,6 +50,7 @@ type VisionConn struct {
 	directConn  net.Conn
 	logger      logger.Logger
 
+	testseed               [4]uint32
 	userUUID               [16]byte
 	isTLS                  bool
 	numberOfPacketToFilter int
@@ -98,6 +104,7 @@ func NewVisionConn(conn net.Conn, tlsConn net.Conn, userUUID [16]byte, logger lo
 		directConn: info.rawConn,
 		logger:     logger,
 
+		testseed:               [4]uint32{900, 500, 900, 256},
 		userUUID:               userUUID,
 		numberOfPacketToFilter: 8,
 		remainingServerHello:   -1,
@@ -182,10 +189,13 @@ func extractTLSInfo(tlsConn net.Conn) (*visionConnInfo, error) {
 			info.netConn = netConn
 			info.rawConn = netConn
 
-			inputField, _ := reflectType.FieldByName("input")
-			rawInputField, _ := reflectType.FieldByName("rawInput")
-			info.input = (*bytes.Reader)(unsafe.Pointer(reflectPointer + inputField.Offset))
-			info.rawInput = (*bytes.Buffer)(unsafe.Pointer(reflectPointer + rawInputField.Offset))
+			inputField, inputOK := reflectType.FieldByName("input")
+			rawInputField, rawInputOK := reflectType.FieldByName("rawInput")
+			if !inputOK || !rawInputOK {
+				return nil, E.New("vision: TLS layer missing input/rawInput fields")
+			}
+			info.input = (*bytes.Reader)(unsafe.Add(reflectPointer, inputField.Offset))
+			info.rawInput = (*bytes.Buffer)(unsafe.Add(reflectPointer, rawInputField.Offset))
 			return info, nil
 		}
 	}
@@ -195,7 +205,7 @@ func extractTLSInfo(tlsConn net.Conn) (*visionConnInfo, error) {
 
 func extractInputFields(encConn net.Conn, info *visionConnInfo) error {
 	reflectType := reflect.TypeOf(encConn).Elem()
-	reflectPointer := uintptr(unsafe.Pointer(reflect.ValueOf(encConn).Pointer()))
+	reflectPointer := reflect.ValueOf(encConn).UnsafePointer()
 
 	inputField, inputOk := reflectType.FieldByName("input")
 	rawInputField, rawInputOk := reflectType.FieldByName("rawInput")
@@ -204,8 +214,8 @@ func extractInputFields(encConn net.Conn, info *visionConnInfo) error {
 		return E.New("vision: encryption layer missing input/rawInput fields")
 	}
 
-	info.input = (*bytes.Reader)(unsafe.Pointer(reflectPointer + inputField.Offset))
-	info.rawInput = (*bytes.Buffer)(unsafe.Pointer(reflectPointer + rawInputField.Offset))
+	info.input = (*bytes.Reader)(unsafe.Add(reflectPointer, inputField.Offset))
+	info.rawInput = (*bytes.Buffer)(unsafe.Add(reflectPointer, rawInputField.Offset))
 	return nil
 }
 
@@ -213,10 +223,13 @@ func extractInputFieldsFromTLS(tlsConn net.Conn, info *visionConnInfo) error {
 	for _, tlsCreator := range tlsRegistry {
 		loaded, _, reflectType, reflectPointer := tlsCreator(tlsConn)
 		if loaded {
-			inputField, _ := reflectType.FieldByName("input")
-			rawInputField, _ := reflectType.FieldByName("rawInput")
-			info.input = (*bytes.Reader)(unsafe.Pointer(reflectPointer + inputField.Offset))
-			info.rawInput = (*bytes.Buffer)(unsafe.Pointer(reflectPointer + rawInputField.Offset))
+			inputField, inputOK := reflectType.FieldByName("input")
+			rawInputField, rawInputOK := reflectType.FieldByName("rawInput")
+			if !inputOK || !rawInputOK {
+				return E.New("vision: TLS layer missing input/rawInput fields")
+			}
+			info.input = (*bytes.Reader)(unsafe.Add(reflectPointer, inputField.Offset))
+			info.rawInput = (*bytes.Buffer)(unsafe.Add(reflectPointer, rawInputField.Offset))
 			return nil
 		}
 	}
@@ -396,7 +409,13 @@ func isTLSConn(conn net.Conn) bool {
 	return false
 }
 
-func (c *VisionConn) Read(p []byte) (n int, err error) {
+func (c *VisionConn) Read(p []byte) (int, error) {
+	c.readAccess.Lock()
+	defer c.readAccess.Unlock()
+	return c.read(p)
+}
+
+func (c *VisionConn) read(p []byte) (n int, err error) {
 	for len(c.remainingBuffers) > 0 {
 		newN, _ := c.remainingBuffers[0].Read(p[n:])
 		if c.remainingBuffers[0].IsEmpty() {
@@ -429,7 +448,7 @@ func (c *VisionConn) Read(p []byte) (n int, err error) {
 		}
 		bufferBytes = chunkBuffer.Bytes()
 	}
-	if c.withinPaddingBuffers || c.numberOfPacketToFilter > 0 {
+	if c.withinPaddingBuffers || c.filterPackets() > 0 {
 		buffers := c.unPadding(bufferBytes)
 		if chunkBuffer != nil {
 			chunkBuffer.Reset()
@@ -462,24 +481,24 @@ func (c *VisionConn) Read(p []byte) (n int, err error) {
 			} else {
 				return 0, E.New("unknown command ", c.currentCommand)
 			}
-		} else if c.remainingContent > 0 || c.remainingPadding > 0 {
+		} else if c.remainingContent > 0 || c.remainingPadding > 0 || len(c.readPrefix) > 0 || c.readHeaderLen > 0 {
 			c.withinPaddingBuffers = true
 		} else {
 			c.withinPaddingBuffers = false
 		}
-		if c.numberOfPacketToFilter > 0 {
+		if c.filterPackets() > 0 {
 			c.filterTLS(buf.ToSliceMulti(buffers))
 		}
 		c.remainingBuffers = buffers
-		return c.Read(p)
+		return c.read(p)
 	} else {
-		if c.numberOfPacketToFilter > 0 {
+		if c.filterPackets() > 0 {
 			c.filterTLS([][]byte{bufferBytes})
 		}
 		if chunkBuffer != nil {
 			c.remainingBuffers = append(c.remainingBuffers, buf.As(chunkBuffer.Bytes()))
 			chunkBuffer.Reset() // chunkBuffer should not be release and only reused after c.remainingBuffers be emptied, so must reset at here
-			return c.Read(p)
+			return c.read(p)
 		}
 		return
 	}
@@ -488,17 +507,18 @@ func (c *VisionConn) Read(p []byte) (n int, err error) {
 func (c *VisionConn) Write(p []byte) (n int, err error) {
 	c.writeAccess.Lock()
 	defer c.writeAccess.Unlock()
-	if c.numberOfPacketToFilter > 0 {
+	if c.filterPackets() > 0 {
 		c.filterTLS([][]byte{p})
 	}
+	isTLS, isTLS12, enableXTLS := c.filterSnapshot()
 	if c.isPadding {
 		inputLen := len(p)
 		isComplete := isCompleteRecord(p)
 		buffers := reshapeBuffer(p)
 		switchToDirectAfterWrite := false
 		for i, buffer := range buffers {
-			if c.isTLS && buffer.Len() > 6 && bytes.Equal(tlsApplicationDataStart, buffer.To(3)) && isComplete {
-				if c.enableXTLS && c.canSplice {
+			if isTLS && buffer.Len() > 6 && bytes.Equal(tlsApplicationDataStart, buffer.To(3)) && isComplete {
+				if enableXTLS && c.canSplice {
 					switchToDirectAfterWrite = true
 				}
 				c.isPadding = false
@@ -512,7 +532,7 @@ func (c *VisionConn) Write(p []byte) (n int, err error) {
 					buffers[i] = c.padding(buffer, commandPaddingContinue)
 				}
 				continue
-			} else if !c.isTLS12orAbove && c.numberOfPacketToFilter <= 1 {
+			} else if !isTLS12 && c.filterPackets() <= 1 {
 				c.isPadding = false
 				buffers[i] = c.padding(buffer, commandPaddingEnd)
 				break
@@ -543,7 +563,22 @@ func (c *VisionConn) Write(p []byte) (n int, err error) {
 	}
 }
 
+func (c *VisionConn) filterPackets() int {
+	c.filterAccess.Lock()
+	defer c.filterAccess.Unlock()
+	return c.numberOfPacketToFilter
+}
+func (c *VisionConn) filterSnapshot() (bool, bool, bool) {
+	c.filterAccess.Lock()
+	defer c.filterAccess.Unlock()
+	return c.isTLS, c.isTLS12orAbove, c.enableXTLS
+}
 func (c *VisionConn) filterTLS(buffers [][]byte) {
+	c.filterAccess.Lock()
+	defer c.filterAccess.Unlock()
+	if c.numberOfPacketToFilter <= 0 {
+		return
+	}
 	for _, buffer := range buffers {
 		c.numberOfPacketToFilter--
 		if len(buffer) > 6 {
@@ -554,8 +589,11 @@ func (c *VisionConn) filterTLS(buffers [][]byte) {
 					c.remainingServerHello = (int32(buffer[3])<<8 | int32(buffer[4])) + 5
 					if len(buffer) >= 79 && c.remainingServerHello >= 79 {
 						sessionIdLen := int32(buffer[43])
-						cipherSuite := buffer[43+sessionIdLen+1 : 43+sessionIdLen+3]
-						c.cipher = uint16(cipherSuite[0])<<8 | uint16(cipherSuite[1])
+						offset := int(44 + sessionIdLen)
+						if offset+2 <= len(buffer) {
+							cipherSuite := buffer[offset : offset+2]
+							c.cipher = uint16(cipherSuite[0])<<8 | uint16(cipherSuite[1])
+						}
 					} else {
 						c.logger.Trace("XtlsFilterTls short server hello, tls 1.2 or older? ", len(buffer), " ", c.remainingServerHello)
 					}
@@ -597,11 +635,12 @@ func (c *VisionConn) padding(buffer *buf.Buffer, command byte) *buf.Buffer {
 	if buffer != nil {
 		contentLen = buffer.Len()
 	}
-	if contentLen < 900 && c.isTLS {
-		l, _ := rand.Int(rand.Reader, big.NewInt(500))
-		paddingLen = int(l.Int64()) + 900 - contentLen
+	isTLS, _, _ := c.filterSnapshot()
+	if contentLen < int(c.testseed[0]) && isTLS {
+		l, _ := rand.Int(rand.Reader, big.NewInt(int64(c.testseed[1])))
+		paddingLen = int(l.Int64()) + int(c.testseed[2]) - contentLen
 	} else {
-		l, _ := rand.Int(rand.Reader, big.NewInt(256))
+		l, _ := rand.Int(rand.Reader, big.NewInt(int64(c.testseed[3])))
 		paddingLen = int(l.Int64())
 	}
 	var bufferLen int
@@ -631,15 +670,25 @@ func (c *VisionConn) padding(buffer *buf.Buffer, command byte) *buf.Buffer {
 func (c *VisionConn) unPadding(buffer []byte) []*buf.Buffer {
 	var bufferIndex int
 	if c.remainingContent == -1 && c.remainingPadding == -1 {
-		if len(buffer) >= 21 && bytes.Equal(c.userUUID[:], buffer[:16]) {
-			bufferIndex = 16
-			c.remainingContent = 0
-			c.remainingPadding = 0
-			c.currentCommand = 0
+		if len(c.readPrefix) > 0 {
+			buffer = append(c.readPrefix, buffer...)
+			c.readPrefix = nil
 		}
-	}
-	if c.remainingContent == -1 && c.remainingPadding == -1 {
-		return []*buf.Buffer{buf.As(buffer).ToOwned()}
+		prefixLen := len(buffer)
+		if prefixLen > len(c.userUUID) {
+			prefixLen = len(c.userUUID)
+		}
+		if !bytes.Equal(c.userUUID[:prefixLen], buffer[:prefixLen]) {
+			return []*buf.Buffer{buf.As(buffer).ToOwned()}
+		}
+		if len(buffer) < 21 {
+			c.readPrefix = append([]byte(nil), buffer...)
+			return nil
+		}
+		bufferIndex = 16
+		c.remainingContent = 0
+		c.remainingPadding = 0
+		c.currentCommand = 0
 	}
 	var buffers []*buf.Buffer
 	for bufferIndex < len(buffer) {
@@ -648,11 +697,17 @@ func (c *VisionConn) unPadding(buffer []byte) []*buf.Buffer {
 				buffers = append(buffers, buf.As(buffer[bufferIndex:]).ToOwned())
 				break
 			} else {
-				paddingInfo := buffer[bufferIndex : bufferIndex+5]
+				n := copy(c.readHeader[c.readHeaderLen:], buffer[bufferIndex:])
+				c.readHeaderLen += n
+				bufferIndex += n
+				if c.readHeaderLen < 5 {
+					break
+				}
+				paddingInfo := c.readHeader[:]
+				c.readHeaderLen = 0
 				c.currentCommand = paddingInfo[0]
 				c.remainingContent = int(paddingInfo[1])<<8 | int(paddingInfo[2])
 				c.remainingPadding = int(paddingInfo[3])<<8 | int(paddingInfo[4])
-				bufferIndex += 5
 				c.logger.Trace("Xtls Unpadding new block ", bufferIndex, " ", c.remainingContent, " padding ", c.remainingPadding, " ", c.currentCommand)
 			}
 		} else if c.remainingContent > 0 {
@@ -687,6 +742,8 @@ func (c *VisionConn) Upstream() any {
 }
 
 func (c *VisionConn) ReaderReplaceable() bool {
+	c.readAccess.Lock()
+	defer c.readAccess.Unlock()
 	return c.directRead
 }
 
@@ -697,6 +754,8 @@ func (c *VisionConn) WriterReplaceable() bool {
 }
 
 func (c *VisionConn) UpstreamReader() any {
+	c.readAccess.Lock()
+	defer c.readAccess.Unlock()
 	if c.directRead {
 		return c.directConn
 	}
@@ -710,4 +769,16 @@ func (c *VisionConn) UpstreamWriter() any {
 		return c.directConn
 	}
 	return nil
+}
+
+func (c *VisionConn) Close() error {
+	err := c.Conn.Close()
+	c.readAccess.Lock()
+	defer c.readAccess.Unlock()
+	for _, b := range c.remainingBuffers {
+		b.Release()
+	}
+	c.remainingBuffers = nil
+	c.readPrefix = nil
+	return err
 }
