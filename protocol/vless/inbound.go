@@ -35,6 +35,20 @@ func RegisterInbound(registry *inbound.Registry) {
 	inbound.Register[option.VLESSInboundOptions](registry, C.TypeVLESS, NewInbound)
 }
 
+// validateVLESSUserUUIDs rejects ambiguous authentication entries before the
+// reverse and ordinary inbound dispatchers can observe them.
+func validateVLESSUserUUIDs(users []option.VLESSUser) error {
+	seen := make(map[string]struct{}, len(users))
+	for _, user := range users {
+		id := strings.ToLower(user.UUID)
+		if _, exists := seen[id]; exists {
+			return E.New("duplicate VLESS UUID: ", user.UUID)
+		}
+		seen[id] = struct{}{}
+	}
+	return nil
+}
+
 var _ adapter.TCPInjectableInbound = (*Inbound)(nil)
 
 type Inbound struct {
@@ -52,6 +66,9 @@ type Inbound struct {
 }
 
 func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.VLESSInboundOptions) (adapter.Inbound, error) {
+	if err := validateVLESSUserUUIDs(options.Users); err != nil {
+		return nil, err
+	}
 	if options.Transport != nil && options.Transport.Type == "xdrive" {
 		if options.Decryption == "" || options.Decryption == "none" {
 			return nil, E.New("XDrive requires VLESS decryption")
