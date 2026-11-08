@@ -177,7 +177,7 @@ func (b *balanceState) pick(tags []string) (string, error) {
 		b.next++
 		return tag, nil
 	case "random":
-		return candidates[rand.IntN(len(candidates))], nil
+		return candidates[rand.Intn(len(candidates))], nil
 	case "leastping", "leastload":
 		sort.Slice(candidates, func(i, j int) bool {
 			left, right := b.reports[candidates[i]], b.reports[candidates[j]]
