@@ -1,11 +1,11 @@
 package rule
 
 import (
-    "context"
     "testing"
 
     "github.com/sagernet/sing-box/option"
     "github.com/sagernet/sing/common/json"
+    "github.com/sagernet/sing/common/logger"
 )
 
 func TestXUIPanelSniffOverrideAction(t *testing.T) {
@@ -14,7 +14,7 @@ func TestXUIPanelSniffOverrideAction(t *testing.T) {
         if enabled { raw = `{"action":"sniff","sniffer":["http","tls"],"override_destination":true}` }
         var options option.RuleAction
         if err := json.Unmarshal([]byte(raw), &options); err != nil { t.Fatal(err) }
-        action, err := NewRuleAction(context.Background(), nil, options)
+        action, err := NewRuleAction(logger.NOP(), options)
         if err != nil { t.Fatal(err) }
         sniff, ok := action.(*RuleActionSniff)
         if !ok || sniff.OverrideDestination != enabled || len(sniff.StreamSniffers) != 2 {
