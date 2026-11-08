@@ -772,7 +772,15 @@ func (c *VisionConn) UpstreamWriter() any {
 }
 
 func (c *VisionConn) Close() error {
-	err := c.Conn.Close()
+	// Vision may switch writes to the direct socket after the TLS handshake.
+	// Closing only the original wrapper can strand a blocked direct I/O worker.
+	c.writeAccess.Lock()
+	active := c.Conn
+	if c.directWrite && c.directConn != nil {
+		active = c.directConn
+	}
+	c.writeAccess.Unlock()
+	err := active.Close()
 	c.readAccess.Lock()
 	defer c.readAccess.Unlock()
 	for _, b := range c.remainingBuffers {
