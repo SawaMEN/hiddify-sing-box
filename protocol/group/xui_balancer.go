@@ -8,9 +8,11 @@ import (
 	"io"
 	"math"
 	"math/rand"
+	"maps"
 	"net"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -51,18 +53,18 @@ type balanceState struct {
 	leastTolerance float64
 	leastBaselines []time.Duration
 	ctx            context.Context
-	cancel  context.CancelFunc
-	config  option.XrayBalancerOptions
-	history *urltest.HistoryStorage
-	mu      sync.RWMutex
-	wg      sync.WaitGroup
-	closed  bool
-	started bool
-	next    uint64
-	costs   []balanceCost
-	reports map[string]balanceReport
-	samples map[string][]probeSample
-	targets map[string]adapter.Outbound
+	cancel         context.CancelFunc
+	config         option.XrayBalancerOptions
+	history        *urltest.HistoryStorage
+	mu             sync.RWMutex
+	wg             sync.WaitGroup
+	closed         bool
+	started        bool
+	next           uint64
+	costs          []balanceCost
+	reports        map[string]balanceReport
+	samples        map[string][]probeSample
+	targets        map[string]adapter.Outbound
 }
 
 func newBalanceState(ctx context.Context, options option.XrayBalancerOptions) (*balanceState, error) {
@@ -168,12 +170,12 @@ func newBalanceState(ctx context.Context, options option.XrayBalancerOptions) (*
 		leastTolerance: leastTolerance,
 		leastBaselines: leastBaselines,
 		ctx:            ctx,
-		cancel:  cancel,
-		config:  options,
-		history: service.PtrFromContext[urltest.HistoryStorage](ctx),
-		costs:   costs,
-		reports: make(map[string]balanceReport),
-		samples: make(map[string][]probeSample),
+		cancel:         cancel,
+		config:         options,
+		history:        service.PtrFromContext[urltest.HistoryStorage](ctx),
+		costs:          costs,
+		reports:        make(map[string]balanceReport),
+		samples:        make(map[string][]probeSample),
 	}, nil
 }
 
@@ -301,9 +303,7 @@ func (b *balanceState) postStart(targets map[string]adapter.Outbound) {
 	}
 	b.started = true
 	b.targets = make(map[string]adapter.Outbound, len(targets))
-	for tag, target := range targets {
-		b.targets[tag] = target
-	}
+	maps.Copy(b.targets, targets)
 	if b.config.ProbeURL == "" {
 		b.mu.Unlock()
 		return
@@ -329,9 +329,7 @@ func (b *balanceState) postStart(targets map[string]adapter.Outbound) {
 func (b *balanceState) probe() {
 	b.mu.RLock()
 	targets := make(map[string]adapter.Outbound, len(b.targets))
-	for tag, target := range b.targets {
-		targets[tag] = target
-	}
+	maps.Copy(targets, b.targets)
 	b.mu.RUnlock()
 	limit := 1
 	if b.config.Concurrent {
@@ -343,17 +341,8 @@ func (b *balanceState) probe() {
 		if tag == b.config.Fallback {
 			continue
 		}
-		if len(b.config.ProbeTags) > 0 {
-			found := false
-			for _, allowed := range b.config.ProbeTags {
-				if tag == allowed {
-					found = true
-					break
-				}
-			}
-			if !found {
-				continue
-			}
+		if len(b.config.ProbeTags) > 0 && !slices.Contains(b.config.ProbeTags, tag) {
+			continue
 		}
 		select {
 		case semaphore <- struct{}{}:

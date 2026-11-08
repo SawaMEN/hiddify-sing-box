@@ -29,7 +29,7 @@ func TestXUIPanelDynamicBalancing(t *testing.T) {
 			state.record("a", 10_000_000, nil)
 			state.record("b", 100_000_000, nil)
 			chosen := map[string]int{}
-			for i := 0; i < 100; i++ {
+			for range 100 {
 				tag, err := state.pick(targets)
 				if err != nil {
 					t.Fatal(err)

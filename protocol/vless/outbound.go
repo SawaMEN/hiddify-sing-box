@@ -267,12 +267,6 @@ func (h *vlessDialer) DialContext(ctx context.Context, network string, destinati
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		if returnErr != nil && conn != nil {
-			_ = conn.Close()
-		}
-	}()
-
 	// Apply encryption if configured
 	if h.encryption != nil {
 		rawConn := conn
@@ -292,6 +286,13 @@ func (h *vlessDialer) DialContext(ctx context.Context, network string, destinati
 		}
 		conn = encryptedConn
 	}
+	defer func() {
+		// The encryption handshake closes rawConn itself on failure. Install
+		// this cleanup only after it succeeds to avoid double-closing sockets.
+		if returnErr != nil && conn != nil {
+			_ = conn.Close()
+		}
+	}()
 
 	// For Vision: wrap the connection to expose the TLS/encryption connection for vless client
 	var visionBaseConn net.Conn // The connection to pass to Vision (TLS or encryption layer)
