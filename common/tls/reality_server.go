@@ -3,12 +3,15 @@
 package tls
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"net"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/sagernet/sing-box/common/dialer"
@@ -92,7 +95,16 @@ func NewRealityServer(ctx context.Context, logger log.ContextLogger, options opt
 	tlsConfig.Type = N.NetworkTCP
 	tlsConfig.Dest = options.Reality.Handshake.ServerOptions.Build().String()
 
-	tlsConfig.ServerNames = map[string]bool{options.ServerName: true}
+	tlsConfig.ServerNames = make(map[string]bool)
+	if options.ServerName != "" {
+		tlsConfig.ServerNames[options.ServerName] = true
+	}
+	for _, name := range options.Reality.ServerNames {
+		if name == "" {
+			return nil, E.New("REALITY server_names cannot contain an empty name")
+		}
+		tlsConfig.ServerNames[name] = true
+	}
 	privateKey, err := base64.RawURLEncoding.DecodeString(options.Reality.PrivateKey)
 	if err != nil {
 		return nil, E.Cause(err, "decode private key")
@@ -101,6 +113,29 @@ func NewRealityServer(ctx context.Context, logger log.ContextLogger, options opt
 		return nil, E.New("invalid private key")
 	}
 	tlsConfig.PrivateKey = privateKey
+	if options.Reality.Xver > 2 {
+		return nil, E.New("invalid REALITY xver")
+	}
+	tlsConfig.Xver = options.Reality.Xver
+	tlsConfig.MinClientVer, err = parseRealityClientVersion(options.Reality.MinClientVersion)
+	if err != nil {
+		return nil, err
+	}
+	tlsConfig.MaxClientVer, err = parseRealityClientVersion(options.Reality.MaxClientVersion)
+	if err != nil {
+		return nil, err
+	}
+	if len(tlsConfig.MinClientVer) > 0 && len(tlsConfig.MaxClientVer) > 0 && bytes.Compare(tlsConfig.MinClientVer, tlsConfig.MaxClientVer) > 0 {
+		return nil, E.New("REALITY min_client_version exceeds max_client_version")
+	}
+	tlsConfig.LimitFallbackUpload, err = parseRealityFallbackLimit(options.Reality.LimitFallbackUpload)
+	if err != nil {
+		return nil, err
+	}
+	tlsConfig.LimitFallbackDownload, err = parseRealityFallbackLimit(options.Reality.LimitFallbackDownload)
+	if err != nil {
+		return nil, err
+	}
 	tlsConfig.MaxTimeDiff = time.Duration(options.Reality.MaxTimeDifference)
 
 	tlsConfig.ShortIds = make(map[[8]byte]bool)
@@ -258,4 +293,34 @@ func (c *realityConnWrapper) ReaderReplaceable() bool {
 
 func (c *realityConnWrapper) WriterReplaceable() bool {
 	return false
+}
+
+func parseRealityClientVersion(value string) ([]byte, error) {
+	if value == "" {
+		return nil, nil
+	}
+	parts := strings.Split(value, ".")
+	if len(parts) != 3 {
+		return nil, E.New("invalid REALITY client version")
+	}
+	result := make([]byte, 3)
+	for i, part := range parts {
+		version, err := strconv.ParseUint(part, 10, 8)
+		if err != nil {
+			return nil, E.New("invalid REALITY client version")
+		}
+		result[i] = byte(version)
+	}
+	return result, nil
+}
+
+func parseRealityFallbackLimit(value option.RealityLimitFallback) (utls.RealityLimitFallback, error) {
+	if value.AfterBytes < 0 || value.BytesPerSec < 0 || value.BurstBytesPerSec < 0 {
+		return utls.RealityLimitFallback{}, E.New("negative REALITY fallback limit")
+	}
+	return utls.RealityLimitFallback{
+		AfterBytes:       uint64(value.AfterBytes),
+		BytesPerSec:      uint64(value.BytesPerSec),
+		BurstBytesPerSec: uint64(value.BurstBytesPerSec),
+	}, nil
 }
