@@ -48,6 +48,10 @@ func NewClient(ctx context.Context, dialer N.Dialer, serverAddr M.Socksaddr, opt
 	if options.Mode == "" {
 		return nil, E.New("mode is not set")
 	}
+	download, err := options.ResolveDownload()
+	if err != nil {
+		return nil, err
+	}
 	options.Mode = hClientMode(options.Mode, tls.IsReality(tlsConfig), options.Download != nil) // H
 	dest := serverAddr
 	baseRequestURL, err := getBaseRequestURL(&options.V2RayXHTTPBaseOptions, dest, tlsConfig)
@@ -67,12 +71,16 @@ func NewClient(ctx context.Context, dialer N.Dialer, serverAddr M.Socksaddr, opt
 	}
 	baseRequestURL2 := baseRequestURL
 	getHTTPClient2 := getHTTPClient
-	if options.Download != nil {
-		options2 := options.Download
+	if download != nil {
+		options2 := download
 		dialer2 := dialer
 		if options2.Detour != "" {
 			var ok bool
-			dialer2, ok = service.FromContext[adapter.OutboundManager](ctx).Outbound(options2.Detour)
+			manager := service.FromContext[adapter.OutboundManager](ctx)
+			if manager == nil {
+				return nil, E.New("download detour requires outbound manager")
+			}
+			dialer2, ok = manager.Outbound(options2.Detour)
 			if !ok {
 				return nil, E.New("outbound detour not found: ", options2.Detour)
 			}

@@ -189,6 +189,8 @@ type _V2RayXHTTPOptions struct {
 type V2RayXHTTPOptions _V2RayXHTTPOptions
 
 type V2RayXHTTPDownloadOptions struct {
+	Download *V2RayXHTTPDownloadOptions `json:"download,omitempty"`
+	Mode     string                     `json:"mode,omitempty"`
 	V2RayXHTTPBaseOptions
 	ServerOptions
 	OutboundTLSOptionsContainer
@@ -224,13 +226,36 @@ func (c *V2RayXHTTPOptions) UnmarshalJSON(bytes []byte) error {
 	if err != nil {
 		return err
 	}
-	if c.Download != nil {
-		err = checkV2RayXHTTPBaseOptions(c.Mode, &c.Download.V2RayXHTTPBaseOptions)
-		if err != nil {
-			return err
-		}
+	_, err = c.ResolveDownload()
+	return err
+}
+
+// ResolveDownload validates each override and selects the innermost download endpoint.
+func (c *V2RayXHTTPOptions) ResolveDownload() (*V2RayXHTTPDownloadOptions, error) {
+	if c.Download != nil && c.Mode == "stream-one" {
+		return nil, E.New("stream-one cannot use a separate download")
 	}
-	return nil
+	var last *V2RayXHTTPDownloadOptions
+	seen := make(map[*V2RayXHTTPDownloadOptions]bool)
+	for node, depth := c.Download, 1; node != nil; node, depth = node.Download, depth+1 {
+		if depth > 8 || seen[node] {
+			return nil, E.New("download nesting exceeds 8 or contains a cycle")
+		}
+		seen[node] = true
+		switch node.Mode {
+		case "", "auto", "packet-up", "stream-up", "stream-one":
+		default:
+			return nil, E.New("unsupported download mode: ", node.Mode)
+		}
+		if node.Server == "" || node.ServerPort == 0 {
+			return nil, E.New("download server and port required")
+		}
+		if err := checkV2RayXHTTPBaseOptions(node.Mode, &node.V2RayXHTTPBaseOptions); err != nil {
+			return nil, err
+		}
+		last = node
+	}
+	return last, nil
 }
 
 func checkV2RayXHTTPBaseOptions(mode string, options *V2RayXHTTPBaseOptions) error {
