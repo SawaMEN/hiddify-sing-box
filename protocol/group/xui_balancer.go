@@ -115,9 +115,9 @@ func newBalanceState(ctx context.Context, options option.XrayBalancerOptions) (*
 			Expected  int      `json:"expected"`
 			MaxRTT    string   `json:"maxRTT"`
 			Tolerance float64  `json:"tolerance"`
-			Costs []*struct {
+			Costs     []*struct {
 				Match  string  `json:"match"`
-				Regexp bool   `json:"regexp"`
+				Regexp bool    `json:"regexp"`
 				Value  float64 `json:"value"`
 			} `json:"costs"`
 		}
