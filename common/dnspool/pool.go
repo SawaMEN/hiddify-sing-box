@@ -2,9 +2,11 @@ package dnspool
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/sagernet/sing-box/common/dialer"
@@ -96,11 +98,26 @@ type Pool struct {
 // StartPool starts a pool listening on a free local port. It is bound when this returns. dial,
 // when set, opens every resolver socket (see DialFunc).
 func StartPool(logger log.ContextLogger, tag string, options PoolOptions, dial multidns.DialFunc) (*Pool, error) {
-	manager, addr, err := multidns.StartLocal(managerOptions(logger, tag, options))
+	manager, addr, err := startLocalWithRetry(managerOptions(logger, tag, options), multidns.StartLocal)
 	if err != nil {
 		return nil, E.Cause(err, "start resolver pool")
 	}
 	return &Pool{manager: manager, addr: addr, dial: dial}, nil
+}
+
+// The resolver library reserves an ephemeral UDP port before binding TCP on
+// the same port. Concurrent pools can claim that port between the two binds.
+// Retry only EADDRINUSE: malformed options and other failures are never hidden.
+func startLocalWithRetry(options multidns.Options, start func(multidns.Options) (*multidns.Manager, string, error)) (*multidns.Manager, string, error) {
+	const attempts = 5
+	for attempt := range attempts {
+		manager, addr, err := start(options)
+		if err == nil || !errors.Is(err, syscall.EADDRINUSE) || attempt == attempts-1 {
+			return manager, addr, err
+		}
+		time.Sleep(time.Duration(attempt+1) * time.Millisecond)
+	}
+	panic("unreachable")
 }
 
 // Addr is the local "127.0.0.1:port" the tunnel sends its queries to.
