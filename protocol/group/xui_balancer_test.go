@@ -192,7 +192,7 @@ func TestXUIPanelBalancerBurstSampling(t *testing.T) {
 		Strategy: "leastLoad",
 		ProbeURL: "http://127.0.0.1:1/probe",
 		Fallback: "backup",
-		Burst: true,
+		Burst:    true,
 		Sampling: 3,
 	})
 	if err != nil {
@@ -222,11 +222,11 @@ func TestXUIPanelBalancerConnectivityOutageDoesNotEvictHealthySnapshot(t *testin
 	// unreachable, do not interpret the local network outage as evidence
 	// that a previously healthy outbound has gone offline.
 	state, err := newBalanceState(context.Background(), option.XrayBalancerOptions{
-		Strategy: "leastPing",
-		ProbeURL: "http://127.0.0.1:1/probe",
+		Strategy:     "leastPing",
+		ProbeURL:     "http://127.0.0.1:1/probe",
 		Connectivity: "http://127.0.0.1:1/connectivity",
-		Fallback: "backup",
-		Timeout: 100000000, // 100ms
+		Fallback:     "backup",
+		Timeout:      100000000, // 100ms
 	})
 	if err != nil {
 		t.Fatal(err)
