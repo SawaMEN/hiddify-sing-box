@@ -182,6 +182,17 @@ func (c *Conn) NeedHandshake() bool {
 	return !c.requestWritten
 }
 
+// The current sing-box transport lifecycle distinguishes the response
+// handshake from the outgoing request. Keep both gates separate when Vision
+// and reverse use early connections.
+func (c *Conn) NeedHandshakeForRead() bool {
+	return !c.responseRead
+}
+
+func (c *Conn) NeedHandshakeForWrite() bool {
+	return !c.requestWritten
+}
+
 func (c *Conn) FrontHeadroom() int {
 	if c.requestWritten {
 		return 0
