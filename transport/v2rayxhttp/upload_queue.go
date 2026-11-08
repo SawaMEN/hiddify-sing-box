@@ -34,6 +34,9 @@ type uploadQueue struct {
 }
 
 func NewUploadQueue(maxPackets int) *uploadQueue {
+	if maxPackets < 1 {
+		maxPackets = 1
+	}
 	return &uploadQueue{
 		pushedPackets: make(chan Packet, maxPackets),
 		closing:       make(chan struct{}),
@@ -103,6 +106,9 @@ func (h *uploadQueue) setReader(reader io.ReadCloser) {
 }
 
 func (h *uploadQueue) Read(b []byte) (int, error) {
+	if len(b) == 0 {
+		return 0, nil
+	}
 	if reader := h.currentReader(); reader != nil {
 		return reader.Read(b)
 	}
