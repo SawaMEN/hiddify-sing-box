@@ -186,3 +186,61 @@ func TestXUIPanelLeastLoadRejectsMalformedSettings(t *testing.T) {
 		}
 	}
 }
+
+func TestXUIPanelBalancerBurstSampling(t *testing.T) {
+	state, err := newBalanceState(context.Background(), option.XrayBalancerOptions{
+		Strategy: "leastLoad",
+		ProbeURL: "http://127.0.0.1:1/probe",
+		Fallback: "backup",
+		Burst: true,
+		Sampling: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer state.Close()
+	state.record("node", 10*time.Millisecond, nil)
+	state.record("node", 0, fmt.Errorf("temporary probe failure"))
+	selected, err := state.pick([]string{"node"})
+	if err != nil || selected != "node" {
+		t.Fatalf("a single failed sample must not mark burst node offline: %q %v", selected, err)
+	}
+	state.record("node", 0, fmt.Errorf("second probe failure"))
+	selected, err = state.pick([]string{"node"})
+	if err != nil || selected != "node" {
+		t.Fatalf("one successful sample must keep burst node alive: %q %v", selected, err)
+	}
+	state.record("node", 0, fmt.Errorf("third probe failure"))
+	selected, err = state.pick([]string{"node"})
+	if err != nil || selected != "backup" {
+		t.Fatalf("all failed samples must trigger fallback: %q %v", selected, err)
+	}
+}
+
+func TestXUIPanelBalancerConnectivityOutageDoesNotEvictHealthySnapshot(t *testing.T) {
+	// If the probe target AND the independent connectivity URL are
+	// unreachable, do not interpret the local network outage as evidence
+	// that a previously healthy outbound has gone offline.
+	state, err := newBalanceState(context.Background(), option.XrayBalancerOptions{
+		Strategy: "leastPing",
+		ProbeURL: "http://127.0.0.1:1/probe",
+		Connectivity: "http://127.0.0.1:1/connectivity",
+		Fallback: "backup",
+		Timeout: 100000000, // 100ms
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer state.Close()
+	state.record("node", 15*time.Millisecond, nil)
+	dead := &probeOutbound{Adapter: outbound.NewAdapter("direct", "node", nil, nil), fail: true}
+	state.targets = map[string]adapter.Outbound{"node": dead}
+	state.probe()
+	if dead.calls.Load() != 1 {
+		t.Fatalf("expected exactly one outbound probe, got %d", dead.calls.Load())
+	}
+	selected, err := state.pick([]string{"node"})
+	if err != nil || selected != "node" {
+		t.Fatalf("local connectivity outage must preserve last healthy snapshot: %q %v", selected, err)
+	}
+}
