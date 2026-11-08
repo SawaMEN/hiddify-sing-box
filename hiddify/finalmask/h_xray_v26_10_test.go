@@ -146,7 +146,8 @@ func TestH_FinalMaskXDNSRoundTrip(t *testing.T) {
 func TestH_FinalMaskUDPHop(t *testing.T) {
 	var ports []string
 	received := make(chan uint16, 64)
-	for range 3 {
+	// A larger pool makes a repeated random selection vanishingly unlikely.
+	for range 8 {
 		server, err := net.ListenPacket("udp", "127.0.0.1:0")
 		require.NoError(t, err)
 		defer server.Close()
