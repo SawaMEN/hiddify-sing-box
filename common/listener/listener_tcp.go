@@ -11,6 +11,7 @@ import (
 	"github.com/sagernet/sing-box/common/proxyproto"
 	"github.com/sagernet/sing-box/common/redir"
 	C "github.com/sagernet/sing-box/constant"
+	"github.com/sagernet/sing-box/hiddify/finalmask"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing/common/control"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -75,6 +76,14 @@ func (l *Listener) ListenTCP() (net.Listener, error) {
 	//nolint:staticcheck
 	if l.listenOptions.ProxyProtocol || l.listenOptions.ProxyProtocolAcceptNoHeader { // H: restored
 		tcpListener = proxyproto.NewListener(tcpListener, l.listenOptions.ProxyProtocolAcceptNoHeader)
+	}
+	if masks != nil && masks.TCP != nil {
+		raw := tcpListener
+		tcpListener, err = masks.TCP.WrapListener(raw)
+		if err != nil {
+			raw.Close()
+			return nil, err
+		}
 	}
 	l.logger.Info("tcp server started at ", tcpListener.Addr())
 	l.tcpListener = tcpListener
