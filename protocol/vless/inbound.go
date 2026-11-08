@@ -66,6 +66,16 @@ type Inbound struct {
 }
 
 func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.VLESSInboundOptions) (adapter.Inbound, error) {
+	// These controls require native sing-vmess extensions, which have not
+	// been integrated yet. Reject instead of silently dropping protection.
+	if len(options.Testseed) != 0 {
+		return nil, E.New("VLESS vision testseed requires the native sing-vmess protection extension")
+	}
+	for _, user := range options.Users {
+		if user.Reverse != nil {
+			return nil, E.New("VLESS reverse user requires the native reverse dispatcher")
+		}
+	}
 	if err := validateVLESSUserUUIDs(options.Users); err != nil {
 		return nil, err
 	}

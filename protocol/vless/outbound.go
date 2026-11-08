@@ -57,6 +57,14 @@ type Outbound struct {
 }
 
 func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.VLESSOutboundOptions) (adapter.Outbound, error) {
+	// Refuse to ignore reverse and Vision security configuration until the
+	// required sing-vmess extensions are available in the native runtime.
+	if options.Reverse != nil {
+		return nil, E.New("VLESS reverse outbound requires the native reverse bridge")
+	}
+	if len(options.Testseed) != 0 {
+		return nil, E.New("VLESS vision testseed requires the native sing-vmess protection extension")
+	}
 	if options.Transport != nil && options.Transport.Type == "xdrive" {
 		if options.Encryption == "" || options.Encryption == "none" {
 			return nil, E.New("XDrive requires VLESS encryption")
