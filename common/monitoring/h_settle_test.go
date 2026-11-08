@@ -165,6 +165,18 @@ func TestH_MonitoringStagedTestShowsTheMissThenTheAnswer(t *testing.T) {
 	require.Less(t, time.Since(start), 700*time.Millisecond, "not waiting for the deadline")
 	require.Equal(t, appSees(), groupSees(), "the answer is confirmed for the group too")
 	require.Equal(t, int64(1), dials.Load(), "a slow proxy is pinged once: no second attempt beside one still running")
+	// An answer is published before all bookkeeping and optional IP lookups finish.
+	// Wait for the priority task to settle before starting a second staged probe;
+	// otherwise the previous run can overwrite the next run's seeded history.
+	waitForProbeToSettle := func(expectedDials int64) {
+		require.Eventually(t, func() bool {
+			state := m.reg().outbounds["slow"]
+			state.mu.Lock()
+			defer state.mu.Unlock()
+			return dials.Load() >= expectedDials && !state.testing && !state.priorityQueued
+		}, 3*time.Second, 5*time.Millisecond, "staged probe fully settled")
+	}
+	waitForProbeToSettle(1)
 
 	// the outbound worked in this run: the first mark does not apply, its result stays through
 	// the slow answer, and the answer replaces it; a miss would come at the second mark
@@ -175,6 +187,7 @@ func TestH_MonitoringStagedTestShowsTheMissThenTheAnswer(t *testing.T) {
 	require.Less(t, appSees(), TimeoutDelay, "a working outbound is not shown as unavailable at the first mark")
 	require.Greater(t, time.Since(start), 400*time.Millisecond, "the answer came from the first attempt")
 	require.Equal(t, appSees(), groupSees())
+	waitForProbeToSettle(2)
 
 	// the outbound worked in this run and answers only after the second mark: the miss shows
 	// there, not at the first, and the group keeps the last confirmed result through it
