@@ -131,7 +131,10 @@ func wireGuardHandshake(ctx context.Context, dialer N.Dialer, addrPort netip.Add
 		if _, _, _, err = state.ReadMessage(nil, response[12:60]); err != nil {
 			return 0, E.Cause(err, "invalid handshake response")
 		}
-		return time.Since(start), nil
+		// On some Windows clocks a successful loopback handshake can be
+		// measured as zero. Keep a successful probe distinguishable from
+		// an unset/failed measurement without inventing millisecond latency.
+		return max(time.Since(start), time.Nanosecond), nil
 	}
 }
 
