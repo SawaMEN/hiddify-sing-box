@@ -265,6 +265,23 @@ func (s *StatsService) GetSysStats(ctx context.Context, request *SysStatsRequest
 	return response, nil
 }
 
+// RoutedOutboundConnection counts traffic on the physical outbound socket.
+// Writes go to the remote peer (uplink) and reads arrive from it (downlink).
+func (s *StatsService) RoutedOutboundConnection(ctx context.Context, conn net.Conn, outbound adapter.Outbound) net.Conn {
+	if s == nil || conn == nil || outbound == nil {
+		return conn
+	}
+	tag := outbound.Tag()
+	if tag == "" || !s.outbounds[tag] {
+		return conn
+	}
+	s.access.Lock()
+	up := s.loadOrCreateCounter("outbound>>>" + tag + ">>>traffic>>>uplink")
+	down := s.loadOrCreateCounter("outbound>>>" + tag + ">>>traffic>>>downlink")
+	s.access.Unlock()
+	return bufio.NewInt64CounterConn(conn, []*atomic.Int64{down}, []*atomic.Int64{up})
+}
+
 func (s *StatsService) mustEmbedUnimplementedStatsServiceServer() {
 }
 
