@@ -1,7 +1,6 @@
 package tlsspoof
 
 import (
-	"bytes"
 	"encoding/binary"
 	"strings"
 	"testing"
@@ -57,10 +56,61 @@ func TestBuildFakeClientHello_NoPostQuantumKeyShare(t *testing.T) {
 	record, err := buildFakeClientHello("example.com")
 	require.NoError(t, err)
 
-	var needle [2]byte
-	binary.BigEndian.PutUint16(needle[:], x25519MLKEM768)
-	require.False(t, bytes.Contains(record, needle[:]),
-		"output must not contain the X25519MLKEM768 code point (0x%04x)", x25519MLKEM768)
+	// Examine the TLS extension structures, not arbitrary random payload
+	// bytes: random and key material can contain 0x11ec by coincidence.
+	require.GreaterOrEqual(t, len(record), 9)
+	require.Equal(t, byte(1), record[5], "handshake must be ClientHello")
+	pos := 9 // TLS record (5) + handshake header (4)
+	take := func(n int) []byte {
+		t.Helper()
+		require.GreaterOrEqual(t, n, 0)
+		require.GreaterOrEqual(t, len(record)-pos, n, "truncated ClientHello")
+		value := record[pos : pos+n]
+		pos += n
+		return value
+	}
+	take(2 + 32) // client_version + random
+	take(int(take(1)[0])) // legacy_session_id
+	take(int(binary.BigEndian.Uint16(take(2)))) // cipher_suites
+	take(int(take(1)[0])) // compression_methods
+	extensions := take(int(binary.BigEndian.Uint16(take(2))))
+	require.Equal(t, len(record), pos, "trailing handshake bytes")
+	foundGroups, foundShare := false, false
+	for len(extensions) > 0 {
+		require.GreaterOrEqual(t, len(extensions), 4, "truncated extension header")
+		kind := binary.BigEndian.Uint16(extensions[:2])
+		length := int(binary.BigEndian.Uint16(extensions[2:4]))
+		extensions = extensions[4:]
+		require.GreaterOrEqual(t, len(extensions), length, "truncated extension body")
+		body := extensions[:length]
+		extensions = extensions[length:]
+		switch kind {
+		case 10: // supported_groups: uint16 length + repeated uint16 group
+			foundGroups = true
+			require.GreaterOrEqual(t, len(body), 2)
+			require.Equal(t, len(body)-2, int(binary.BigEndian.Uint16(body[:2])))
+			require.Zero(t, (len(body)-2)%2)
+			for groups := body[2:]; len(groups) > 0; groups = groups[2:] {
+				require.NotEqual(t, x25519MLKEM768, binary.BigEndian.Uint16(groups[:2]),
+					"hybrid group advertised in supported_groups")
+			}
+		case 51: // key_share: uint16 vector length, then (group, len, key)
+			foundShare = true
+			require.GreaterOrEqual(t, len(body), 2)
+			require.Equal(t, len(body)-2, int(binary.BigEndian.Uint16(body[:2])))
+			for shares := body[2:]; len(shares) > 0; {
+				require.GreaterOrEqual(t, len(shares), 4)
+				require.NotEqual(t, x25519MLKEM768, binary.BigEndian.Uint16(shares[:2]),
+					"hybrid group used in key_share")
+				keyLength := int(binary.BigEndian.Uint16(shares[2:4]))
+				shares = shares[4:]
+				require.GreaterOrEqual(t, len(shares), keyLength)
+				shares = shares[keyLength:]
+			}
+		}
+	}
+	require.True(t, foundGroups, "missing supported_groups extension")
+	require.True(t, foundShare, "missing key_share extension")
 }
 
 // TestBuildFakeClientHello_RandomizesPerCall ensures crypto/tls generates a
