@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"syscall"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
