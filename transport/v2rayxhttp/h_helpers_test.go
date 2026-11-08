@@ -58,7 +58,6 @@ func TestH_RandStringFromCharset(t *testing.T) {
 }
 
 func TestH_RandStringFromCharsetPowerOfTwo(t *testing.T) {
-	t.Skip("BUG: randStringFromCharset loops forever when 256%len(charset)==0 because limit wraps to byte(0) (xpadding.go:46)")
 	done := make(chan string, 1)
 	go func() {
 		value, _ := randStringFromCharset(10, "ab")
