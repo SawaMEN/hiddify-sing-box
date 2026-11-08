@@ -16,15 +16,15 @@ type VLESSReverseOptions struct {
 
 type VLESSUser struct {
 	Reverse *VLESSReverseOptions `json:"reverse,omitempty"`
-	Name string `json:"name,omitempty"`
-	UUID string `json:"uuid"`
-	Flow string `json:"flow,omitempty"`
+	Name    string               `json:"name,omitempty"`
+	UUID    string               `json:"uuid"`
+	Flow    string               `json:"flow,omitempty"`
 }
 
 type VLESSOutboundOptions struct {
-	Reverse *VLESSReverseOptions `json:"reverse,omitempty"`
-	Testseed []uint32 `json:"testseed,omitempty"`
-	Testpre uint32 `json:"testpre,omitempty"`
+	Reverse  *VLESSReverseOptions `json:"reverse,omitempty"`
+	Testseed []uint32             `json:"testseed,omitempty"`
+	Testpre  uint32               `json:"testpre,omitempty"`
 	DialerOptions
 	ServerOptions
 	UUID       string      `json:"uuid"`

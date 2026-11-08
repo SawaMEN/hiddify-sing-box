@@ -10,7 +10,7 @@ import (
 
 func TestXUIPanelUnsupportedVLESSProtectionFailsClosed(t *testing.T) {
 	for _, tc := range []struct {
-		name string
+		name    string
 		options option.VLESSOutboundOptions
 	}{
 		{name: "outbound-testseed", options: option.VLESSOutboundOptions{Testseed: []uint32{1000, 1}}},
