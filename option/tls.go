@@ -284,8 +284,8 @@ func (o *OutboundUTLSOptions) IsUnsafe() bool {
 
 type OutboundRealityOptions struct {
 	Mldsa65Verify string `json:"mldsa65_verify,omitempty"`
-	Enabled   bool   `json:"enabled,omitempty"`
-	PublicKey string `json:"public_key,omitempty"`
-	ShortID   string `json:"short_id,omitempty"`
-	KeyShare  string `json:"key_share,omitempty"` // H: "", "hybrid" or "classical"
+	Enabled       bool   `json:"enabled,omitempty"`
+	PublicKey     string `json:"public_key,omitempty"`
+	ShortID       string `json:"short_id,omitempty"`
+	KeyShare      string `json:"key_share,omitempty"` // H: "", "hybrid" or "classical"
 }
