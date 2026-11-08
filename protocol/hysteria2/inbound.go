@@ -99,13 +99,13 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 			}
 		case C.Hysterai2MasqueradeTypeString:
 			masqueradeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if options.Masquerade.StringOptions.StatusCode != 0 {
-					w.WriteHeader(options.Masquerade.StringOptions.StatusCode)
-				}
 				for key, values := range options.Masquerade.StringOptions.Headers {
 					for _, value := range values {
 						w.Header().Add(key, value)
 					}
+				}
+				if options.Masquerade.StringOptions.StatusCode != 0 {
+					w.WriteHeader(options.Masquerade.StringOptions.StatusCode)
 				}
 				w.Write([]byte(options.Masquerade.StringOptions.Content))
 			})
@@ -230,7 +230,11 @@ func (h *Inbound) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 	metadata.Destination = destination
 	h.logger.InfoContext(ctx, "inbound connection from ", metadata.Source)
 	userID, _ := auth.UserFromContext[int](ctx)
-	if userName := h.userNameList[userID]; userName != "" {
+	userName := ""
+	if userID >= 0 && userID < len(h.userNameList) {
+		userName = h.userNameList[userID]
+	}
+	if userName != "" {
 		metadata.User = userName
 		h.logger.InfoContext(ctx, "[", userName, "] inbound connection to ", metadata.Destination)
 	} else {
@@ -252,7 +256,11 @@ func (h *Inbound) NewPacketConnectionEx(ctx context.Context, conn N.PacketConn, 
 	metadata.Destination = destination
 	h.logger.InfoContext(ctx, "inbound packet connection from ", metadata.Source)
 	userID, _ := auth.UserFromContext[int](ctx)
-	if userName := h.userNameList[userID]; userName != "" {
+	userName := ""
+	if userID >= 0 && userID < len(h.userNameList) {
+		userName = h.userNameList[userID]
+	}
+	if userName != "" {
 		metadata.User = userName
 		h.logger.InfoContext(ctx, "[", userName, "] inbound packet connection to ", metadata.Destination)
 	} else {

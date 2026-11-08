@@ -53,7 +53,7 @@ func TestH_V2RayTransportXHTTPMissingPadding(t *testing.T) {
 		`{"type":"xhttp","x_padding_bytes":""}`,
 		`{"type":"xhttp","x_padding_bytes":"0"}`,
 		`{"type":"xhttp","x_padding_bytes":0}`,
-		`{"type":"xhttp","x_padding_bytes":"1-2","download":{"x_padding_bytes":""}}`,
+		`{"type":"xhttp","x_padding_bytes":"1-2","download":{"server":"127.0.0.1","server_port":443,"x_padding_bytes":""}}`,
 	} {
 		options, err := hUnmarshalTransport(t, content)
 		require.NoError(t, err, content)

@@ -73,5 +73,8 @@ func (s *Server) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 }
 
 func (s *Server) StatsService() adapter.ConnectionTracker {
+	if s.statsService == nil {
+		return nil
+	}
 	return s.statsService
 }

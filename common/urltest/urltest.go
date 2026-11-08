@@ -134,7 +134,22 @@ func URLTest(ctx context.Context, link string, detour N.Dialer) (uint16, error) 
 	return urlTest(ctx, link, detour)
 }
 
-func urlTest(ctx context.Context, link string, detour N.Dialer) (t uint16, err error) {
+// URLTestWithMethod probes using the specified HTTP method, defaulting to HEAD.
+func URLTestWithMethod(ctx context.Context, link, method string, detour N.Dialer) (uint16, error) {
+	if method == "" || method == http.MethodHead {
+		return URLTest(ctx, link, detour)
+	}
+	if detour == nil {
+		return 0, fmt.Errorf("urltest dialer is nil")
+	}
+	return urlTestWithMethod(ctx, link, method, detour)
+}
+
+func urlTest(ctx context.Context, link string, detour N.Dialer) (uint16, error) {
+	return urlTestWithMethod(ctx, link, http.MethodHead, detour)
+}
+
+func urlTestWithMethod(ctx context.Context, link, method string, detour N.Dialer) (t uint16, err error) {
 	if link == "" {
 		link = "https://www.gstatic.com/generate_204"
 	}
@@ -162,12 +177,13 @@ func urlTest(ctx context.Context, link string, detour N.Dialer) (t uint16, err e
 	if N.NeedHandshakeForWrite(instance) {
 		start = time.Now()
 	}
-	req, err := http.NewRequest(http.MethodHead, link, nil)
+	req, err := http.NewRequestWithContext(ctx, method, link, nil)
 	if err != nil {
 		return
 	}
 	select {
 	case <-ctx.Done():
+		err = ctx.Err()
 		return
 	default:
 	}
@@ -189,6 +205,7 @@ func urlTest(ctx context.Context, link string, detour N.Dialer) (t uint16, err e
 	defer client.CloseIdleConnections()
 	select {
 	case <-ctx.Done():
+		err = ctx.Err()
 		return
 	default:
 	}

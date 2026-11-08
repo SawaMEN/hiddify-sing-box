@@ -77,6 +77,8 @@ type InboundOptions struct {
 }
 
 type ListenOptions struct {
+	// FinalMask applies Xray-compatible TCP masks before the transport handshake.
+	FinalMask            *FinalMaskOptions  `json:"final_mask,omitempty"`
 	Listen               *badoption.Addr    `json:"listen,omitempty"`
 	ListenPort           uint16             `json:"listen_port,omitempty"`
 	BindInterface        string             `json:"bind_interface,omitempty"`

@@ -214,12 +214,25 @@ func (c CurvePreference) DescribeSchema(builder schema.Builder) (*schema.Node, e
 	return schema.StringEnum("P256", "P384", "P521", "X25519", "X25519MLKEM768"), nil
 }
 
+type RealityLimitFallback struct {
+	AfterBytes       int64 `json:"after_bytes,omitempty"`
+	BytesPerSec      int64 `json:"bytes_per_sec,omitempty"`
+	BurstBytesPerSec int64 `json:"burst_bytes_per_sec,omitempty"`
+}
+
 type InboundRealityOptions struct {
-	Enabled           bool                           `json:"enabled,omitempty"`
-	Handshake         InboundRealityHandshakeOptions `json:"handshake,omitempty"`
-	PrivateKey        string                         `json:"private_key,omitempty"`
-	ShortID           badoption.Listable[string]     `json:"short_id,omitempty"`
-	MaxTimeDifference badoption.Duration             `json:"max_time_difference,omitempty"`
+	Mldsa65Seed           string                         `json:"mldsa65_seed,omitempty"`
+	Enabled               bool                           `json:"enabled,omitempty"`
+	Handshake             InboundRealityHandshakeOptions `json:"handshake,omitempty"`
+	PrivateKey            string                         `json:"private_key,omitempty"`
+	ShortID               badoption.Listable[string]     `json:"short_id,omitempty"`
+	MaxTimeDifference     badoption.Duration             `json:"max_time_difference,omitempty"`
+	ServerNames           []string                       `json:"server_names,omitempty"`
+	MinClientVersion      string                         `json:"min_client_version,omitempty"`
+	MaxClientVersion      string                         `json:"max_client_version,omitempty"`
+	Xver                  uint8                          `json:"xver,omitempty"`
+	LimitFallbackUpload   RealityLimitFallback           `json:"limit_fallback_upload,omitempty"`
+	LimitFallbackDownload RealityLimitFallback           `json:"limit_fallback_download,omitempty"`
 }
 
 type InboundRealityHandshakeOptions struct {
@@ -270,8 +283,9 @@ func (o *OutboundUTLSOptions) IsUnsafe() bool {
 }
 
 type OutboundRealityOptions struct {
-	Enabled   bool   `json:"enabled,omitempty"`
-	PublicKey string `json:"public_key,omitempty"`
-	ShortID   string `json:"short_id,omitempty"`
-	KeyShare  string `json:"key_share,omitempty"` // H: "", "hybrid" or "classical"
+	Mldsa65Verify string `json:"mldsa65_verify,omitempty"`
+	Enabled       bool   `json:"enabled,omitempty"`
+	PublicKey     string `json:"public_key,omitempty"`
+	ShortID       string `json:"short_id,omitempty"`
+	KeyShare      string `json:"key_share,omitempty"` // H: "", "hybrid" or "classical"
 }

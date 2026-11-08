@@ -170,14 +170,16 @@ type ConnMetadata struct {
 
 // Connection is a KCP connection over UDP.
 type Connection struct {
-	meta       ConnMetadata
-	closer     io.Closer
-	rd         time.Time
-	wd         time.Time // write deadline
-	since      int64
-	dataInput  *signal.Notifier
-	dataOutput *signal.Notifier
-	Config     *Config
+	deadlineAccess sync.RWMutex
+	terminateOnce  sync.Once
+	meta           ConnMetadata
+	closer         io.Closer
+	rd             time.Time
+	wd             time.Time // write deadline
+	since          int64
+	dataInput      *signal.Notifier
+	dataOutput     *signal.Notifier
+	Config         *Config
 
 	state            State
 	stateBeginTime   atomic.Uint32
@@ -284,8 +286,8 @@ func (c *Connection) waitForDataInput() error {
 	}
 
 	duration := time.Second * 16
-	if !c.rd.IsZero() {
-		duration = time.Until(c.rd)
+	if deadline := c.readDeadline(); !deadline.IsZero() {
+		duration = time.Until(deadline)
 		if duration < 0 {
 			return ErrIOTimeout
 		}
@@ -297,7 +299,7 @@ func (c *Connection) waitForDataInput() error {
 	select {
 	case <-c.dataInput.Wait():
 	case <-timeout.C:
-		if !c.rd.IsZero() && c.rd.Before(time.Now()) {
+		if deadline := c.readDeadline(); !deadline.IsZero() && !time.Now().Before(deadline) {
 			return ErrIOTimeout
 		}
 	}
@@ -338,8 +340,8 @@ func (c *Connection) waitForDataOutput() error {
 	}
 
 	duration := time.Second * 16
-	if !c.wd.IsZero() {
-		duration = time.Until(c.wd)
+	if deadline := c.writeDeadline(); !deadline.IsZero() {
+		duration = time.Until(deadline)
 		if duration < 0 {
 			return ErrIOTimeout
 		}
@@ -351,7 +353,7 @@ func (c *Connection) waitForDataOutput() error {
 	select {
 	case <-c.dataOutput.Wait():
 	case <-timeout.C:
-		if !c.wd.IsZero() && c.wd.Before(time.Now()) {
+		if deadline := c.writeDeadline(); !deadline.IsZero() && !time.Now().Before(deadline) {
 			return ErrIOTimeout
 		}
 	}
@@ -423,7 +425,15 @@ func (c *Connection) writeMultiBufferInternal(reader io.Reader) error {
 
 func (c *Connection) SetState(state State) {
 	current := c.Elapsed()
-	atomic.StoreInt32((*int32)(&c.state), int32(state))
+	for {
+		old := atomic.LoadInt32((*int32)(&c.state))
+		if State(old) == StateTerminated || State(old) == state {
+			return
+		}
+		if atomic.CompareAndSwapInt32((*int32)(&c.state), old, int32(state)) {
+			break
+		}
+	}
 	c.stateBeginTime.Store(current)
 	errors.LogDebug(context.Background(), "#", c.meta.Conversation, " entering state ", state, " at ", current)
 
@@ -503,7 +513,10 @@ func (c *Connection) SetReadDeadline(t time.Time) error {
 	if c == nil || c.State() != StateActive {
 		return ErrClosedConnection
 	}
+	c.deadlineAccess.Lock()
 	c.rd = t
+	c.deadlineAccess.Unlock()
+	c.dataInput.Signal()
 	return nil
 }
 
@@ -512,7 +525,10 @@ func (c *Connection) SetWriteDeadline(t time.Time) error {
 	if c == nil || c.State() != StateActive {
 		return ErrClosedConnection
 	}
+	c.deadlineAccess.Lock()
 	c.wd = t
+	c.deadlineAccess.Unlock()
+	c.dataOutput.Signal()
 	return nil
 }
 
@@ -525,15 +541,17 @@ func (c *Connection) Terminate() {
 	if c == nil {
 		return
 	}
-	errors.LogInfo(context.Background(), "#", c.meta.Conversation, " terminating connection to ", c.RemoteAddr())
-
-	// v.SetState(StateTerminated)
-	c.dataInput.Signal()
-	c.dataOutput.Signal()
-
-	c.closer.Close()
-	c.sendingWorker.Release()
-	c.receivingWorker.Release()
+	c.terminateOnce.Do(func() {
+		errors.LogInfo(context.Background(), "#", c.meta.Conversation, " terminating connection to ", c.RemoteAddr())
+		atomic.StoreInt32((*int32)(&c.state), int32(StateTerminated))
+		c.dataInput.Signal()
+		c.dataOutput.Signal()
+		c.dataUpdater.WakeUp()
+		c.pingUpdater.WakeUp()
+		_ = c.closer.Close()
+		c.sendingWorker.Release()
+		c.receivingWorker.Release()
+	})
 }
 
 func (c *Connection) HandleOption(opt SegmentOption) {
@@ -655,4 +673,16 @@ func (c *Connection) Ping(current uint32, cmd Command) {
 	c.output.Write(seg)
 	c.lastPingTime.Store(current)
 	seg.Release()
+}
+
+func (c *Connection) readDeadline() time.Time {
+	c.deadlineAccess.RLock()
+	defer c.deadlineAccess.RUnlock()
+	return c.rd
+}
+
+func (c *Connection) writeDeadline() time.Time {
+	c.deadlineAccess.RLock()
+	defer c.deadlineAccess.RUnlock()
+	return c.wd
 }

@@ -3,6 +3,7 @@ package trojan
 import (
 	"context"
 	"encoding/binary"
+	"io"
 	"net"
 
 	"github.com/sagernet/sing/common/auth"
@@ -64,8 +65,20 @@ func (s *Service[K]) NewConnection(ctx context.Context, conn net.Conn, source M.
 	n, err := conn.Read(key[:])
 	if err != nil {
 		return err
-	} else if n != KeyLength {
-		return s.fallback(ctx, conn, source, key[:n], E.New("bad request size"), onClose)
+	}
+	if n != KeyLength {
+		// TCP and upgraded HTTP streams may split the authentication key.
+		// Preserve prompt fallback for non-Trojan prefixes such as HTTP requests.
+		for _, b := range key[:n] {
+			if !(b >= '0' && b <= '9' || b >= 'a' && b <= 'f') {
+				return s.fallback(ctx, conn, source, key[:n], E.New("bad request size"), onClose)
+			}
+		}
+		extra, readErr := io.ReadFull(conn, key[n:])
+		n += extra
+		if readErr != nil {
+			return s.fallback(ctx, conn, source, key[:n], E.Cause(readErr, "read authentication key"), onClose)
+		}
 	}
 
 	if user, loaded := s.keys[key]; loaded {

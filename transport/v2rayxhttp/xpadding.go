@@ -40,11 +40,11 @@ type XPaddingConfig struct {
 }
 
 func randStringFromCharset(n int, charset string) (string, bool) {
-	if n <= 0 || len(charset) == 0 {
+	if n <= 0 || len(charset) == 0 || len(charset) > 256 {
 		return "", false
 	}
 	m := len(charset)
-	limit := byte(256 - (256 % m))
+	limit := 256 - (256 % m)
 	result := make([]byte, n)
 	i := 0
 	buf := make([]byte, 256)
@@ -53,7 +53,7 @@ func randStringFromCharset(n int, charset string) (string, bool) {
 			return "", false
 		}
 		for _, rb := range buf {
-			if rb >= limit {
+			if int(rb) >= limit {
 				continue
 			}
 			result[i] = charset[int(rb)%m]

@@ -53,9 +53,18 @@ type Outbound struct {
 	xudp            bool
 	encryption      *encryption.ClientInstance
 	vision          bool
+	preconnect      *preconnectPool
 }
 
 func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.VLESSOutboundOptions) (adapter.Outbound, error) {
+	// Refuse to ignore reverse and Vision security configuration until the
+	// required sing-vmess extensions are available in the native runtime.
+	if options.Reverse != nil {
+		return nil, E.New("VLESS reverse outbound requires the native reverse bridge")
+	}
+	if len(options.Testseed) != 0 {
+		return nil, E.New("VLESS vision testseed requires the native sing-vmess protection extension")
+	}
 	if options.Transport != nil && options.Transport.Type == "xdrive" {
 		if options.Encryption == "" || options.Encryption == "none" {
 			return nil, E.New("XDrive requires VLESS encryption")
@@ -125,6 +134,15 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 	if err != nil {
 		return nil, err
 	}
+	if options.Testpre > 64 {
+		return nil, E.New("testpre must not exceed 64")
+	}
+	if options.Testpre > 0 {
+		if !outbound.vision || muxOpts.Enabled {
+			return nil, E.New("testpre requires Vision without multiplex")
+		}
+		outbound.preconnect = newPreconnectPool(ctx, int(options.Testpre), (*vlessDialer)(outbound).dialServer)
+	}
 	return outbound, nil
 }
 
@@ -167,6 +185,9 @@ func (h *Outbound) MultiplexEnabled() bool {
 }
 
 func (h *Outbound) InterfaceUpdated(ctx context.Context) {
+	if h.preconnect != nil {
+		h.preconnect.Reset()
+	}
 	if h.transport != nil {
 		h.transport.Close()
 	}
@@ -186,6 +207,9 @@ func (h *Outbound) SetKeepIdleConnections(keep bool) {
 }
 
 func (h *Outbound) CloseIdleConnections() {
+	if h.preconnect != nil {
+		h.preconnect.Reset()
+	}
 	transportKeeper, isTransportKeeper := h.transport.(adapter.IdleConnectionKeeper)
 	if isTransportKeeper {
 		transportKeeper.CloseIdleConnections()
@@ -196,39 +220,42 @@ func (h *Outbound) CloseIdleConnections() {
 }
 
 func (h *Outbound) Close() error {
+	if h.preconnect != nil {
+		h.preconnect.Close()
+	}
 	return common.Close(common.PtrOrNil(h.multiplexDialer), h.transport)
+}
+
+// handshakeOnceConn owns transport closure across the encryption layer,
+// cancellation and failure cleanup. The handshake may close its argument itself.
+type handshakeOnceConn struct {
+	net.Conn
+	once     sync.Once
+	closeErr error
+}
+
+func (c *handshakeOnceConn) Close() error {
+	c.once.Do(func() { c.closeErr = c.Conn.Close() })
+	return c.closeErr
 }
 
 type vlessDialer Outbound
 
-func (h *vlessDialer) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-	ctx, metadata := adapter.ExtendContext(ctx)
-	metadata.Outbound = h.Tag()
-	metadata.Destination = destination
-	var conn net.Conn
-	var baseConn net.Conn
+func (h *vlessDialer) dialServer(ctx context.Context) (conn net.Conn, baseConn net.Conn, err error) {
 	var hookOnce sync.Once
 	if h.vision {
 		ctx = vision.WithHook(ctx, func(tlsConn net.Conn) {
 			if tlsConn == nil || !isVisionTLSConn(tlsConn) {
 				return
 			}
-			hookOnce.Do(func() {
-				baseConn = tlsConn
-			})
+			hookOnce.Do(func() { baseConn = tlsConn })
 		})
 	}
-	var err error
 	if h.transport != nil {
 		conn, err = h.transport.DialContext(ctx)
-		if err == nil && h.vision {
-			if baseConn == nil {
-				// Only set baseConn if the transport delivered a TLS-capable connection
-				if isVisionTLSConn(conn) {
-					h.logger.Warn("Vision enabled but hook was not called by transport, using fallback")
-					baseConn = conn
-				}
-			}
+		if err == nil && h.vision && baseConn == nil && isVisionTLSConn(conn) {
+			h.logger.Warn("Vision enabled but hook was not called by transport, using fallback")
+			baseConn = conn
 		}
 	} else {
 		conn, err = h.dialer.DialContext(ctx, N.NetworkTCP, h.serverAddr)
@@ -237,22 +264,34 @@ func (h *vlessDialer) DialContext(ctx context.Context, network string, destinati
 			conn, err = tls.ClientHandshake(ctx, conn, h.tlsConfig)
 			if err != nil {
 				_ = rawConn.Close()
-				return nil, E.Cause(err, "TLS handshake")
+				return nil, nil, E.Cause(err, "TLS handshake")
 			}
-			if err == nil && h.vision && baseConn == nil {
+			if h.vision && baseConn == nil {
 				baseConn = conn
 			}
 		}
 	}
+	return conn, baseConn, err
+}
+
+func (h *vlessDialer) DialContext(ctx context.Context, network string, destination M.Socksaddr) (result net.Conn, returnErr error) {
+	ctx, metadata := adapter.ExtendContext(ctx)
+	metadata.Outbound = h.Tag()
+	metadata.Destination = destination
+	var conn, baseConn net.Conn
+	var err error
+	if h.preconnect != nil {
+		conn, baseConn, err = h.preconnect.Get(ctx)
+	} else {
+		conn, baseConn, err = h.dialServer(ctx)
+	}
 	if err != nil {
 		return nil, err
 	}
-
 	// Apply encryption if configured
 	if h.encryption != nil {
-		rawConn := conn
-		var closeOnce sync.Once
-		closeRaw := func() { closeOnce.Do(func() { _ = rawConn.Close() }) }
+		rawConn := &handshakeOnceConn{Conn: conn}
+		closeRaw := func() { _ = rawConn.Close() }
 		// Handshake blocks on reads: cancel the raw socket once if ctx ends.
 		stopHandshake := context.AfterFunc(ctx, closeRaw)
 		encryptedConn, handshakeErr := h.encryption.Handshake(rawConn)
@@ -267,6 +306,13 @@ func (h *vlessDialer) DialContext(ctx context.Context, network string, destinati
 		}
 		conn = encryptedConn
 	}
+	defer func() {
+		// The encryption handshake closes rawConn itself on failure. Install
+		// this cleanup only after it succeeds to avoid double-closing sockets.
+		if returnErr != nil && conn != nil {
+			_ = conn.Close()
+		}
+	}()
 
 	// For Vision: wrap the connection to expose the TLS/encryption connection for vless client
 	var visionBaseConn net.Conn // The connection to pass to Vision (TLS or encryption layer)
@@ -331,7 +377,7 @@ func (h *vlessDialer) DialContext(ctx context.Context, network string, destinati
 	}
 }
 
-func (h *vlessDialer) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
+func (h *vlessDialer) ListenPacket(ctx context.Context, destination M.Socksaddr) (result net.PacketConn, returnErr error) {
 	h.logger.InfoContext(ctx, "outbound packet connection to ", destination)
 	ctx, metadata := adapter.ExtendContext(ctx)
 	metadata.Outbound = h.Tag()
@@ -357,9 +403,8 @@ func (h *vlessDialer) ListenPacket(ctx context.Context, destination M.Socksaddr)
 	}
 	// Apply encryption if configured
 	if h.encryption != nil {
-		rawConn := conn
-		var closeOnce sync.Once
-		closeRaw := func() { closeOnce.Do(func() { _ = rawConn.Close() }) }
+		rawConn := &handshakeOnceConn{Conn: conn}
+		closeRaw := func() { _ = rawConn.Close() }
 		// Handshake blocks on reads: cancel the raw socket once if ctx ends.
 		stopHandshake := context.AfterFunc(ctx, closeRaw)
 		encryptedConn, handshakeErr := h.encryption.Handshake(rawConn)
@@ -374,6 +419,14 @@ func (h *vlessDialer) ListenPacket(ctx context.Context, destination M.Socksaddr)
 		}
 		conn = encryptedConn
 	}
+	defer func() {
+		// Once encryption has succeeded, this method owns the connection
+		// until a packet wrapper is returned. Avoid leaking it when a later
+		// packetaddr or protocol initialization step fails.
+		if returnErr != nil && conn != nil {
+			_ = conn.Close()
+		}
+	}()
 	if h.xudp {
 		return h.client.DialEarlyXUDPPacketConn(conn, destination)
 	} else if h.packetAddr {
@@ -419,14 +472,16 @@ func (c *visionConnWrapper) ReaderReplaceable() bool {
 	if replacer, ok := c.Conn.(N.ReaderWithUpstream); ok {
 		return replacer.ReaderReplaceable()
 	}
-	return true
+	// Never skip an opaque wrapper: it may be an active encryption layer.
+	return false
 }
 
 func (c *visionConnWrapper) WriterReplaceable() bool {
 	if replacer, ok := c.Conn.(N.WriterWithUpstream); ok {
 		return replacer.WriterReplaceable()
 	}
-	return true
+	// Never skip an opaque wrapper: it may be an active encryption layer.
+	return false
 }
 
 // isVisionTLSConn returns true when the provided connection exposes TLS semantics Vision expects.

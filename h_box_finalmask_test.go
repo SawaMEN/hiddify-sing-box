@@ -17,13 +17,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// An outbound with final_mask dials through the Xray masks: the first packet reaches the server
-// in fragments and the connection still works end to end.
+// An outbound with final_mask dials through the Xray masks and works end to end.
+// Fragment sizes are verified at the raw Write layer, not at TCP read boundaries.
 func TestH_OutboundFinalMask(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	defer listener.Close()
-	reads := make(chan int, 64)
 	go func() {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -34,10 +33,8 @@ func TestH_OutboundFinalMask(t *testing.T) {
 		for {
 			n, err := conn.Read(buf)
 			if err != nil {
-				close(reads)
 				return
 			}
-			reads <- n
 			conn.Write(buf[:n])
 		}
 	}()
@@ -74,7 +71,9 @@ func TestH_OutboundFinalMask(t *testing.T) {
 	_, err = io.ReadFull(conn, got)
 	require.NoError(t, err)
 	require.Equal(t, payload, got)
-	require.LessOrEqual(t, <-reads, 4, "the first packet must arrive fragmented")
+	// TCP is a byte stream: recv boundaries do not preserve the sender's
+	// fragment Write calls. Fragment sizes are verified by the recording
+	// connection in finalmask.TestFragmentSplitsFirstPacket.
 }
 
 func TestH_OutboundFinalMaskInvalid(t *testing.T) {

@@ -278,7 +278,6 @@ func TestH_VisionConnWrapper(t *testing.T) {
 }
 
 func TestH_VisionConnWrapperDoesNotBypassEncryption(t *testing.T) {
-	t.Skip("BUG: visionConnWrapper reports ReaderReplaceable/WriterReplaceable=true when the wrapped conn (e.g. encryption.CommonConn) does not implement them, so N.UnwrapReader/UnwrapWriter skip the encryption layer and go straight to the TLS upstream (outbound.go:377-389)")
 	t.Parallel()
 	a, b := net.Pipe()
 	defer a.Close()

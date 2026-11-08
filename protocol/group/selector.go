@@ -40,14 +40,16 @@ type Selector struct {
 	defaultTag                   string
 	outbounds                    map[string]adapter.Outbound
 	selected                     common.TypedValue[adapter.Outbound]
+	balance                      *balanceState
 	history                      *urltest.HistoryStorage
 	interruptGroup               *interrupt.Group
 	interruptExternalConnections bool
 }
 
 func NewSelector(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.SelectorOutboundOptions) (adapter.Outbound, error) {
+	var err error
 	outbound := &Selector{
-		Adapter:                      outbound.NewAdapter(C.TypeSelector, tag, nil, options.Outbounds),
+		Adapter:                      outbound.NewAdapter(C.TypeSelector, tag, nil, selectorDependencies(options)),
 		ctx:                          ctx,
 		outbound:                     service.FromContext[adapter.OutboundManager](ctx),
 		logger:                       logger,
@@ -66,10 +68,30 @@ func NewSelector(ctx context.Context, router adapter.Router, logger log.ContextL
 			return nil, E.New("duplicate tag: ", tag)
 		}
 	}
+	if options.Balancer != nil {
+		if options.Balancer.Fallback == tag && tag != "" {
+			return nil, E.New("balancer cannot reference itself as fallback")
+		}
+		outbound.balance, err = newBalanceState(ctx, *options.Balancer)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return outbound, nil
 }
 
+func selectorDependencies(options option.SelectorOutboundOptions) []string {
+	dependencies := append([]string(nil), options.Outbounds...)
+	if options.Balancer != nil && options.Balancer.Fallback != "" && !slices.Contains(dependencies, options.Balancer.Fallback) {
+		dependencies = append(dependencies, options.Balancer.Fallback)
+	}
+	return dependencies
+}
+
 func (s *Selector) Network() []string {
+	if s.balance != nil {
+		return []string{N.NetworkTCP, N.NetworkUDP}
+	}
 	selected := s.selected.Load()
 	if selected == nil {
 		return []string{N.NetworkTCP, N.NetworkUDP}
@@ -78,6 +100,12 @@ func (s *Selector) Network() []string {
 }
 
 func (s *Selector) Start(stage adapter.StartStage, scope *adapter.Scope) error {
+	if stage == adapter.StartStatePostStart {
+		if s.balance != nil {
+			s.balance.postStart(s.outbounds)
+		}
+		return nil
+	}
 	if stage != adapter.StartStateStart {
 		return nil
 	}
@@ -87,6 +115,17 @@ func (s *Selector) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 			return E.New("outbound ", i, " not found: ", tag)
 		}
 		s.outbounds[tag] = detour
+	}
+	if s.balance != nil {
+		if fallback := s.balance.config.Fallback; fallback != "" {
+			detour, loaded := s.outbound.Outbound(fallback)
+			if !loaded {
+				return E.New("balancer fallback outbound not found: ", fallback)
+			}
+			s.outbounds[fallback] = detour
+		}
+		s.selected.Store(s.outbounds[s.tags[0]])
+		return nil
 	}
 
 	if s.Tag() != "" {
@@ -121,6 +160,13 @@ func (s *Selector) All() []string {
 }
 
 func (s *Selector) Selected(network string) adapter.Outbound {
+	if s.balance != nil {
+		tag, err := s.balance.pick(s.tags)
+		if err != nil {
+			return nil
+		}
+		return s.outbounds[tag]
+	}
 	return s.selected.Load()
 }
 
@@ -129,6 +175,9 @@ func (s *Selector) AttachConnection(closer io.Closer) func() {
 }
 
 func (s *Selector) References() []string {
+	if s.balance != nil {
+		return selectorDependencies(option.SelectorOutboundOptions{Outbounds: s.tags, Balancer: &s.balance.config})
+	}
 	selected := s.selected.Load()
 	if selected == nil {
 		return s.tags[:1]
@@ -137,6 +186,9 @@ func (s *Selector) References() []string {
 }
 
 func (s *Selector) SelectOutbound(tag string) bool {
+	if s.balance != nil {
+		return false
+	}
 	detour, loaded := s.outbounds[tag]
 	if !loaded {
 		return false
@@ -167,7 +219,11 @@ func (s *Selector) SelectOutbound(tag string) bool {
 }
 
 func (s *Selector) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-	conn, err := s.selected.Load().DialContext(ctx, network, destination)
+	detour := s.Selected(network)
+	if detour == nil {
+		return nil, E.New("balancer has no healthy outbound")
+	}
+	conn, err := detour.DialContext(ctx, network, destination)
 	if err != nil {
 		return nil, err
 	}
@@ -175,11 +231,22 @@ func (s *Selector) DialContext(ctx context.Context, network string, destination 
 }
 
 func (s *Selector) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
-	conn, err := s.selected.Load().ListenPacket(ctx, destination)
+	detour := s.Selected(N.NetworkUDP)
+	if detour == nil {
+		return nil, E.New("balancer has no healthy outbound")
+	}
+	conn, err := detour.ListenPacket(ctx, destination)
 	if err != nil {
 		return nil, err
 	}
 	return s.interruptGroup.NewPacketConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), nil
+}
+
+func (s *Selector) Close() error {
+	if s.balance != nil {
+		return s.balance.Close()
+	}
+	return nil
 }
 
 func RealTag(detour adapter.Outbound, network string) string {
