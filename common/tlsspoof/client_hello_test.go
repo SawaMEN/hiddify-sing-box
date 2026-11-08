@@ -69,10 +69,10 @@ func TestBuildFakeClientHello_NoPostQuantumKeyShare(t *testing.T) {
 		pos += n
 		return value
 	}
-	take(2 + 32) // client_version + random
-	take(int(take(1)[0])) // legacy_session_id
+	take(2 + 32)                                // client_version + random
+	take(int(take(1)[0]))                       // legacy_session_id
 	take(int(binary.BigEndian.Uint16(take(2)))) // cipher_suites
-	take(int(take(1)[0])) // compression_methods
+	take(int(take(1)[0]))                       // compression_methods
 	extensions := take(int(binary.BigEndian.Uint16(take(2))))
 	require.Equal(t, len(record), pos, "trailing handshake bytes")
 	foundGroups, foundShare := false, false
