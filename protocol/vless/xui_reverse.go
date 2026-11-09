@@ -46,6 +46,7 @@ func reverseLink(c net.Conn) *XT.Link {
 }
 
 func (s *reverseStream) ReadMultiBuffer() (XB.MultiBuffer, error) { return s.reader.ReadMultiBuffer() }
+
 func (s *reverseStream) WriteMultiBuffer(b XB.MultiBuffer) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
@@ -378,9 +379,9 @@ type reverseDispatcher struct {
 	draining atomic.Bool
 }
 
-func (d *reverseDispatcher) Type() any { return routing.DispatcherType() }
-func (d *reverseDispatcher) Start() error      { return nil }
-func (d *reverseDispatcher) Close() error      { return nil }
+func (d *reverseDispatcher) Type() any    { return routing.DispatcherType() }
+func (d *reverseDispatcher) Start() error { return nil }
+func (d *reverseDispatcher) Close() error { return nil }
 func (d *reverseDispatcher) Dispatch(ctx context.Context, dest XN.Destination) (*XT.Link, error) {
 	if dest.Address.Family().IsDomain() && dest.Address.Domain() == "reverse" {
 		upR, upW := XP.New(XP.WithSizeLimit(16384))
