@@ -35,5 +35,5 @@ jobs:
           go test -race -tags with_utls \
             github.com/sagernet/sing-vmess/vless \
             github.com/sagernet/sing-box/protocol/vless \
-            -run '^(TestH_Vision|TestXUIPanelVision|TestXUIPanelUnsupportedVLESS)' \
+            -run '^(TestH_Vision|TestXUIPanelVision|TestXUIPanelUnsupportedVLESS|TestXUIReverse)' \
             -count=1 -timeout=2m
