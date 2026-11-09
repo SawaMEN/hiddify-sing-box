@@ -68,7 +68,7 @@ func TestXUIPanelRealityMLDSASignatureBinding(t *testing.T) {
 func TestXUIPanelRealityMLDSAServerRejectsInvalidSeed(t *testing.T) {
 	_, err := NewRealityServer(context.Background(), nil, option.InboundTLSOptions{
 		Reality: &option.InboundRealityOptions{
-			PrivateKey: base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)),
+			PrivateKey:  base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)),
 			Mldsa65Seed: "configured-but-unsupported",
 		},
 	})
