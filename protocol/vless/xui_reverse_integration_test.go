@@ -20,14 +20,14 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/service"
-    XM "github.com/xtls/xray-core/common/mux"
-    XS "github.com/xtls/xray-core/common/session"
+
+	XM "github.com/xtls/xray-core/common/mux"
+	XS "github.com/xtls/xray-core/common/session"
 )
 
 // Native end-to-end parity for the retired 3x-ui reverse_runtime_test.go.in.
 // Exercise the real authenticated VLESS wire and Xray mux rather than merely
 // constructing a reverse portal with no bridge.
-
 const reverseUUID = "11111111-1111-4111-8111-111111111111"
 
 type reverseTestRouter struct {
@@ -123,7 +123,7 @@ func TestXUIPanelReverseTCPUDPAndStats(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer worker.Close()
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		c, err := portal.DialContext(ctx, "tcp", M.ParseSocksaddr("example.org:443"))
 		if err != nil {
 			t.Fatal(err)
@@ -243,4 +243,3 @@ func TestXUIPanelReverseMissingPortal(t *testing.T) {
 		t.Fatal("unknown portal authorized")
 	}
 }
-
