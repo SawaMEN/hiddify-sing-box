@@ -39,6 +39,7 @@ func (r *reverseTestRouter) RouteConnectionEx(_ context.Context, c net.Conn, m a
 	r.metadata <- m
 	go func() { _, err := io.Copy(c, c); c.Close(); close(err) }()
 }
+
 func (r *reverseTestRouter) RoutePacketConnectionEx(_ context.Context, c N.PacketConn, m adapter.InboundContext, close N.CloseHandlerFunc) {
 	r.metadata <- m
 	go func() {
@@ -231,6 +232,7 @@ func TestXUIPanelReverseAuthorization(t *testing.T) {
 		})
 	}
 }
+
 func TestXUIPanelReverseMissingPortal(t *testing.T) {
 	ctx := service.ContextWithDefaultRegistry(context.Background())
 	wrong := &reversePortal{Adapter: outbound.NewAdapter("vless-reverse", "different", nil, nil)}

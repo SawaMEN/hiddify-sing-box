@@ -26,6 +26,7 @@ func TestXUIPanelReverseNativeBridgeReconnectAndShutdown(t *testing.T) {
 		t.Run("TLS-"+flow, func(t *testing.T) { testReverseNativeBridge(t, flow) })
 	}
 }
+
 func testReverseNativeBridge(t *testing.T, flow string) {
 	ctx, cancel := context.WithCancel(service.ContextWithDefaultRegistry(context.Background()))
 	defer cancel()
