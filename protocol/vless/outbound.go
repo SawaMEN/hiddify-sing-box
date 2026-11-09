@@ -57,13 +57,9 @@ type Outbound struct {
 }
 
 func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.VLESSOutboundOptions) (adapter.Outbound, error) {
-	// Refuse to ignore reverse and Vision security configuration until the
-	// required sing-vmess extensions are available in the native runtime.
+	// Reverse remains disabled until the native portal and bridge are ready.
 	if options.Reverse != nil {
 		return nil, E.New("VLESS reverse outbound requires the native reverse bridge")
-	}
-	if len(options.Testseed) != 0 {
-		return nil, E.New("VLESS vision testseed requires the native sing-vmess protection extension")
 	}
 	if options.Transport != nil && options.Transport.Type == "xdrive" {
 		if options.Encryption == "" || options.Encryption == "none" {
@@ -129,6 +125,9 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 	outbound.client, err = vless.NewClient(options.UUID, options.Flow, logger)
 	if err != nil {
 		return nil, err
+	}
+	if err := outbound.client.SetVisionTestseed(options.Testseed); err != nil {
+		return nil, E.Cause(err, "invalid VLESS vision testseed")
 	}
 	outbound.multiplexDialer, err = mux.NewClientWithOptions((*vlessDialer)(outbound), logger, muxOpts)
 	if err != nil {
