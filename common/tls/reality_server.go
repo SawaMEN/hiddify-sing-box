@@ -23,6 +23,7 @@ import (
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/common/ntp"
 
+	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
 	utls "github.com/metacubex/utls"
 )
 
@@ -34,9 +35,6 @@ type RealityServerConfig struct {
 }
 
 func NewRealityServer(ctx context.Context, logger log.ContextLogger, options option.InboundTLSOptions) (ServerConfig, error) {
-	if options.Reality != nil && options.Reality.Mldsa65Seed != "" {
-		return nil, E.New("REALITY mldsa65_seed requires ML-DSA-65 signing support in the uTLS dependency")
-	}
 	var tlsConfig utls.RealityConfig
 
 	if options.CertificateProvider != nil {
@@ -116,6 +114,10 @@ func NewRealityServer(ctx context.Context, logger log.ContextLogger, options opt
 		return nil, E.New("invalid private key")
 	}
 	tlsConfig.PrivateKey = privateKey
+	tlsConfig.Mldsa65Key, err = parseRealityMLDSAServerKey(options.Reality.Mldsa65Seed, privateKey)
+	if err != nil {
+		return nil, err
+	}
 	if options.Reality.Xver > 2 {
 		return nil, E.New("invalid REALITY xver")
 	}
@@ -326,4 +328,21 @@ func parseRealityFallbackLimit(value option.RealityLimitFallback) (utls.RealityL
 		BytesPerSec:      uint64(value.BytesPerSec),
 		BurstBytesPerSec: uint64(value.BurstBytesPerSec),
 	}, nil
+}
+
+// parseRealityMLDSAServerKey derives the independent ML-DSA signing key and
+// refuses malformed or reused REALITY key material before transport startup.
+func parseRealityMLDSAServerKey(encoded string, realityPrivateKey []byte) ([]byte, error) {
+	if encoded == "" {
+		return nil, nil
+	}
+	seed, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil || len(seed) != mldsa65.SeedSize {
+		return nil, E.New("invalid REALITY mldsa65_seed")
+	}
+	if bytes.Equal(seed, realityPrivateKey) {
+		return nil, E.New("REALITY mldsa65_seed must differ from private_key")
+	}
+	_, key := mldsa65.NewKeyFromSeed((*[32]byte)(seed))
+	return key.Bytes(), nil
 }

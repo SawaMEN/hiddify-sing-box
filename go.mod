@@ -391,7 +391,7 @@ replace github.com/sagernet/gvisor => ./replace/gvisor
 
 replace github.com/sagernet/sing-mux => ./replace/sing-mux
 
-replace github.com/metacubex/utls => github.com/Leadaxe/utls-lx v1.8.8-0.20261011005638-ad69b191e2f8
+replace github.com/metacubex/utls => ./replace/utls-native
 
 replace masterdnsvpn-go => ./replace/MasterDnsVPN
 
