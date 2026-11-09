@@ -123,8 +123,18 @@ func TestH_VLESSVisionAndEncryptionModes(t *testing.T) {
 
 func hStartVLESSBox(t *testing.T, testCase hVLESSCase, certPEM, keyPEM string) int {
 	t.Helper()
-	vlessPort := hFreeTCPPort(t)
-	mixedPort := hFreeTCPPort(t)
+	// Reserve both ephemeral ports simultaneously. Two consecutive calls to
+	// hFreeTCPPort may return the same number after the first socket closes,
+	// causing the VLESS and mixed inbounds to collide during instance.Start.
+	vlessReservation, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	mixedReservation, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	vlessPort := vlessReservation.Addr().(*net.TCPAddr).Port
+	mixedPort := mixedReservation.Addr().(*net.TCPAddr).Port
+	require.NotEqual(t, vlessPort, mixedPort)
+	require.NoError(t, vlessReservation.Close())
+	require.NoError(t, mixedReservation.Close())
 	user := map[string]any{"name": "u", "uuid": hVLESSUUID, "flow": testCase.flow}
 	inbound := map[string]any{"type": "vless", "tag": "vless-in", "listen": "127.0.0.1", "listen_port": vlessPort, "users": []any{user}}
 	outbound := map[string]any{"type": "vless", "tag": "vless-out", "server": "127.0.0.1", "server_port": vlessPort, "uuid": hVLESSUUID, "flow": testCase.flow}
