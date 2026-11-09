@@ -82,7 +82,24 @@ func TestH_KCPOptions(t *testing.T) {
 	require.Error(t, err)
 	_, err = newConfig(option.V2RayKCPOptions{TTI: 5})
 	require.Error(t, err)
+	for _, tc := range []struct {
+		name string
+		opts option.V2RayKCPOptions
+	}{
+		{"mtu-overflow", option.V2RayKCPOptions{MTU: 65535}},
+		{"uplink-overflow", option.V2RayKCPOptions{UplinkCapacity: 4096}},
+		{"downlink-overflow", option.V2RayKCPOptions{DownlinkCapacity: 4096}},
+		{"window-smaller-than-mtu", option.V2RayKCPOptions{MTU: 1400, MaxSendingWindow: 1399}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := newConfig(tc.opts)
+			require.Error(t, err)
+		})
+	}
 	config, err := newConfig(option.V2RayKCPOptions{})
 	require.NoError(t, err)
 	require.EqualValues(t, 1350, config.Mtu)
+	config, err = newConfig(option.V2RayKCPOptions{MTU: 1400, MaxSendingWindow: 1400, UplinkCapacity: 4095, DownlinkCapacity: 4095})
+	require.NoError(t, err)
+	require.EqualValues(t, 1400, config.Mtu)
 }
