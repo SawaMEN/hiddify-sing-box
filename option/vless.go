@@ -14,6 +14,8 @@ type VLESSReverseOptions struct {
 	Tag string `json:"tag"`
 }
 
+type VLESSReversePortalOptions struct{}
+
 type VLESSUser struct {
 	Reverse *VLESSReverseOptions `json:"reverse,omitempty"`
 	Name    string               `json:"name,omitempty"`
