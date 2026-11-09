@@ -3,7 +3,7 @@ package xhttp
 import (
 	"errors"
 	"io"
-	"sort"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -194,7 +194,7 @@ func TestXUIUploadQueueConcurrentReadersPreservePacketSequence(t *testing.T) {
 	for letter := range results {
 		received = append(received, letter)
 	}
-	sort.Slice(received, func(i, j int) bool { return received[i] < received[j] })
+	slices.Sort(received)
 	if string(received) != "abcd" {
 		t.Fatalf("duplicated or missing packets: %q", received)
 	}
