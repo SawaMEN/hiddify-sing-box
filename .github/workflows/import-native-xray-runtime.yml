@@ -1,0 +1,71 @@
+name: One-time import of pinned Xray runtime compatibility source
+
+on:
+  push:
+    branches:
+      - feature/native-xray-runtime-source-20261109
+    paths:
+      - .github/workflows/import-native-xray-runtime.yml
+
+permissions:
+  contents: write
+
+jobs:
+  source-port:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout isolated import branch
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: true
+          fetch-depth: 2
+      - name: Import exact Xray source before applying compatibility changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e third_party/xray-core
+          git clone --filter=blob:none https://github.com/XTLS/Xray-core.git "$RUNNER_TEMP/xray-core"
+          git -C "$RUNNER_TEMP/xray-core" checkout --detach a4a3dff5b20c2faae567b742c172c7b95e75c083
+          test "$(git -C "$RUNNER_TEMP/xray-core" rev-parse HEAD)" = a4a3dff5b20c2faae567b742c172c7b95e75c083
+          test "$(head -n1 "$RUNNER_TEMP/xray-core/go.mod")" = 'module github.com/xtls/xray-core'
+          test -s "$RUNNER_TEMP/xray-core/LICENSE"
+          curl --fail --location --retry 3 --silent --show-error \
+            https://raw.githubusercontent.com/SawaMEN/3x-ui/600c06179de93a85b4e959f1bbb4813ef9e885b5/deploy/hiddify/xray-runtime-compat.patch \
+            -o "$RUNNER_TEMP/xray-runtime-compat.patch"
+          test -s "$RUNNER_TEMP/xray-runtime-compat.patch"
+          git -C "$RUNNER_TEMP/xray-core" apply --check "$RUNNER_TEMP/xray-runtime-compat.patch"
+          git -C "$RUNNER_TEMP/xray-core" apply "$RUNNER_TEMP/xray-runtime-compat.patch"
+          mkdir -p third_party/xray-core
+          cp -a "$RUNNER_TEMP/xray-core/." third_party/xray-core/
+          rm -rf third_party/xray-core/.git third_party/xray-core/.github
+          gofmt -w \
+            third_party/xray-core/common/buf/multi_buffer.go \
+            third_party/xray-core/common/mux/reader.go \
+            third_party/xray-core/common/mux/client.go \
+            third_party/xray-core/app/router/sing_box_observer.go \
+            third_party/xray-core/transport/internet/kcp/receiving.go \
+            third_party/xray-core/transport/internet/kcp/connection.go \
+            third_party/xray-core/transport/internet/finalmask/mkcp/header/conn.go
+          cat > third_party/xray-core/SOURCE_PROVENANCE.md <<'EOF'
+          # Xray runtime pinned native compatibility
+
+          Upstream: https://github.com/XTLS/Xray-core
+          Revision: a4a3dff5b20c2faae567b742c172c7b95e75c083
+          License: original upstream license retained.
+          Overlay: SawaMEN/3x-ui/deploy/hiddify/xray-runtime-compat.patch
+          The overlay is applied once at source import; release builds never patch this module.
+          EOF
+          go mod edit -replace=github.com/xtls/xray-core=./third_party/xray-core
+          git diff --check
+      - name: Commit pinned native Xray runtime source to branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add third_party/xray-core go.mod
+          git diff --cached --check
+          git diff --cached --quiet && { echo 'Xray source import was empty' >&2; exit 1; }
+          git commit -m 'feat(xray): vendor pinned runtime compatibility source without build patches'
+          git push origin HEAD:refs/heads/feature/native-xray-runtime-source-20261109
