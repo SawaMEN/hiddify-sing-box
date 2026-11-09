@@ -114,16 +114,9 @@ func NewRealityServer(ctx context.Context, logger log.ContextLogger, options opt
 		return nil, E.New("invalid private key")
 	}
 	tlsConfig.PrivateKey = privateKey
-	if options.Reality.Mldsa65Seed != "" {
-		seed, err := base64.RawURLEncoding.DecodeString(options.Reality.Mldsa65Seed)
-		if err != nil || len(seed) != mldsa65.SeedSize {
-			return nil, E.New("invalid REALITY mldsa65_seed")
-		}
-		if bytes.Equal(seed, privateKey) {
-			return nil, E.New("REALITY mldsa65_seed must differ from private_key")
-		}
-		_, key := mldsa65.NewKeyFromSeed((*[32]byte)(seed))
-		tlsConfig.Mldsa65Key = key.Bytes()
+	tlsConfig.Mldsa65Key, err = parseRealityMLDSAServerKey(options.Reality.Mldsa65Seed, privateKey)
+	if err != nil {
+		return nil, err
 	}
 	if options.Reality.Xver > 2 {
 		return nil, E.New("invalid REALITY xver")
@@ -335,4 +328,21 @@ func parseRealityFallbackLimit(value option.RealityLimitFallback) (utls.RealityL
 		BytesPerSec:      uint64(value.BytesPerSec),
 		BurstBytesPerSec: uint64(value.BurstBytesPerSec),
 	}, nil
+}
+
+// parseRealityMLDSAServerKey derives the independent ML-DSA signing key and
+// refuses malformed or reused REALITY key material before transport startup.
+func parseRealityMLDSAServerKey(encoded string, realityPrivateKey []byte) ([]byte, error) {
+	if encoded == "" {
+		return nil, nil
+	}
+	seed, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil || len(seed) != mldsa65.SeedSize {
+		return nil, E.New("invalid REALITY mldsa65_seed")
+	}
+	if bytes.Equal(seed, realityPrivateKey) {
+		return nil, E.New("REALITY mldsa65_seed must differ from private_key")
+	}
+	_, key := mldsa65.NewKeyFromSeed((*[32]byte)(seed))
+	return key.Bytes(), nil
 }
