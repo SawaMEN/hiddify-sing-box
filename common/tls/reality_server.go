@@ -23,6 +23,7 @@ import (
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/common/ntp"
 
+	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
 	utls "github.com/metacubex/utls"
 )
 
@@ -34,9 +35,6 @@ type RealityServerConfig struct {
 }
 
 func NewRealityServer(ctx context.Context, logger log.ContextLogger, options option.InboundTLSOptions) (ServerConfig, error) {
-	if options.Reality != nil && options.Reality.Mldsa65Seed != "" {
-		return nil, E.New("REALITY mldsa65_seed requires ML-DSA-65 signing support in the uTLS dependency")
-	}
 	var tlsConfig utls.RealityConfig
 
 	if options.CertificateProvider != nil {
@@ -116,6 +114,17 @@ func NewRealityServer(ctx context.Context, logger log.ContextLogger, options opt
 		return nil, E.New("invalid private key")
 	}
 	tlsConfig.PrivateKey = privateKey
+	if options.Reality.Mldsa65Seed != "" {
+		seed, err := base64.RawURLEncoding.DecodeString(options.Reality.Mldsa65Seed)
+		if err != nil || len(seed) != mldsa65.SeedSize {
+			return nil, E.New("invalid REALITY mldsa65_seed")
+		}
+		if bytes.Equal(seed, privateKey) {
+			return nil, E.New("REALITY mldsa65_seed must differ from private_key")
+		}
+		_, key := mldsa65.NewKeyFromSeed((*[32]byte)(seed))
+		tlsConfig.Mldsa65Key = key.Bytes()
+	}
 	if options.Reality.Xver > 2 {
 		return nil, E.New("invalid REALITY xver")
 	}
