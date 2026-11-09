@@ -97,7 +97,7 @@ func TestXUIPanelRealityMLDSAAuthenticatedHandshake(t *testing.T) {
 				// REALITY's internal logging may outlive the subtest. Never call
 				// t.Logf from that detached goroutine; it races with test teardown.
 				// Also avoid printing handshake secrets into CI logs.
-				Log: func(string, ...any) {},
+				Log:         func(string, ...any) {},
 				Type:        "tcp",
 				Dest:        originAddr,
 				PrivateKey:  x25519.Bytes(),
