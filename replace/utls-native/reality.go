@@ -3,6 +3,7 @@
 package tls
 
 import (
+	"bytes"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -12,6 +13,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -22,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
 	"github.com/metacubex/utls/internal/mlkem"
 	"github.com/metacubex/utls/internal/ratelimit"
 
@@ -104,6 +107,7 @@ type RealityConfig struct {
 
 	ServerNames  map[string]bool
 	PrivateKey   []byte
+	Mldsa65Key  []byte
 	MinClientVer []byte
 	MaxClientVer []byte
 	MaxTimeDiff  time.Duration
@@ -124,6 +128,7 @@ func (a *RealityConfig) Clone() *RealityConfig {
 		Xver:                  a.Xver,
 		ServerNames:           a.ServerNames,
 		PrivateKey:            a.PrivateKey,
+		Mldsa65Key:            a.Mldsa65Key,
 		MinClientVer:          a.MinClientVer,
 		MaxClientVer:          a.MaxClientVer,
 		MaxTimeDiff:           a.MaxTimeDiff,
@@ -270,11 +275,40 @@ func (hs *realityServerHandshakeStateTLS13) handshake() error {
 	*/
 	{
 		ed25519Priv, signedCert := realityServerCert()
-		signedCert = append([]byte{}, signedCert...)
+		if len(hs.Config.Mldsa65Key) != 0 {
+			// Reserve a DER extension for the ML-DSA-65 transcript signature.
+			// The old REALITY certificate shape is retained when ML-DSA is off.
+			template := x509.Certificate{
+				SerialNumber: &big.Int{},
+				ExtraExtensions: []pkix.Extension{{
+					Id:    []int{0, 0},
+					Value: make([]byte, mldsa65.SignatureSize),
+				}},
+			}
+			var err error
+			signedCert, err = x509.CreateCertificate(rand.Reader, &template, &template, ed25519.PublicKey(ed25519Priv[32:]), ed25519Priv)
+			if err != nil {
+				return err
+			}
+		}
+		signedCert = bytes.Clone(signedCert)
 
 		h := hmac.New(sha512.New, hs.AuthKey)
 		h.Write(ed25519Priv[32:])
 		h.Sum(signedCert[:len(signedCert)-64])
+		if len(hs.Config.Mldsa65Key) != 0 {
+			key, err := mldsa65.Scheme().UnmarshalBinaryPrivateKey(hs.Config.Mldsa65Key)
+			if err != nil {
+				return err
+			}
+			h.Write(hs.clientHello.original)
+			h.Write(hs.hello.original)
+			offset := bytes.Index(signedCert, make([]byte, mldsa65.SignatureSize))
+			if offset < 0 {
+				return errors.New("REALITY: missing ML-DSA signature extension")
+			}
+			mldsa65.SignTo(key.(*mldsa65.PrivateKey), h.Sum(nil), nil, false, signedCert[offset:offset+mldsa65.SignatureSize])
+		}
 
 		hs.cert = &Certificate{
 			Certificate: [][]byte{signedCert},
