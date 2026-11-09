@@ -34,8 +34,32 @@ jobs:
             https://raw.githubusercontent.com/SawaMEN/3x-ui/600c06179de93a85b4e959f1bbb4813ef9e885b5/deploy/hiddify/xray-runtime-compat.patch \
             -o "$RUNNER_TEMP/xray-runtime-compat.patch"
           test -s "$RUNNER_TEMP/xray-runtime-compat.patch"
-          git -C "$RUNNER_TEMP/xray-core" apply --check "$RUNNER_TEMP/xray-runtime-compat.patch"
-          git -C "$RUNNER_TEMP/xray-core" apply "$RUNNER_TEMP/xray-runtime-compat.patch"
+          # Two 2026 Xray upstream changes already implement the old
+          # reader-copy and mux allocation-lock safety requirements. Verify
+          # those exact guarantees, then exclude ONLY their obsolete hunks.
+          python3 - "$RUNNER_TEMP/xray-core" "$RUNNER_TEMP/xray-runtime-compat.patch" "$RUNNER_TEMP/xray-runtime-filtered.patch" <<'PY'
+          import pathlib, re, sys
+          root, patch, output = map(pathlib.Path, sys.argv[1:])
+          reader = (root / 'common/mux/reader.go').read_text()
+          session = (root / 'common/mux/session.go').read_text()
+          client = (root / 'common/mux/client.go').read_text()
+          start = session.index('func (m *SessionManager) Allocate(')
+          end = session.index('func (m *SessionManager) Add(', start)
+          allocate = session[start:end]
+          assert 'dest   net.Destination' in reader and 'dest:   *dest' in reader, 'packet destination is not copied'
+          assert 'sm.Allocate(&m.strategy, link.Reader, link.Writer)' in client, 'mux dispatch API changed'
+          for marker in ('m.Lock()', 'if m.closed ||', 'input:  input', 'output: output'):
+              assert marker in allocate, 'mux allocation lost safety guarantee: ' + marker
+          original = patch.read_text()
+          sections = [s for s in re.split(r'(?=^--- (?:a/|/dev/null))', original, flags=re.M) if s.strip()]
+          assert len(sections) == 7, 'Xray compatibility patch structure changed'
+          obsolete = {'--- a/common/mux/reader.go', '--- a/common/mux/client.go'}
+          removed = [s for s in sections if s.splitlines()[0] in obsolete]
+          assert len(removed) == 2, 'expected exactly two already-native Xray patch sections'
+          output.write_text(''.join(s for s in sections if s.splitlines()[0] not in obsolete))
+          PY
+          git -C "$RUNNER_TEMP/xray-core" apply --check "$RUNNER_TEMP/xray-runtime-filtered.patch"
+          git -C "$RUNNER_TEMP/xray-core" apply "$RUNNER_TEMP/xray-runtime-filtered.patch"
           mkdir -p third_party/xray-core
           cp -a "$RUNNER_TEMP/xray-core/." third_party/xray-core/
           rm -rf third_party/xray-core/.git third_party/xray-core/.github
