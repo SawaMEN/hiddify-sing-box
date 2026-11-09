@@ -65,11 +65,35 @@ func TestXUIPanelRealityMLDSASignatureBinding(t *testing.T) {
 	}
 }
 
-func TestXUIPanelRealityMLDSAServerFailsClosed(t *testing.T) {
+func TestXUIPanelRealityMLDSAServerRejectsInvalidSeed(t *testing.T) {
 	_, err := NewRealityServer(context.Background(), nil, option.InboundTLSOptions{
 		Reality: &option.InboundRealityOptions{Mldsa65Seed: "configured-but-unsupported"},
 	})
-	if err == nil || !strings.Contains(err.Error(), "requires") {
-		t.Fatalf("unavailable ML-DSA signing was silently accepted: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "invalid REALITY mldsa65_seed") {
+		t.Fatalf("malformed ML-DSA seed was silently accepted: %v", err)
+	}
+}
+
+func TestXUIPanelRealityMLDSAServerKeyDerivation(t *testing.T) {
+	privateKey := bytes.Repeat([]byte{1}, mldsa65.SeedSize)
+	if key, err := parseRealityMLDSAServerKey("", privateKey); err != nil || key != nil {
+		t.Fatalf("empty ML-DSA seed should keep classical REALITY: %v, %v", key, err)
+	}
+	for _, invalid := range []string{"invalid/base64", base64.RawURLEncoding.EncodeToString([]byte("too short"))} {
+		if _, err := parseRealityMLDSAServerKey(invalid, privateKey); err == nil {
+			t.Fatalf("invalid ML-DSA seed accepted: %q", invalid)
+		}
+	}
+	if _, err := parseRealityMLDSAServerKey(base64.RawURLEncoding.EncodeToString(privateKey), privateKey); err == nil || !strings.Contains(err.Error(), "must differ") {
+		t.Fatalf("reused REALITY private key accepted as ML-DSA seed: %v", err)
+	}
+	seed := [32]byte{4, 5, 6}
+	_, expectedPrivate := mldsa65.NewKeyFromSeed(&seed)
+	key, err := parseRealityMLDSAServerKey(base64.RawURLEncoding.EncodeToString(seed[:]), privateKey)
+	if err != nil || !bytes.Equal(key, expectedPrivate.Bytes()) {
+		t.Fatalf("valid ML-DSA seed derived incorrect private key: %v", err)
+	}
+	if _, err := mldsa65.Scheme().UnmarshalBinaryPrivateKey(key); err != nil {
+		t.Fatalf("derived REALITY ML-DSA key rejected by signer: %v", err)
 	}
 }
