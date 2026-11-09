@@ -6,10 +6,16 @@ import (
 	"bytes"
 	"context"
 	"crypto/ecdh"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"errors"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -28,9 +34,40 @@ import (
 // An unrelated local TLS origin provides the plausible ServerHello that the
 // REALITY server reuses as camouflage.
 func TestXUIPanelRealityMLDSAAuthenticatedHandshake(t *testing.T) {
-	origin := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	// REALITY must fit its ML-DSA-65 signed certificate inside the
+	// camouflage TLS origin's certificate record. The small default test
+	// certificate is not large enough for a 3.3 KB ML-DSA signature, and
+	// causes a negative padding error before verification can be tested.
+	origin := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
+	originKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	originCert := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		DNSNames:     []string{"example.com"},
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtraExtensions: []pkix.Extension{{
+			Id:    []int{1, 2, 3, 4},
+			Value: make([]byte, 6000),
+		}},
+	}
+	originDER, err := x509.CreateCertificate(rand.Reader, &originCert, &originCert, &originKey.PublicKey, originKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	origin.TLS = &tls.Config{
+		MinVersion: tls.VersionTLS13,
+		Certificates: []tls.Certificate{{
+			Certificate: [][]byte{originDER},
+			PrivateKey:  originKey,
+		}},
+	}
+	origin.StartTLS()
 	defer origin.Close()
 
 	x25519, err := ecdh.X25519().GenerateKey(rand.Reader)
