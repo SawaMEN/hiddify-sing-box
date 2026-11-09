@@ -1,14 +1,12 @@
 package xhttp
 
-// upload_queue is a specialized priorityqueue + channel to reorder generic
-// packets by a sequence number
-
+// upload_queue reorders XHTTP packets without blocking Close behind a full
+// upload channel or racing concurrent readers against the reassembly heap.
 import (
 	"container/heap"
+	"errors"
 	"io"
-	"runtime"
 	"sync"
-	"sync/atomic"
 
 	E "github.com/sagernet/sing/common/exceptions"
 )
@@ -20,17 +18,17 @@ type Packet struct {
 }
 
 type uploadQueue struct {
-	reader          io.ReadCloser
-	readerAccess    sync.Mutex // reader is set by Read and by Close's drain
-	nomore          bool
-	pushedPackets   chan Packet
-	writeCloseMutex sync.Mutex
-	heap            uploadHeap
-	nextSeq         uint64
-	closed          atomic.Bool   // read by Read without writeCloseMutex
-	closing         chan struct{} // closed by Close before it waits for writeCloseMutex
-	closeOnce       sync.Once
-	maxPackets      int
+	mu            sync.Mutex // guards closed, nomore and reader
+	readMutex     sync.Mutex // serializes heap/reassembly and stream reads
+	reader        io.ReadCloser
+	nomore        bool
+	pushedPackets chan Packet
+	heap          uploadHeap
+	nextSeq       uint64
+	closed        bool
+	done          chan struct{} // broadcast to blocked Push and Read
+	space         chan struct{} // a receive frees one channel slot
+	maxPackets    int
 }
 
 func NewUploadQueue(maxPackets int) *uploadQueue {
@@ -39,128 +37,155 @@ func NewUploadQueue(maxPackets int) *uploadQueue {
 	}
 	return &uploadQueue{
 		pushedPackets: make(chan Packet, maxPackets),
-		closing:       make(chan struct{}),
-		heap:          uploadHeap{},
-		nextSeq:       0,
 		maxPackets:    maxPackets,
+		done:          make(chan struct{}),
+		space:         make(chan struct{}, maxPackets),
 	}
 }
 
-func (h *uploadQueue) Push(p Packet) error {
-	h.writeCloseMutex.Lock()
-	defer h.writeCloseMutex.Unlock()
-	if h.closed.Load() {
-		return E.New("packet queue closed")
+func (h *uploadQueue) Push(packet Packet) error {
+	for {
+		h.mu.Lock()
+		if h.closed {
+			h.mu.Unlock()
+			return E.New("packet queue closed")
+		}
+		if h.nomore {
+			h.mu.Unlock()
+			return E.New("h.reader already exists")
+		}
+		// A nonblocking send while holding mu makes enqueue and Close atomic.
+		select {
+		case h.pushedPackets <- packet:
+			if packet.Reader != nil {
+				h.nomore = true
+			}
+			h.mu.Unlock()
+			return nil
+		default:
+			h.mu.Unlock()
+		}
+		select {
+		case <-h.done:
+			return E.New("packet queue closed")
+		case <-h.space:
+		}
 	}
-	if h.nomore {
-		return E.New("h.reader already exists")
-	}
-	// a full queue that nobody reads would hold writeCloseMutex here, and Close with it, forever
-	select {
-	case h.pushedPackets <- p:
-	case <-h.closing:
-		return E.New("packet queue closed")
-	}
-	if p.Reader != nil {
-		h.nomore = true
-	}
-	return nil
 }
 
 func (h *uploadQueue) Close() error {
-	h.closeOnce.Do(func() { close(h.closing) }) // a blocked Push gives up the mutex
-	h.writeCloseMutex.Lock()
-	defer h.writeCloseMutex.Unlock()
-	if !h.closed.Load() {
-		h.closed.Store(true)
-		runtime.Gosched() // hope Read() gets the packet
-	f:
-		for {
-			select {
-			case p := <-h.pushedPackets:
-				if p.Reader != nil {
-					h.setReader(p.Reader)
-				}
-			default:
-				break f
+	h.mu.Lock()
+	if h.closed {
+		h.mu.Unlock()
+		return nil
+	}
+	h.closed = true
+	close(h.done)
+	reader := h.reader
+	var pending []io.ReadCloser
+	// No Push can enqueue while mu is held. Drain and own every reader
+	// rather than replacing an earlier stream without closing it.
+drain:
+	for {
+		select {
+		case packet := <-h.pushedPackets:
+			if packet.Reader != nil {
+				pending = append(pending, packet.Reader)
 			}
+		default:
+			break drain
 		}
-		close(h.pushedPackets)
 	}
-	if reader := h.currentReader(); reader != nil {
-		return reader.Close()
+	h.mu.Unlock()
+
+	var errs []error
+	if reader != nil {
+		errs = append(errs, reader.Close())
 	}
-	return nil
+	for _, r := range pending {
+		errs = append(errs, r.Close())
+	}
+	return errors.Join(errs...)
 }
 
-func (h *uploadQueue) currentReader() io.ReadCloser {
-	h.readerAccess.Lock()
-	defer h.readerAccess.Unlock()
-	return h.reader
+func (h *uploadQueue) receive() (Packet, bool) {
+	select {
+	case <-h.done:
+		return Packet{}, false
+	case packet := <-h.pushedPackets:
+		// Each receive notifies one producer; the signal buffer is bounded.
+		select {
+		case h.space <- struct{}{}:
+		default:
+		}
+		return packet, true
+	}
 }
 
-func (h *uploadQueue) setReader(reader io.ReadCloser) {
-	h.readerAccess.Lock()
-	h.reader = reader
-	h.readerAccess.Unlock()
-}
-
-func (h *uploadQueue) Read(b []byte) (int, error) {
-	if len(b) == 0 {
+func (h *uploadQueue) Read(buffer []byte) (int, error) {
+	if len(buffer) == 0 {
 		return 0, nil
 	}
-	if reader := h.currentReader(); reader != nil {
-		return reader.Read(b)
-	}
-	if h.closed.Load() {
-		return 0, io.EOF
-	}
-	if len(h.heap) == 0 {
-		packet, more := <-h.pushedPackets
-		if !more {
+	h.readMutex.Lock()
+	defer h.readMutex.Unlock()
+
+	for {
+		h.mu.Lock()
+		closed, reader := h.closed, h.reader
+		h.mu.Unlock()
+		if closed {
+			return 0, io.EOF
+		}
+		if reader != nil {
+			return reader.Read(buffer)
+		}
+		if len(h.heap) > 0 {
+			packet := h.heap[0]
+			if packet.Seq < h.nextSeq {
+				// A duplicated or delayed packet must not obstruct newer data.
+				heap.Pop(&h.heap)
+				continue
+			}
+			if packet.Seq == h.nextSeq {
+				heap.Pop(&h.heap)
+				n := copy(buffer, packet.Payload)
+				if n < len(packet.Payload) {
+					packet.Payload = packet.Payload[n:]
+					heap.Push(&h.heap, packet)
+				} else {
+					h.nextSeq++
+				}
+				if n == 0 {
+					continue
+				}
+				return n, nil
+			}
+			if len(h.heap) > h.maxPackets {
+				return 0, E.New("packet queue is too large")
+			}
+		}
+		packet, ok := h.receive()
+		if !ok {
 			return 0, io.EOF
 		}
 		if packet.Reader != nil {
-			h.setReader(packet.Reader)
-			return packet.Reader.Read(b)
+			h.mu.Lock()
+			if h.closed {
+				h.mu.Unlock()
+				_ = packet.Reader.Close()
+				return 0, io.EOF
+			}
+			if len(h.heap) > 0 {
+				h.mu.Unlock()
+				_ = packet.Reader.Close()
+				return 0, E.New("cannot mix stream and packet upload")
+			}
+			h.reader = packet.Reader
+			h.mu.Unlock()
+			return packet.Reader.Read(buffer)
 		}
 		heap.Push(&h.heap, packet)
 	}
-	for len(h.heap) > 0 {
-		packet := heap.Pop(&h.heap).(Packet)
-		n := 0
-
-		if packet.Seq == h.nextSeq {
-			copy(b, packet.Payload)
-			n = min(len(b), len(packet.Payload))
-
-			if n < len(packet.Payload) {
-				// partial read
-				packet.Payload = packet.Payload[n:]
-				heap.Push(&h.heap, packet)
-			} else {
-				h.nextSeq = packet.Seq + 1
-			}
-
-			return n, nil
-		}
-		// misordered packet
-		if packet.Seq > h.nextSeq {
-			if len(h.heap) > h.maxPackets {
-				// the "reassembly buffer" is too large, and we want to
-				// constrain memory usage somehow. let's tear down the
-				// connection, and hope the application retries.
-				return 0, E.New("packet queue is too large")
-			}
-			heap.Push(&h.heap, packet)
-			packet2, more := <-h.pushedPackets
-			if !more {
-				return 0, io.EOF
-			}
-			heap.Push(&h.heap, packet2)
-		}
-	}
-	return 0, nil
 }
 
 // heap code directly taken from https://pkg.go.dev/container/heap
