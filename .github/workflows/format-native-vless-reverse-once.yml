@@ -1,0 +1,35 @@
+name: One-time native VLESS reverse formatter
+on:
+  push:
+    branches: [fix/format-native-vless-reverse-20261109]
+    paths: [.github/workflows/format-native-vless-reverse-once.yml]
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Format the exact affected Go file using repository formatter settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 4 --retry-all-errors --retry-delay 2 \
+            https://github.com/golangci/golangci-lint/releases/download/v2.15.0/golangci-lint-2.15.0-linux-amd64.tar.gz \
+            -o "$RUNNER_TEMP/golangci-lint.tgz"
+          tar -xzf "$RUNNER_TEMP/golangci-lint.tgz" -C "$RUNNER_TEMP"
+          LINTER="$RUNNER_TEMP/golangci-lint-2.15.0-linux-amd64/golangci-lint"
+          "$LINTER" fmt protocol/vless/xui_reverse.go
+          git diff --check
+          git add -- protocol/vless/xui_reverse.go
+          if git diff --cached --quiet; then
+            echo "File already matches lint formatting; no change needed"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'style(vless): apply configured gci and gofumpt'
+          git push origin HEAD:refs/heads/fix/format-native-vless-reverse-20261109
