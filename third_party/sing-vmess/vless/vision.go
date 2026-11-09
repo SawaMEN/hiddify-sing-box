@@ -682,7 +682,10 @@ func (c *VisionConn) unPadding(buffer []byte) []*buf.Buffer {
 			buffer = append(c.readPrefix, buffer...)
 			c.readPrefix = nil
 		}
-		prefixLen := min(len(buffer), len(c.userUUID))
+		prefixLen := len(buffer)
+		if prefixLen > len(c.userUUID) {
+			prefixLen = len(c.userUUID)
+		}
 		if !bytes.Equal(c.userUUID[:prefixLen], buffer[:prefixLen]) {
 			return []*buf.Buffer{buf.As(buffer).ToOwned()}
 		}
