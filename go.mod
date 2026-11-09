@@ -396,4 +396,7 @@ replace github.com/metacubex/utls => github.com/Leadaxe/utls-lx v1.8.8-0.2026101
 replace masterdnsvpn-go => ./replace/MasterDnsVPN
 
 replace github.com/getlantern/soar => ./replace/soar
+
 replace github.com/sagernet/sing => ./replace/sing
+
+replace github.com/xtls/xray-core => ./third_party/xray-core
