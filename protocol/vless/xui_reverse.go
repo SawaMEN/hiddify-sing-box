@@ -436,6 +436,9 @@ func newReversePacket(l *XT.Link, d M.Socksaddr) *reversePacket {
 	return p
 }
 func (p *reversePacket) receive() {
+	// There is one receiver goroutine; it alone closes packets, allowing
+	// repeated ReadFrom calls to observe remote EOF instead of hanging.
+	defer close(p.packets)
 	for {
 		mb, err := p.link.Reader.ReadMultiBuffer()
 		for i, b := range mb {
@@ -477,7 +480,11 @@ func (p *reversePacket) read() (data []byte, dest M.Socksaddr, err error) {
 		select {
 		case <-p.closed:
 			err = net.ErrClosed
-		case packet := <-p.packets:
+		case packet, ok := <-p.packets:
+			if !ok {
+				err = io.EOF
+				break
+			}
 			data, dest, err = packet.data, packet.dest, packet.err
 		case <-timed:
 			err = os.ErrDeadlineExceeded
