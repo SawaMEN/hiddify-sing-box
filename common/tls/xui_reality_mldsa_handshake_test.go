@@ -91,7 +91,7 @@ func TestXUIPanelRealityMLDSAAuthenticatedHandshake(t *testing.T) {
 				_, handshakeErr := utls.RealityServer(ctx, serverConn, serverConfig)
 				serverDone <- handshakeErr
 			}()
-			verified, err := client.ClientHandshake(ctx, clientConn)
+			verified, err := client.(*RealityClientConfig).ClientHandshake(ctx, clientConn)
 			if tc.wantReject {
 				if err == nil {
 					_ = verified.Close()
