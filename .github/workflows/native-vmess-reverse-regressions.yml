@@ -3,15 +3,20 @@ name: Native VLESS reverse and Vision source regressions
 on:
   push:
     branches:
+      - main
       - feature/native-vmess-reverse-source-20261109
     paths:
       - .github/workflows/native-vmess-reverse-regressions.yml
       - third_party/sing-vmess/**
       - protocol/vless/**
+      - common/tls/**
+      - replace/utls-native/**
   pull_request:
     paths:
       - third_party/sing-vmess/**
       - protocol/vless/**
+      - common/tls/**
+      - replace/utls-native/**
 
 permissions:
   contents: read
@@ -19,7 +24,7 @@ permissions:
 jobs:
   race-and-wire:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -35,5 +40,6 @@ jobs:
           go test -race -tags with_utls \
             github.com/sagernet/sing-vmess/vless \
             github.com/sagernet/sing-box/protocol/vless \
-            -run '^(TestH_Vision|TestXUIPanelVision|TestXUIPanelUnsupportedVLESS|TestXUIReverse)' \
+            github.com/sagernet/sing-box/common/tls \
+            -run '^(TestH_Vision|TestXUIPanelVision|TestXUIPanelUnsupportedVLESS|TestXUIReverse|TestXUIPanelRealityMLDSA)' \
             -count=1 -timeout=2m
