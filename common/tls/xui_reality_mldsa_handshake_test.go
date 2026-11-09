@@ -94,13 +94,10 @@ func TestXUIPanelRealityMLDSAAuthenticatedHandshake(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 			defer cancel()
 			serverConfig := &utls.RealityConfig{
-				Log: func(format string, values ...any) {
-					// Do not expose shared handshake keys or short IDs in CI logs.
-					if strings.Contains(format, "AuthKey") || strings.Contains(format, "ClientShortId") {
-						return
-					}
-					t.Logf(format, values...)
-				},
+				// REALITY's internal logging may outlive the subtest. Never call
+				// t.Logf from that detached goroutine; it races with test teardown.
+				// Also avoid printing handshake secrets into CI logs.
+				Log: func(string, ...any) {},
 				Type:        "tcp",
 				Dest:        originAddr,
 				PrivateKey:  x25519.Bytes(),
