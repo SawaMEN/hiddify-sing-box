@@ -170,16 +170,14 @@ func TestXUIUploadQueueConcurrentReadersPreservePacketSequence(t *testing.T) {
 	results := make(chan byte, 4)
 	var wg sync.WaitGroup
 	for range 4 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			var b [1]byte
 			if n, err := q.Read(b[:]); err != nil || n != 1 {
 				t.Errorf("concurrent read got %d bytes, error %v", n, err)
 				return
 			}
 			results <- b[0]
-		}()
+		})
 	}
 	finished := make(chan struct{})
 	go func() { wg.Wait(); close(finished) }()
