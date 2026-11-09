@@ -66,11 +66,7 @@ type Inbound struct {
 }
 
 func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.VLESSInboundOptions) (adapter.Inbound, error) {
-	// These controls require native sing-vmess extensions, which have not
-	// been integrated yet. Reject instead of silently dropping protection.
-	if len(options.Testseed) != 0 {
-		return nil, E.New("VLESS vision testseed requires the native sing-vmess protection extension")
-	}
+	// Reverse users remain disabled until the native portal/bridge is implemented.
 	for _, user := range options.Users {
 		if user.Reverse != nil {
 			return nil, E.New("VLESS reverse user requires the native reverse dispatcher")
@@ -102,6 +98,9 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 		return nil, err
 	}
 	service := vless.NewService[int](logger, adapter.NewUpstreamContextHandler(inbound.newConnectionEx, inbound.newPacketConnectionEx))
+	if err := service.SetVisionTestseed(options.Testseed); err != nil {
+		return nil, E.Cause(err, "invalid VLESS vision testseed")
+	}
 	service.UpdateUsers(common.MapIndexed(inbound.users, func(index int, _ option.VLESSUser) int {
 		return index
 	}), common.Map(inbound.users, func(it option.VLESSUser) string {
