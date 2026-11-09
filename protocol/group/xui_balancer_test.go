@@ -13,6 +13,7 @@ import (
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
 	"github.com/sagernet/sing-box/option"
+	"github.com/sagernet/sing/common/json/badoption"
 	M "github.com/sagernet/sing/common/metadata"
 )
 
@@ -242,5 +243,19 @@ func TestXUIPanelBalancerConnectivityOutageDoesNotEvictHealthySnapshot(t *testin
 	selected, err := state.pick([]string{"node"})
 	if err != nil || selected != "node" {
 		t.Fatalf("local connectivity outage must preserve last healthy snapshot: %q %v", selected, err)
+	}
+}
+
+func TestXUIPanelBalancerRejectsOverflowingFreshnessWindow(t *testing.T) {
+	// Burst freshness multiplies interval * samples * 2. A wrapped
+	// negative duration could keep a stale proxy marked healthy.
+	_, err := newBalanceState(context.Background(), option.XrayBalancerOptions{
+		Strategy: "leastPing",
+		ProbeURL: "http://127.0.0.1:1/probe",
+		Interval: badoption.Duration(1 << 62),
+		Sampling: 2,
+	})
+	if err == nil {
+		t.Fatal("accepted an overflowing probe observation horizon")
 	}
 }
