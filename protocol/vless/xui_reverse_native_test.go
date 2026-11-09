@@ -1,14 +1,20 @@
 package vless
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sagernet/sing-box/option"
 	M "github.com/sagernet/sing/common/metadata"
+
+	XB "github.com/xtls/xray-core/common/buf"
+	XT "github.com/xtls/xray-core/transport"
 )
 
 func TestXUIReversePortalRejectsMissingTag(t *testing.T) {
@@ -49,5 +55,22 @@ func TestXUIReversePortalFailsClosedWithoutBridge(t *testing.T) {
 	}
 	if err := portal.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestXUIReversePacketRemoteEOFIsPersistent(t *testing.T) {
+	reader := XB.NewReader(bytes.NewReader(nil))
+	writer := XB.NewWriter(io.Discard)
+	packet := newReversePacket(&XT.Link{Reader: reader, Writer: writer}, M.Socksaddr{})
+	defer packet.Close()
+
+	for range 2 {
+		if err := packet.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+			t.Fatal(err)
+		}
+		n, _, err := packet.ReadFrom(make([]byte, 8))
+		if n != 0 || !errors.Is(err, io.EOF) {
+			t.Fatalf("remote EOF lost or blocked: n=%d err=%v", n, err)
+		}
 	}
 }
