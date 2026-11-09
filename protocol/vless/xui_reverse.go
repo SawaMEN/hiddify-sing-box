@@ -442,6 +442,11 @@ func (p *reversePacket) receive() {
 	for {
 		mb, err := p.link.Reader.ReadMultiBuffer()
 		for i, b := range mb {
+			// Xray readers may return a nil buffer alongside EOF.
+			// Do not dereference it while routing reverse UDP.
+			if b == nil {
+				continue
+			}
 			dest := p.dest
 			if b.UDP != nil {
 				dest = sbDestination(*b.UDP)
