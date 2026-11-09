@@ -1,21 +1,21 @@
 package vless
 
 import (
-    "context"
-    "crypto/tls"
-    "io"
-    "net"
-    "net/http/httptest"
-    "testing"
-    "time"
+	"context"
+	"crypto/tls"
+	"io"
+	"net"
+	"net/http/httptest"
+	"testing"
+	"time"
 
-    "github.com/sagernet/sing-box/adapter"
-    "github.com/sagernet/sing-box/experimental/v2rayapi"
-    "github.com/sagernet/sing-box/log"
-    "github.com/sagernet/sing-box/option"
-    V "github.com/sagernet/sing-vmess/vless"
-    M "github.com/sagernet/sing/common/metadata"
-    "github.com/sagernet/sing/service"
+	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/experimental/v2rayapi"
+	"github.com/sagernet/sing-box/log"
+	"github.com/sagernet/sing-box/option"
+	V "github.com/sagernet/sing-vmess/vless"
+	M "github.com/sagernet/sing/common/metadata"
+	"github.com/sagernet/sing/service"
 )
 
 // Full connection lifecycle for the native bridge: post-start, TCP echo,
