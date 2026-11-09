@@ -66,7 +66,8 @@ func testReverseNativeBridge(t *testing.T, flow string) {
 	}()
 	router := &reverseTestRouter{metadata: make(chan adapter.InboundContext, 32)}
 	serverOptions := option.ServerOptions{Server: "127.0.0.1", ServerPort: uint16(listener.Addr().(*net.TCPAddr).Port)}
-	bridge, err := NewOutbound(ctx, router, logger, "remote", option.VLESSOutboundOptions{ServerOptions: serverOptions, UUID: reverseUUID, Flow: flow, OutboundTLSOptionsContainer: option.OutboundTLSOptionsContainer{TLS: &option.OutboundTLSOptions{Enabled: true, Insecure: true}}, Reverse: &option.VLESSReverseOptions{Tag: "bridge"}})
+	tlsOptions := option.OutboundTLSOptionsContainer{TLS: &option.OutboundTLSOptions{Enabled: true, Insecure: true}}
+	bridge, err := NewOutbound(ctx, router, logger, "remote", option.VLESSOutboundOptions{ServerOptions: serverOptions, UUID: reverseUUID, Flow: flow, OutboundTLSOptionsContainer: tlsOptions, Reverse: &option.VLESSReverseOptions{Tag: "bridge"}})
 	if err != nil {
 		t.Fatal(err)
 	}
