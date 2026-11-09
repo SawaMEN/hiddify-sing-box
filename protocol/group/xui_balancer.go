@@ -86,7 +86,13 @@ func newBalanceState(ctx context.Context, options option.XrayBalancerOptions) (*
 	if options.Sampling == 0 {
 		options.Sampling = 5
 	}
-	if options.Sampling > 64 || options.Interval.Build() < time.Second || options.Timeout.Build() < time.Millisecond {
+	interval := options.Interval.Build()
+	// Burst freshness checks multiply the interval by sampling and two.
+	// Reject values that would wrap a signed time.Duration and mark stale
+	// observations as healthy.
+	if options.Sampling > 64 || interval < time.Second ||
+		interval > time.Duration(math.MaxInt64)/time.Duration(options.Sampling)/2 ||
+		options.Timeout.Build() < time.Millisecond {
 		return nil, fmt.Errorf("invalid balancing probe limits")
 	}
 	for _, link := range []string{options.ProbeURL, options.Connectivity} {
