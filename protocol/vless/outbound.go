@@ -32,6 +32,7 @@ import (
 
 func RegisterOutbound(registry *outbound.Registry) {
 	outbound.Register[option.VLESSOutboundOptions](registry, C.TypeVLESS, NewOutbound)
+	outbound.Register[option.VLESSReversePortalOptions](registry, "vless-reverse", NewReversePortal)
 }
 
 var (
@@ -54,13 +55,10 @@ type Outbound struct {
 	encryption      *encryption.ClientInstance
 	vision          bool
 	preconnect      *preconnectPool
+	reverse         *reverseBridge
 }
 
 func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.VLESSOutboundOptions) (adapter.Outbound, error) {
-	// Reverse remains disabled until the native portal and bridge are ready.
-	if options.Reverse != nil {
-		return nil, E.New("VLESS reverse outbound requires the native reverse bridge")
-	}
 	if options.Transport != nil && options.Transport.Type == "xdrive" {
 		if options.Encryption == "" || options.Encryption == "none" {
 			return nil, E.New("XDrive requires VLESS encryption")
@@ -142,10 +140,22 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 		}
 		outbound.preconnect = newPreconnectPool(ctx, int(options.Testpre), (*vlessDialer)(outbound).dialServer)
 	}
+	if options.Reverse != nil {
+		if options.Reverse.Tag == "" {
+			return nil, E.New("reverse tag is required")
+		}
+		if muxOpts.Enabled || options.Testpre > 0 {
+			return nil, E.New("reverse cannot use multiplex or testpre")
+		}
+		outbound.reverse = newReverseBridge(ctx, router, logger, options.Reverse.Tag, (*vlessDialer)(outbound))
+	}
 	return outbound, nil
 }
 
 func (h *Outbound) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
+	if h.reverse != nil {
+		return nil, E.New("reverse-only outbound cannot dial ordinary connections")
+	}
 	if h.multiplexDialer == nil {
 		switch N.NetworkName(network) {
 		case N.NetworkTCP:
@@ -166,6 +176,9 @@ func (h *Outbound) DialContext(ctx context.Context, network string, destination 
 }
 
 func (h *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
+	if h.reverse != nil {
+		return nil, E.New("reverse-only outbound cannot dial ordinary connections")
+	}
 	if h.multiplexDialer == nil {
 		h.logger.InfoContext(ctx, "outbound packet connection to ", destination)
 		return (*vlessDialer)(h).ListenPacket(ctx, destination)
@@ -218,7 +231,17 @@ func (h *Outbound) CloseIdleConnections() {
 	}
 }
 
+func (h *Outbound) Start(stage adapter.StartStage, _ *adapter.Scope) error {
+	if stage == adapter.StartStatePostStart && h.reverse != nil {
+		h.reverse.start()
+	}
+	return nil
+}
+
 func (h *Outbound) Close() error {
+	if h.reverse != nil {
+		h.reverse.close()
+	}
 	if h.preconnect != nil {
 		h.preconnect.Close()
 	}
@@ -346,6 +369,9 @@ func (h *vlessDialer) DialContext(ctx context.Context, network string, destinati
 		}
 	}
 
+	if h.reverse != nil && destination.Fqdn == "v1.rvs.cool" && destination.Port == 0 {
+		return h.client.DialEarlyReverseConnWithOptions(conn, visionBaseConn, visionCanSplice)
+	}
 	switch N.NetworkName(network) {
 	case N.NetworkTCP:
 		h.logger.InfoContext(ctx, "outbound connection to ", destination)
