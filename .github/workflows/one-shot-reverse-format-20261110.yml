@@ -1,0 +1,39 @@
+name: One-shot formatting for native Reverse integration tests
+on:
+  push:
+    branches: [test/reverse-e2e-parity-20261109]
+    paths:
+      - .github/workflows/one-shot-reverse-format-20261110.yml
+permissions:
+  contents: write
+jobs:
+  format-native-reverse:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: true
+      - name: Download pinned formatter used by CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 4 --silent --show-error \
+            https://github.com/golangci/golangci-lint/releases/download/v2.15.0/golangci-lint-2.15.0-linux-amd64.tar.gz \
+            -o /tmp/golangci-lint-2.15.0.tar.gz
+          tar -xzf /tmp/golangci-lint-2.15.0.tar.gz -C /tmp
+          /tmp/golangci-lint-2.15.0-linux-amd64/golangci-lint version
+      - name: Format ONLY reviewed reverse regression tests and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=(protocol/vless/xui_reverse_bridge_e2e_test.go protocol/vless/xui_reverse_integration_test.go)
+          /tmp/golangci-lint-2.15.0-linux-amd64/golangci-lint fmt "${files[@]}"
+          git diff --check
+          git diff --quiet -- "${files[@]}" && { echo 'No formatter changes made'; exit 1; }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- "${files[@]}"
+          git diff --cached --check
+          git commit -m 'style(vless): apply pinned gci and gofumpt to reverse E2E tests'
+          git push origin HEAD:refs/heads/test/reverse-e2e-parity-20261109
