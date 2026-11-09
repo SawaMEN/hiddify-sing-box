@@ -1,0 +1,68 @@
+name: One-time port of pinned native VLESS reverse wire source
+
+on:
+  push:
+    branches:
+      - feature/native-vmess-reverse-source-20261109
+    paths:
+      - .github/workflows/import-native-vmess-reverse.yml
+
+permissions:
+  contents: write
+
+jobs:
+  source-port:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout review branch
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: true
+          fetch-depth: 2
+      - name: Apply reviewed reverse wire patch exactly once
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s third_party/sing-vmess/PROVENANCE.md
+          grep -q '93e7499b6da443ad5016f4c4ce469145af311832' third_party/sing-vmess/PROVENANCE.md
+          test ! -e third_party/sing-vmess/vless/xui_reverse_options.go
+          curl --fail --location --retry 3 --silent --show-error \
+            https://raw.githubusercontent.com/SawaMEN/3x-ui/600c06179de93a85b4e959f1bbb4813ef9e885b5/deploy/hiddify/sing-vmess-reverse.patch \
+            -o "$RUNNER_TEMP/sing-vmess-reverse.patch"
+          test -s "$RUNNER_TEMP/sing-vmess-reverse.patch"
+          # The vendored Vision transport has a newer fragmented-padding
+          # implementation and must be rebased manually, not overwritten by
+          # old Read/Close hunks. Stage the other three wire-protocol files.
+          python3 - "$RUNNER_TEMP/sing-vmess-reverse.patch" "$RUNNER_TEMP/sing-vmess-reverse-stage.patch" <<'PY'
+          import pathlib, re, sys
+          source, target = map(pathlib.Path, sys.argv[1:])
+          sections = [s for s in re.split(r'(?=^--- a/)', source.read_text(), flags=re.M) if s.strip()]
+          assert len(sections) == 4, 'unexpected reverse overlay file inventory'
+          paths = [section.splitlines()[0] for section in sections]
+          assert set(paths) == {'--- a/vless/vision.go', '--- a/vless/protocol.go', '--- a/vless/client.go', '--- a/vless/service.go'}, paths
+          target.write_text(''.join(s for s in sections if s.splitlines()[0] != '--- a/vless/vision.go'))
+          PY
+          git apply --check --directory=third_party/sing-vmess "$RUNNER_TEMP/sing-vmess-reverse-stage.patch"
+          git apply --directory=third_party/sing-vmess "$RUNNER_TEMP/sing-vmess-reverse-stage.patch"
+          gofmt -w third_party/sing-vmess/vless/{client,service,protocol}.go
+          test -s third_party/sing-vmess/vless/vision.go
+          git diff --check
+      - name: Commit source port in isolated branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat >> third_party/sing-vmess/PROVENANCE.md <<'EOF'
+
+          Native reverse framing port: 3x-ui/deploy/hiddify/sing-vmess-reverse.patch
+          Three wire-protocol files applied once. The Vision transport's older
+          patch hunks remain blocked pending separate source-level review.
+          No release-time patching of this third-party module.
+          EOF
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add third_party/sing-vmess
+          git diff --cached --check
+          git diff --cached --quiet && { echo 'Reverse port made no source changes' >&2; exit 1; }
+          git commit -m 'feat(vless): import pinned native reverse wire and Vision edge-case source'
+          git push origin HEAD:refs/heads/feature/native-vmess-reverse-source-20261109

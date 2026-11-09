@@ -29,6 +29,7 @@ import (
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+	"github.com/sagernet/sing/service"
 )
 
 func RegisterInbound(registry *inbound.Registry) {
@@ -66,12 +67,6 @@ type Inbound struct {
 }
 
 func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.VLESSInboundOptions) (adapter.Inbound, error) {
-	// Reverse users remain disabled until the native portal/bridge is implemented.
-	for _, user := range options.Users {
-		if user.Reverse != nil {
-			return nil, E.New("VLESS reverse user requires the native reverse dispatcher")
-		}
-	}
 	if err := validateVLESSUserUUIDs(options.Users); err != nil {
 		return nil, err
 	}
@@ -98,9 +93,6 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 		return nil, err
 	}
 	service := vless.NewService[int](logger, adapter.NewUpstreamContextHandler(inbound.newConnectionEx, inbound.newPacketConnectionEx))
-	if err := service.SetVisionTestseed(options.Testseed); err != nil {
-		return nil, E.Cause(err, "invalid VLESS vision testseed")
-	}
 	service.UpdateUsers(common.MapIndexed(inbound.users, func(index int, _ option.VLESSUser) int {
 		return index
 	}), common.Map(inbound.users, func(it option.VLESSUser) string {
@@ -108,6 +100,20 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 	}), common.Map(inbound.users, func(it option.VLESSUser) string {
 		return it.Flow
 	}))
+	if err := service.SetVisionTestseed(options.Testseed); err != nil {
+		return nil, E.Cause(err, "invalid VLESS vision testseed")
+	}
+	reverseUsers := make(map[int]bool)
+	for i, user := range options.Users {
+		if user.Reverse != nil {
+			if user.Reverse.Tag == "" {
+				return nil, E.New("reverse tag is required")
+			}
+			reverseUsers[i] = true
+			inbound.references = append(inbound.references, user.Reverse.Tag)
+		}
+	}
+	service.SetReverseHandler(reverseUsers, inbound.newReverseConnection)
 	inbound.service = service
 	if options.TLS != nil {
 		inbound.tlsConfig, err = tls.NewServer(ctx, logger, common.PtrValueOrDefault(options.TLS))
@@ -115,7 +121,7 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 			return nil, err
 		}
 		if options.TLS.Reality != nil && options.TLS.Reality.Enabled && options.TLS.Reality.Handshake.Detour != "" {
-			inbound.references = []string{options.TLS.Reality.Handshake.Detour}
+			inbound.references = append(inbound.references, options.TLS.Reality.Handshake.Detour)
 		}
 	}
 	if options.Transport != nil {
@@ -149,6 +155,22 @@ func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLo
 func (h *Inbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage != adapter.StartStateStart {
 		return nil
+	}
+	for _, user := range h.users {
+		if user.Reverse == nil {
+			continue
+		}
+		manager := service.FromContext[adapter.OutboundManager](h.ctx)
+		if manager == nil {
+			return E.New("reverse outbound manager missing")
+		}
+		ob, found := manager.Outbound(user.Reverse.Tag)
+		if !found {
+			return E.New("reverse portal missing: ", user.Reverse.Tag)
+		}
+		if _, ok := ob.(*reversePortal); !ok {
+			return E.New("reverse tag is not a portal: ", user.Reverse.Tag)
+		}
 	}
 	if h.decryption != nil {
 		scope.Add(func() error {
