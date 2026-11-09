@@ -1,0 +1,97 @@
+name: One-time import of pinned Xray runtime compatibility source
+
+on:
+  push:
+    branches:
+      - feature/native-xray-runtime-source-20261109
+    paths:
+      - .github/workflows/import-native-xray-runtime.yml
+
+permissions:
+  contents: write
+
+jobs:
+  source-port:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout isolated import branch
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: true
+          fetch-depth: 2
+      - name: Import exact Xray source before applying compatibility changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e third_party/xray-core
+          git clone --filter=blob:none https://github.com/XTLS/Xray-core.git "$RUNNER_TEMP/xray-core"
+          git -C "$RUNNER_TEMP/xray-core" checkout --detach a4a3dff5b20c2faae567b742c172c7b95e75c083
+          test "$(git -C "$RUNNER_TEMP/xray-core" rev-parse HEAD)" = a4a3dff5b20c2faae567b742c172c7b95e75c083
+          test "$(head -n1 "$RUNNER_TEMP/xray-core/go.mod")" = 'module github.com/xtls/xray-core'
+          test -s "$RUNNER_TEMP/xray-core/LICENSE"
+          curl --fail --location --retry 3 --silent --show-error \
+            https://raw.githubusercontent.com/SawaMEN/3x-ui/600c06179de93a85b4e959f1bbb4813ef9e885b5/deploy/hiddify/xray-runtime-compat.patch \
+            -o "$RUNNER_TEMP/xray-runtime-compat.patch"
+          test -s "$RUNNER_TEMP/xray-runtime-compat.patch"
+          # Two 2026 Xray upstream changes already implement the old
+          # reader-copy and mux allocation-lock safety requirements. Verify
+          # those exact guarantees, then exclude ONLY their obsolete hunks.
+          python3 - "$RUNNER_TEMP/xray-core" "$RUNNER_TEMP/xray-runtime-compat.patch" "$RUNNER_TEMP/xray-runtime-filtered.patch" <<'PY'
+          import pathlib, re, sys
+          root, patch, output = map(pathlib.Path, sys.argv[1:])
+          reader = (root / 'common/mux/reader.go').read_text()
+          session = (root / 'common/mux/session.go').read_text()
+          client = (root / 'common/mux/client.go').read_text()
+          start = session.index('func (m *SessionManager) Allocate(')
+          end = session.index('func (m *SessionManager) Add(', start)
+          allocate = session[start:end]
+          assert 'dest   net.Destination' in reader and 'dest:   *dest' in reader, 'packet destination is not copied'
+          assert 'sm.Allocate(&m.strategy, link.Reader, link.Writer)' in client, 'mux dispatch API changed'
+          for marker in ('m.Lock()', 'if m.closed ||', 'input:  input', 'output: output'):
+              assert marker in allocate, 'mux allocation lost safety guarantee: ' + marker
+          original = patch.read_text()
+          sections = [s for s in re.split(r'(?=^--- (?:a/|/dev/null))', original, flags=re.M) if s.strip()]
+          assert len(sections) == 7, 'Xray compatibility patch structure changed'
+          obsolete = {'--- a/common/mux/reader.go', '--- a/common/mux/client.go'}
+          removed = [s for s in sections if s.splitlines()[0] in obsolete]
+          assert len(removed) == 2, 'expected exactly two already-native Xray patch sections'
+          output.write_text(''.join(s for s in sections if s.splitlines()[0] not in obsolete))
+          PY
+          git -C "$RUNNER_TEMP/xray-core" apply --check "$RUNNER_TEMP/xray-runtime-filtered.patch"
+          git -C "$RUNNER_TEMP/xray-core" apply "$RUNNER_TEMP/xray-runtime-filtered.patch"
+          mkdir -p third_party/xray-core
+          cp -a "$RUNNER_TEMP/xray-core/." third_party/xray-core/
+          rm -rf third_party/xray-core/.git third_party/xray-core/.github
+          gofmt -w \
+            third_party/xray-core/common/buf/multi_buffer.go \
+            third_party/xray-core/common/mux/reader.go \
+            third_party/xray-core/common/mux/client.go \
+            third_party/xray-core/app/router/sing_box_observer.go \
+            third_party/xray-core/transport/internet/kcp/receiving.go \
+            third_party/xray-core/transport/internet/kcp/connection.go \
+            third_party/xray-core/transport/internet/finalmask/mkcp/header/conn.go
+          cat > third_party/xray-core/SOURCE_PROVENANCE.md <<'EOF'
+          # Xray runtime pinned native compatibility
+
+          Upstream: https://github.com/XTLS/Xray-core
+          Revision: a4a3dff5b20c2faae567b742c172c7b95e75c083
+          License: original upstream license retained.
+          Overlay: SawaMEN/3x-ui/deploy/hiddify/xray-runtime-compat.patch
+          The overlay is applied once at source import; release builds never patch this module.
+          EOF
+          go mod edit -replace=github.com/xtls/xray-core=./third_party/xray-core
+          git diff --check
+      - name: Commit pinned native Xray runtime source to branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add third_party/xray-core go.mod
+          # Preserve upstream's exact source, including pre-existing whitespace.
+          # Check our reviewed patch before copying and the root module edit here.
+          git diff --cached --check -- go.mod
+          git diff --cached --quiet && { echo 'Xray source import was empty' >&2; exit 1; }
+          git commit -m 'feat(xray): vendor pinned runtime compatibility source without build patches'
+          git push origin HEAD:refs/heads/feature/native-xray-runtime-source-20261109
