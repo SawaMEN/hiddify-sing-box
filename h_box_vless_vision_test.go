@@ -133,8 +133,8 @@ func hStartVLESSBox(t *testing.T, testCase hVLESSCase, certPEM, keyPEM string) i
 	vlessPort := vlessReservation.Addr().(*net.TCPAddr).Port
 	mixedPort := mixedReservation.Addr().(*net.TCPAddr).Port
 	require.NotEqual(t, vlessPort, mixedPort)
-	require.NoError(t, vlessReservation.Close())
-	require.NoError(t, mixedReservation.Close())
+	defer vlessReservation.Close()
+	defer mixedReservation.Close()
 	user := map[string]any{"name": "u", "uuid": hVLESSUUID, "flow": testCase.flow}
 	inbound := map[string]any{"type": "vless", "tag": "vless-in", "listen": "127.0.0.1", "listen_port": vlessPort, "users": []any{user}}
 	outbound := map[string]any{"type": "vless", "tag": "vless-out", "server": "127.0.0.1", "server_port": vlessPort, "uuid": hVLESSUUID, "flow": testCase.flow}
@@ -164,6 +164,9 @@ func hStartVLESSBox(t *testing.T, testCase hVLESSCase, certPEM, keyPEM string) i
 	instance, err := box.New(box.Options{Context: ctx, Options: options})
 	require.NoError(t, err)
 	t.Cleanup(func() { instance.Close() })
+	// Keep both ports reserved until the instant Start binds the listeners.
+	require.NoError(t, vlessReservation.Close())
+	require.NoError(t, mixedReservation.Close())
 	require.NoError(t, instance.Start())
 	return mixedPort
 }
