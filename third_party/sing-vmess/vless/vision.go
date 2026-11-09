@@ -35,6 +35,9 @@ func init() {
 const xrayChunkSize = 8192
 
 type VisionConn struct {
+	filterAccess sync.Mutex // protects the TLS detection shared by Read and Write
+	readAccess   sync.Mutex // serializes reads and buffered padding state
+	readPrefix   []byte     // fragmented UUID/padding prefix
 	net.Conn
 	reader      *bufio.ChunkReader
 	writer      N.VectorisedWriter
@@ -407,7 +410,16 @@ func isTLSConn(conn net.Conn) bool {
 	return false
 }
 
-func (c *VisionConn) Read(p []byte) (n int, err error) {
+func (c *VisionConn) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	c.readAccess.Lock()
+	defer c.readAccess.Unlock()
+	return c.read(p)
+}
+
+func (c *VisionConn) read(p []byte) (n int, err error) {
 	for {
 		n = 0
 		for len(c.remainingBuffers) > 0 {
@@ -475,18 +487,18 @@ func (c *VisionConn) Read(p []byte) (n int, err error) {
 				} else {
 					return 0, E.New("unknown command ", c.currentCommand)
 				}
-			} else if c.remainingContent > 0 || c.remainingPadding > 0 {
+			} else if c.remainingContent > 0 || c.remainingPadding > 0 || len(c.readPrefix) > 0 || c.paddingHeaderLen > 0 {
 				c.withinPaddingBuffers = true
 			} else {
 				c.withinPaddingBuffers = false
 			}
-			if c.numberOfPacketToFilter > 0 {
+			if c.filterPackets() > 0 {
 				c.filterTLS(buf.ToSliceMulti(buffers))
 			}
 			c.remainingBuffers = buffers
 			continue
 		} else {
-			if c.numberOfPacketToFilter > 0 {
+			if c.filterPackets() > 0 {
 				c.filterTLS([][]byte{bufferBytes})
 			}
 			if chunkBuffer != nil {
@@ -502,17 +514,18 @@ func (c *VisionConn) Read(p []byte) (n int, err error) {
 func (c *VisionConn) Write(p []byte) (n int, err error) {
 	c.writeAccess.Lock()
 	defer c.writeAccess.Unlock()
-	if c.numberOfPacketToFilter > 0 {
+	if c.filterPackets() > 0 {
 		c.filterTLS([][]byte{p})
 	}
+	isTLS, isTLS12, enableXTLS := c.filterSnapshot()
 	if c.isPadding {
 		inputLen := len(p)
 		isComplete := isCompleteRecord(p)
 		buffers := reshapeBuffer(p)
 		switchToDirectAfterWrite := false
 		for i, buffer := range buffers {
-			if c.isTLS && buffer.Len() > 6 && bytes.Equal(tlsApplicationDataStart, buffer.To(3)) && isComplete {
-				if c.enableXTLS && c.canSplice {
+			if isTLS && buffer.Len() > 6 && bytes.Equal(tlsApplicationDataStart, buffer.To(3)) && isComplete {
+				if enableXTLS && c.canSplice {
 					switchToDirectAfterWrite = true
 				}
 				c.isPadding = false
@@ -526,7 +539,7 @@ func (c *VisionConn) Write(p []byte) (n int, err error) {
 					buffers[i] = c.padding(buffer, commandPaddingContinue)
 				}
 				continue
-			} else if !c.isTLS12orAbove && c.numberOfPacketToFilter <= 1 {
+			} else if !isTLS12 && c.filterPackets() <= 1 {
 				c.isPadding = false
 				buffers[i] = c.padding(buffer, commandPaddingEnd)
 				break
@@ -557,8 +570,25 @@ func (c *VisionConn) Write(p []byte) (n int, err error) {
 	}
 }
 
+func (c *VisionConn) filterPackets() int {
+	c.filterAccess.Lock()
+	defer c.filterAccess.Unlock()
+	return c.numberOfPacketToFilter
+}
+
+func (c *VisionConn) filterSnapshot() (bool, bool, bool) {
+	c.filterAccess.Lock()
+	defer c.filterAccess.Unlock()
+	return c.isTLS, c.isTLS12orAbove, c.enableXTLS
+}
+
 func (c *VisionConn) filterTLS(buffers [][]byte) {
+	c.filterAccess.Lock()
+	defer c.filterAccess.Unlock()
 	for _, buffer := range buffers {
+		if c.numberOfPacketToFilter <= 0 {
+			return
+		}
 		c.numberOfPacketToFilter--
 		if len(buffer) > 6 {
 			if buffer[0] == 22 && buffer[1] == 3 && buffer[2] == 3 {
@@ -613,7 +643,8 @@ func (c *VisionConn) padding(buffer *buf.Buffer, command byte) *buf.Buffer {
 	if buffer != nil {
 		contentLen = buffer.Len()
 	}
-	if contentLen < int(c.testseed[0]) && c.isTLS {
+	isTLS, _, _ := c.filterSnapshot()
+	if contentLen < int(c.testseed[0]) && isTLS {
 		l, _ := rand.Int(rand.Reader, big.NewInt(int64(c.testseed[1])))
 		paddingLen = int(l.Int64()) + int(c.testseed[2]) - contentLen
 	} else {
@@ -647,15 +678,22 @@ func (c *VisionConn) padding(buffer *buf.Buffer, command byte) *buf.Buffer {
 func (c *VisionConn) unPadding(buffer []byte) []*buf.Buffer {
 	var bufferIndex int
 	if c.remainingContent == -1 && c.remainingPadding == -1 {
-		if len(buffer) >= 21 && bytes.Equal(c.userUUID[:], buffer[:16]) {
-			bufferIndex = 16
-			c.remainingContent = 0
-			c.remainingPadding = 0
-			c.currentCommand = 0
+		if len(c.readPrefix) > 0 {
+			buffer = append(c.readPrefix, buffer...)
+			c.readPrefix = nil
 		}
-	}
-	if c.remainingContent == -1 && c.remainingPadding == -1 {
-		return []*buf.Buffer{buf.As(buffer).ToOwned()}
+		prefixLen := min(len(buffer), len(c.userUUID))
+		if !bytes.Equal(c.userUUID[:prefixLen], buffer[:prefixLen]) {
+			return []*buf.Buffer{buf.As(buffer).ToOwned()}
+		}
+		if len(buffer) < 21 {
+			c.readPrefix = append([]byte(nil), buffer...)
+			return nil
+		}
+		bufferIndex = 16
+		c.remainingContent = 0
+		c.remainingPadding = 0
+		c.currentCommand = 0
 	}
 	var buffers []*buf.Buffer
 	for bufferIndex < len(buffer) {
@@ -700,10 +738,22 @@ func (c *VisionConn) unPadding(buffer []byte) []*buf.Buffer {
 }
 
 func (c *VisionConn) Close() error {
+	var err error
 	if c.directWrite.Load() {
-		return c.directConn.Close()
+		err = c.directConn.Close()
+	} else {
+		err = c.Conn.Close()
 	}
-	return c.Conn.Close()
+	// Close the underlying stream before taking readAccess so a blocked Read
+	// can return; then release every remaining owned buffer exactly once.
+	c.readAccess.Lock()
+	for _, b := range c.remainingBuffers {
+		b.Release()
+	}
+	c.remainingBuffers = nil
+	c.readPrefix = nil
+	c.readAccess.Unlock()
+	return err
 }
 
 func (c *VisionConn) NeedAdditionalReadDeadline() bool {
@@ -715,6 +765,8 @@ func (c *VisionConn) Upstream() any {
 }
 
 func (c *VisionConn) ReaderReplaceable() bool {
+	c.readAccess.Lock()
+	defer c.readAccess.Unlock()
 	return c.directRead
 }
 
@@ -725,6 +777,8 @@ func (c *VisionConn) WriterReplaceable() bool {
 }
 
 func (c *VisionConn) UpstreamReader() any {
+	c.readAccess.Lock()
+	defer c.readAccess.Unlock()
 	if c.directRead {
 		return c.directConn
 	}
