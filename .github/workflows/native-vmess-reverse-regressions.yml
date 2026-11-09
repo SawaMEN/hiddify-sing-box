@@ -41,5 +41,5 @@ jobs:
             github.com/sagernet/sing-vmess/vless \
             github.com/sagernet/sing-box/protocol/vless \
             github.com/sagernet/sing-box/common/tls \
-            -run '^(TestH_Vision|TestXUIPanelVision|TestXUIPanelUnsupportedVLESS|TestXUIReverse|TestXUIPanelRealityMLDSA)' \
+            -run '^(TestH_Vision|TestXUIPanelVision|TestXUIPanelUnsupportedVLESS|TestXUIReverse|TestXUIPanelReverse|TestXUIPanelRealityMLDSA)' \
             -count=1 -timeout=2m
