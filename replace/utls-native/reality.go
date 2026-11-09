@@ -307,7 +307,9 @@ func (hs *realityServerHandshakeStateTLS13) handshake() error {
 			if offset < 0 {
 				return errors.New("REALITY: missing ML-DSA signature extension")
 			}
-			mldsa65.SignTo(key.(*mldsa65.PrivateKey), h.Sum(nil), nil, false, signedCert[offset:offset+mldsa65.SignatureSize])
+			if err := mldsa65.SignTo(key.(*mldsa65.PrivateKey), h.Sum(nil), nil, false, signedCert[offset:offset+mldsa65.SignatureSize]); err != nil {
+				return err
+			}
 		}
 
 		hs.cert = &Certificate{
