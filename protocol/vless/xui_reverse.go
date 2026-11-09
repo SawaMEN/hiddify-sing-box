@@ -18,6 +18,7 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/service"
+
 	XR "github.com/xtls/xray-core/app/reverse"
 	XC "github.com/xtls/xray-core/common"
 	XB "github.com/xtls/xray-core/common/buf"
@@ -43,12 +44,14 @@ func reverseLink(c net.Conn) *XT.Link {
 	s := &reverseStream{Conn: c, reader: XB.NewReader(c), writer: XB.NewWriter(c)}
 	return &XT.Link{Reader: s, Writer: s}
 }
+
 func (s *reverseStream) ReadMultiBuffer() (XB.MultiBuffer, error) { return s.reader.ReadMultiBuffer() }
 func (s *reverseStream) WriteMultiBuffer(b XB.MultiBuffer) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	return s.writer.WriteMultiBuffer(b)
 }
+
 func (s *reverseStream) Close() error { s.once.Do(func() { s.Conn.Close() }); return nil }
 func (s *reverseStream) Interrupt()   { s.Close() }
 func xrDestination(d M.Socksaddr, udp bool) XN.Destination {
@@ -58,9 +61,11 @@ func xrDestination(d M.Socksaddr, udp bool) XN.Destination {
 	}
 	return XN.TCPDestination(a, XN.Port(d.Port))
 }
+
 func sbDestination(d XN.Destination) M.Socksaddr {
 	return M.ParseSocksaddrHostPort(d.Address.String(), uint16(d.Port))
 }
+
 func reverseContext(ctx context.Context, d XN.Destination) context.Context {
 	ctx = XS.ContextWithIsReverseMux(ctx, true)
 	return XS.ContextWithOutbounds(ctx, []*XS.Outbound{{Target: d}})
@@ -81,6 +86,7 @@ func NewReversePortal(ctx context.Context, _ adapter.Router, _ log.ContextLogger
 	}
 	return &reversePortal{Adapter: outbound.NewAdapter("vless-reverse", tag, []string{"tcp", "udp"}, nil), ctx: ctx}, nil
 }
+
 func (p *reversePortal) PickAvailable() (*XM.ClientWorker, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -104,6 +110,7 @@ func (p *reversePortal) PickAvailable() (*XM.ClientWorker, error) {
 	}
 	return best, nil
 }
+
 func (p *reversePortal) accept(ctx context.Context, c net.Conn, onClose N.CloseHandlerFunc) error {
 	w, err := XM.NewClientWorker(*reverseLink(c), XM.ClientStrategy{})
 	if err != nil {
@@ -178,6 +185,7 @@ func (p *reversePortal) accept(ctx context.Context, c net.Conn, onClose N.CloseH
 	}()
 	return nil
 }
+
 func (p *reversePortal) DialContext(ctx context.Context, network string, d M.Socksaddr) (net.Conn, error) {
 	if N.NetworkName(network) == N.NetworkUDP {
 		pc, err := p.ListenPacket(ctx, d)
@@ -203,6 +211,7 @@ func (p *reversePortal) DialContext(ctx context.Context, network string, d M.Soc
 
 	return front, nil
 }
+
 func (p *reversePortal) ListenPacket(ctx context.Context, d M.Socksaddr) (net.PacketConn, error) {
 	upR, upW := XP.New(XP.WithSizeLimit(65536))
 	downR, downW := XP.New(XP.WithSizeLimit(65536))
@@ -216,6 +225,7 @@ func (p *reversePortal) ListenPacket(ctx context.Context, d M.Socksaddr) (net.Pa
 	}
 	return pc, nil
 }
+
 func (p *reversePortal) Close() error {
 	p.mu.Lock()
 	p.closed = true
@@ -269,6 +279,7 @@ func newReverseBridge(ctx context.Context, r adapter.Router, l log.ContextLogger
 	ctx, cancel := context.WithCancel(ctx)
 	return &reverseBridge{ctx: ctx, cancel: cancel, router: r, logger: l, tag: tag, dialer: d}
 }
+
 func (b *reverseBridge) start() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -279,6 +290,7 @@ func (b *reverseBridge) start() {
 	b.wg.Add(1)
 	go b.run()
 }
+
 func (b *reverseBridge) close() { b.mu.Lock(); b.closed = true; b.cancel(); b.mu.Unlock(); b.wg.Wait() }
 
 type bridgeSession struct {
@@ -366,7 +378,7 @@ type reverseDispatcher struct {
 	draining atomic.Bool
 }
 
-func (d *reverseDispatcher) Type() interface{} { return routing.DispatcherType() }
+func (d *reverseDispatcher) Type() any { return routing.DispatcherType() }
 func (d *reverseDispatcher) Start() error      { return nil }
 func (d *reverseDispatcher) Close() error      { return nil }
 func (d *reverseDispatcher) Dispatch(ctx context.Context, dest XN.Destination) (*XT.Link, error) {
@@ -408,6 +420,7 @@ func (d *reverseDispatcher) Dispatch(ctx context.Context, dest XN.Destination) (
 	d.bridge.router.RouteConnectionEx(d.ctx, front, metadata, func(error) { stop(); front.Close() })
 	return reverseLink(back), nil
 }
+
 func (d *reverseDispatcher) DispatchLink(context.Context, XN.Destination, *XT.Link) error {
 	return fmt.Errorf("reverse dispatcher requires Dispatch")
 }
@@ -435,6 +448,7 @@ func newReversePacket(l *XT.Link, d M.Socksaddr) *reversePacket {
 	go p.receive()
 	return p
 }
+
 func (p *reversePacket) receive() {
 	// There is one receiver goroutine; it alone closes packets, allowing
 	// repeated ReadFrom calls to observe remote EOF instead of hanging.
@@ -469,6 +483,7 @@ func (p *reversePacket) receive() {
 		}
 	}
 }
+
 func deadlineTimer(t time.Time) (*time.Timer, <-chan time.Time) {
 	if t.IsZero() {
 		return nil, nil
@@ -476,6 +491,7 @@ func deadlineTimer(t time.Time) (*time.Timer, <-chan time.Time) {
 	timer := time.NewTimer(max(0, time.Until(t)))
 	return timer, timer.C
 }
+
 func (p *reversePacket) read() (data []byte, dest M.Socksaddr, err error) {
 	for {
 		p.mu.Lock()
@@ -505,6 +521,7 @@ func (p *reversePacket) read() (data []byte, dest M.Socksaddr, err error) {
 		return
 	}
 }
+
 func (p *reversePacket) ReadFrom(b []byte) (int, net.Addr, error) {
 	data, d, err := p.read()
 	if err != nil {
@@ -515,6 +532,7 @@ func (p *reversePacket) ReadFrom(b []byte) (int, net.Addr, error) {
 	}
 	return copy(b, data), d, nil
 }
+
 func (p *reversePacket) ReadPacket(b *SB.Buffer) (M.Socksaddr, error) {
 	data, d, err := p.read()
 	if err != nil {
@@ -523,6 +541,7 @@ func (p *reversePacket) ReadPacket(b *SB.Buffer) (M.Socksaddr, error) {
 	_, err = b.Write(data)
 	return d, err
 }
+
 func (p *reversePacket) WriteTo(data []byte, a net.Addr) (int, error) {
 	p.writeMu.Lock()
 	defer p.writeMu.Unlock()
@@ -574,20 +593,24 @@ func (p *reversePacket) WriteTo(data []byte, a net.Addr) (int, error) {
 		return len(data), nil
 	}
 }
+
 func (p *reversePacket) WritePacket(b *SB.Buffer, d M.Socksaddr) error {
 	defer b.Release()
 	_, err := p.WriteTo(b.Bytes(), d)
 	return err
 }
+
 func (p *reversePacket) Close() error {
 	p.once.Do(func() { close(p.closed); XC.Interrupt(p.link.Reader); XC.Interrupt(p.link.Writer) })
 	return nil
 }
+
 func (p *reversePacket) LocalAddr() net.Addr { return &net.UDPAddr{} }
 func (p *reversePacket) SetDeadline(t time.Time) error {
 	p.SetReadDeadline(t)
 	return p.SetWriteDeadline(t)
 }
+
 func (p *reversePacket) SetReadDeadline(t time.Time) error {
 	p.mu.Lock()
 	p.rd = t
@@ -596,6 +619,7 @@ func (p *reversePacket) SetReadDeadline(t time.Time) error {
 	p.mu.Unlock()
 	return nil
 }
+
 func (p *reversePacket) SetWriteDeadline(t time.Time) error {
 	p.mu.Lock()
 	p.wd = t
@@ -613,6 +637,7 @@ type reverseBoundPacket struct {
 func newReverseBoundPacket(c net.PacketConn, d M.Socksaddr) *reverseBoundPacket {
 	return &reverseBoundPacket{c, d}
 }
+
 func (p *reverseBoundPacket) Read(b []byte) (int, error)  { n, _, err := p.ReadFrom(b); return n, err }
 func (p *reverseBoundPacket) Write(b []byte) (int, error) { return p.WriteTo(b, p.dest) }
 func (p *reverseBoundPacket) RemoteAddr() net.Addr        { return p.dest }
