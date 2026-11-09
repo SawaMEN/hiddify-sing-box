@@ -89,7 +89,9 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add third_party/xray-core go.mod
-          git diff --cached --check
+          # Preserve upstream's exact source, including pre-existing whitespace.
+          # Check our reviewed patch before copying and the root module edit here.
+          git diff --cached --check -- go.mod
           git diff --cached --quiet && { echo 'Xray source import was empty' >&2; exit 1; }
           git commit -m 'feat(xray): vendor pinned runtime compatibility source without build patches'
           git push origin HEAD:refs/heads/feature/native-xray-runtime-source-20261109
