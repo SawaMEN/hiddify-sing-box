@@ -18,7 +18,8 @@ func TestXUIPanelVisionTestseedNativeValidation(t *testing.T) {
 		{1},
 		{900, 0, 900, 256},
 		{0, 500, 900, 256},
-		{900, 500, 898, 256}, {900, 500, 900, 65537},
+		{900, 500, 898, 256},
+		{900, 500, 900, 65537},
 		{900, 65535, 900, 256},
 	} {
 		if _, err := vmess.ValidateVisionTestseed(seed); err == nil {
