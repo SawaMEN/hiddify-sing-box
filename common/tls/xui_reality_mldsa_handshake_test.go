@@ -57,6 +57,13 @@ func TestXUIPanelRealityMLDSAAuthenticatedHandshake(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 			defer cancel()
 			serverConfig := &utls.RealityConfig{
+				Log: func(format string, values ...any) {
+					// Do not expose shared handshake keys or short IDs in CI logs.
+					if strings.Contains(format, "AuthKey") || strings.Contains(format, "ClientShortId") {
+						return
+					}
+					t.Logf(format, values...)
+				},
 				Type:        "tcp",
 				Dest:        originAddr,
 				PrivateKey:  x25519.Bytes(),
@@ -108,8 +115,8 @@ func TestXUIPanelRealityMLDSAAuthenticatedHandshake(t *testing.T) {
 			origin.CloseClientConnections()
 			select {
 			case serverErr := <-serverDone:
-				if !tc.wantReject && serverErr != nil && !errors.Is(serverErr, io.EOF) && err == nil {
-					t.Logf("origin shutdown after handshake: %v", serverErr)
+				if serverErr != nil && !errors.Is(serverErr, io.EOF) {
+					t.Logf("REALITY server result: %v", serverErr)
 				}
 			case <-time.After(5 * time.Second):
 				t.Error("REALITY server goroutines did not exit after disconnect")
