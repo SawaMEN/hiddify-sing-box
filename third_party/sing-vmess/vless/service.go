@@ -19,11 +19,13 @@ import (
 )
 
 type Service[T comparable] struct {
-	userMap  map[[16]byte]T
-	userFlow map[T]string
-	testseed [4]uint32
-	logger   logger.Logger
-	handler  Handler
+	userMap        map[[16]byte]T
+	userFlow       map[T]string
+	reverseUsers   map[T]bool
+	reverseHandler func(context.Context, T, net.Conn, M.Socksaddr, N.CloseHandlerFunc) error
+	testseed       [4]uint32
+	logger         logger.Logger
+	handler        Handler
 }
 
 type Handler interface {
@@ -67,6 +69,9 @@ func (s *Service[T]) NewConnectionWithOptions(ctx context.Context, conn net.Conn
 	if !loaded {
 		return E.New("unknown UUID: ", uuid.FromBytesOrNil(request.UUID[:]))
 	}
+	if s.reverseUsers[user] != (request.Command == CommandReverse) {
+		return E.New("reverse command not allowed for this user")
+	}
 	ctx = auth.ContextWithUser(ctx, user)
 	userFlow := s.userFlow[user]
 	if request.Flow == FlowVision && request.Command == vmess.NetworkUDP {
@@ -97,6 +102,11 @@ func (s *Service[T]) NewConnectionWithOptions(ctx context.Context, conn net.Conn
 		return E.New("unknown flow: ", userFlow)
 	}
 	switch request.Command {
+	case CommandReverse:
+		if s.reverseHandler == nil {
+			return E.New("reverse handler unavailable")
+		}
+		return s.reverseHandler(ctx, user, conn, source, onClose)
 	case vmess.CommandTCP:
 		s.handler.NewConnectionEx(ctx, conn, source, request.Destination, onClose)
 		return nil
@@ -255,4 +265,9 @@ func (c *serverPacketConn) NeedAdditionalReadDeadline() bool {
 
 func (c *serverPacketConn) Upstream() any {
 	return c.ExtendedConn
+}
+
+func (s *Service[T]) SetReverseHandler(users map[T]bool, handler func(context.Context, T, net.Conn, M.Socksaddr, N.CloseHandlerFunc) error) {
+	s.reverseUsers = users
+	s.reverseHandler = handler
 }

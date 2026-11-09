@@ -300,3 +300,7 @@ func (c *PacketConn) NeedAdditionalReadDeadline() bool {
 func (c *PacketConn) Upstream() any {
 	return c.Conn
 }
+
+func (c *Client) DialEarlyReverseConnWithOptions(conn, base net.Conn, splice bool) (net.Conn, error) {
+	return c.prepareConnWithOptions(NewConn(conn, c.key, CommandReverse, M.Socksaddr{}, c.flow), base, splice)
+}
