@@ -77,12 +77,12 @@ func NewServer(options ServerOptions) (*Server, error) {
 	}
 	server := &Server{
 		speedScope: options.SpeedScope,
-		ctx:       options.Context,
-		logger:    options.Logger,
-		template:  template,
-		resolve:   options.Resolve,
-		handler:   options.Handler,
-		addresses: make(map[netip.Addr]*serverSession),
+		ctx:        options.Context,
+		logger:     options.Logger,
+		template:   template,
+		resolve:    options.Resolve,
+		handler:    options.Handler,
+		addresses:  make(map[netip.Addr]*serverSession),
 	}
 	var builder netipx.IPSetBuilder
 	for _, address := range options.Address {
