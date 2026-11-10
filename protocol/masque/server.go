@@ -88,6 +88,7 @@ func NewServerEndpoint(ctx context.Context, router adapter.Router, logger log.Co
 		localAddresses: options.Address,
 	}
 	server, err := masque.NewServer(masque.ServerOptions{
+		SpeedScope:      tag,
 		Context:         ctx,
 		Logger:          logger,
 		Path:            options.Path,

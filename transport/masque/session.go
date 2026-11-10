@@ -190,6 +190,14 @@ func (s *session) writeCapsule(capsule *buf.Buffer) error {
 func (s *session) writePackets(buffers []*buf.Buffer) error {
 	capsules := buffers[:0]
 	for i, buffer := range buffers {
+		if limiter, ok := s.handler.(interface{ waitDownload(int) error }); ok {
+			if err := limiter.waitDownload(buffer.Len()); err != nil {
+				buffer.Release()
+				buf.ReleaseMulti(capsules)
+				buf.ReleaseMulti(buffers[i+1:])
+				return err
+			}
+		}
 		datagram := transportHTTP.PrependContextID(buffer)
 		if s.datagrams != nil {
 			err := s.datagrams.SendDatagram(datagram.Bytes())

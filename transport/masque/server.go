@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/sagernet/sing-box/internal/xuispeed"
 	transportHTTP "github.com/sagernet/sing-box/transport/http"
 	"github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
@@ -28,6 +29,7 @@ type ServerHandler interface {
 }
 
 type ServerOptions struct {
+	SpeedScope      string
 	Context         context.Context
 	Logger          logger.ContextLogger
 	Path            string
@@ -38,6 +40,7 @@ type ServerOptions struct {
 }
 
 type Server struct {
+	speedScope      string
 	ctx             context.Context
 	logger          logger.ContextLogger
 	template        *Template
@@ -53,6 +56,7 @@ type Server struct {
 }
 
 type serverSession struct {
+	speed *xuispeed.Client
 	*session
 	queue            *tun.OutboundQueue
 	server           *Server
@@ -72,6 +76,7 @@ func NewServer(options ServerOptions) (*Server, error) {
 		return nil, E.New("missing address")
 	}
 	server := &Server{
+		speedScope: options.SpeedScope,
 		ctx:       options.Context,
 		logger:    options.Logger,
 		template:  template,
@@ -152,6 +157,13 @@ func (s *Server) NewTunnelRequest(ctx context.Context, request transportHTTP.Tun
 		ctx:    ctx,
 	}
 	current.user, _ = auth.UserFromContext[string](ctx)
+	current.speed, err = xuispeed.New("masque:" + s.speedScope + ":" + current.user)
+	if err != nil {
+		s.logger.ErrorContext(ctx, E.Cause(err, "MASQUE speed budget unavailable"))
+		request.Reject(http.StatusServiceUnavailable, nil)
+		return
+	}
+	defer current.speed.Close()
 	for _, pool := range s.pools {
 		address, allocated := pool.allocate()
 		if !allocated {
@@ -409,7 +421,16 @@ func (s *serverSession) handleRouteAdvertisement(routes []AddressRange) error {
 	return nil
 }
 
+func (s *serverSession) waitDownload(n int) error {
+	return s.speed.Wait(s.session.ctx, 1, n)
+}
+
 func (s *serverSession) handlePacket(buffer *buf.Buffer) {
+	if err := s.speed.Wait(s.ctx, 0, buffer.Len()); err != nil {
+		buffer.Release()
+		s.cancel(err)
+		return
+	}
 	source, destination, protocol, valid := packetAddresses(buffer.Bytes())
 	if !valid {
 		buffer.Release()
