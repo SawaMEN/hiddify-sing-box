@@ -46,11 +46,11 @@ func TestBrokerOnlyRequiresCredentialsForLimitedIdentity(t *testing.T) {
 }
 
 func TestInvalidBrokerConfigurationFailsClosed(t *testing.T) {
-	t.Setenv(Environment, t.TempDir()+"/missing")
+	t.Setenv(Environment, t.TempDir() + "/missing")
 	if _, err := New("masque:demo:user"); err == nil {
 		t.Fatal("missing broker config silently ignored")
 	}
-	file := t.TempDir()+"/speed.json"
+	file := t.TempDir() + "/speed.json"
 	if err := os.WriteFile(file, []byte("{broken"), 0o600); err != nil {
 		t.Fatal(err)
 	}
