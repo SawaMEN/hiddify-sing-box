@@ -3,8 +3,8 @@
 package tls
 
 import (
-	"testing"
 	"net"
+	"testing"
 
 	utls "github.com/metacubex/utls"
 )
