@@ -3083,10 +3083,11 @@ func (uconn *UConn) applyPresetByID(id ClientHelloID) (err error) {
 }
 
 // ApplyPreset should only be used in conjunction with HelloCustom to apply custom specs.
-// Fields of TLSExtensions that are slices/pointers are shared across different connections with
-// same ClientHelloSpec. It is advised to use different specs and avoid any shared state.
+// Clone the spec to keep certificate trust-anchor IDs, key shares, signatures
+// and extension state isolated between simultaneous TLS connections.
 func (uconn *UConn) ApplyPreset(p *ClientHelloSpec) error {
 	var err error
+	p = p.clone()
 
 	err = uconn.SetTLSVers(p.TLSVersMin, p.TLSVersMax, p.Extensions)
 	if err != nil {
