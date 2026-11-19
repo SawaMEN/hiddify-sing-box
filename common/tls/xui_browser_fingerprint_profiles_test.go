@@ -17,16 +17,8 @@ func TestXUIPanelBrowserFingerprintProfiles(t *testing.T) {
 	}{
 		{"", utls.HelloChrome_155},
 		{"chrome", utls.HelloChrome_155},
-		{"chrome_155", utls.HelloChrome_155},
-		{"hellochrome_155", utls.HelloChrome_155},
-		{"chrome_133", utls.HelloChrome_133},
-		{"hellochrome_133", utls.HelloChrome_133},
 		{"firefox", utls.HelloFirefox_148},
-		{"firefox_148", utls.HelloFirefox_148},
-		{"hellofirefox_148", utls.HelloFirefox_148},
 		{"safari", utls.HelloSafari_26_3},
-		{"safari_26_3", utls.HelloSafari_26_3},
-		{"hellosafari_26_3", utls.HelloSafari_26_3},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -42,5 +34,45 @@ func TestXUIPanelBrowserFingerprintProfiles(t *testing.T) {
 				t.Fatalf("fingerprint %q cannot build a ClientHelloSpec: %v", tt.name, err)
 			}
 		})
+	}
+}
+
+func TestXUIPanelRejectFakeChromePSKProfiles(t *testing.T) {
+	// These were never separate PSK/PQ handshakes: silently returning
+	// the Chrome profile was misleading, so reject them instead.
+	for _, name := range []string{
+		"chrome_psk",
+		"chrome_psk_shuffle",
+		"chrome_padding_psk_shuffle",
+		"chrome_pq",
+		"chrome_pq_psk",
+	} {
+		if _, err := uTLSClientHelloID(name); err == nil {
+			t.Fatalf("obsolete fingerprint %q silently accepted", name)
+		}
+	}
+}
+
+func TestXUIPanelRandomFingerprintUsesVerifiedBrowser(t *testing.T) {
+	got, err := uTLSClientHelloID("random")
+	if err != nil {
+		t.Fatal(err)
+	}
+	supported := []utls.ClientHelloID{utls.HelloChrome_155, utls.HelloFirefox_148, utls.HelloSafari_26_3}
+	for _, fingerprint := range supported {
+		if got.Client == fingerprint.Client && got.Version == fingerprint.Version {
+			return
+		}
+	}
+	t.Fatalf("random fingerprint selected an obsolete or unknown template: %s/%s", got.Client, got.Version)
+}
+
+func TestXUIPanelRandomizedNoALPN(t *testing.T) {
+	got, err := uTLSClientHelloID("randomizednoalpn")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Client != utls.HelloRandomizedNoALPN.Client || got.Version != utls.HelloRandomizedNoALPN.Version {
+		t.Fatalf("unexpected randomized no-ALPN fingerprint: %s/%s", got.Client, got.Version)
 	}
 }
