@@ -38,19 +38,32 @@ func TestXUIPanelBrowserFingerprintProfiles(t *testing.T) {
 	}
 }
 
-func TestXUIPanelBrowserFingerprintRejectFakePSKProfiles(t *testing.T) {
-	// These were never separate PSK/PQ handshakes: silently returning
-	// the Chrome profile was misleading, so reject them instead.
-	for _, name := range []string{
-		"chrome_psk",
-		"chrome_psk_shuffle",
-		"chrome_padding_psk_shuffle",
-		"chrome_pq",
-		"chrome_pq_psk",
+func TestXUIPanelBrowserFingerprintLegacyAliasesMigrate(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		want utls.ClientHelloID
+	}{
+		{"chrome_psk", utls.HelloChrome_155},
+		{"chrome_psk_shuffle", utls.HelloChrome_155},
+		{"chrome_padding_psk_shuffle", utls.HelloChrome_155},
+		{"chrome_pq", utls.HelloChrome_155},
+		{"chrome_pq_psk", utls.HelloChrome_155},
+		{"chrome_133", utls.HelloChrome_155},
+		{"hellochrome_133", utls.HelloChrome_155},
+		{"hellochrome_155", utls.HelloChrome_155},
+		{"hellofirefox_148", utls.HelloFirefox_148},
+		{"hellosafari_26_3", utls.HelloSafari_26_3},
 	} {
-		if _, err := uTLSClientHelloID(name); err == nil {
-			t.Fatalf("obsolete fingerprint %q silently accepted", name)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := uTLSClientHelloID(tc.name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Client != tc.want.Client || got.Version != tc.want.Version {
+				t.Fatalf("legacy alias %q returned %s/%s, want modern %s/%s", tc.name,
+					got.Client, got.Version, tc.want.Client, tc.want.Version)
+			}
+		})
 	}
 }
 
