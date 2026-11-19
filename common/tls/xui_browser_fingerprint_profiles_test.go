@@ -4,6 +4,7 @@ package tls
 
 import (
 	"testing"
+	"net"
 
 	utls "github.com/metacubex/utls"
 )
@@ -74,5 +75,31 @@ func TestXUIPanelBrowserFingerprintRandomizedNoALPN(t *testing.T) {
 	}
 	if got.Client != utls.HelloRandomizedNoALPN.Client || got.Version != utls.HelloRandomizedNoALPN.Version {
 		t.Fatalf("unexpected randomized no-ALPN fingerprint: %s/%s", got.Client, got.Version)
+	}
+}
+
+func TestXUIPanelBrowserFingerprintCanonicalClientHello(t *testing.T) {
+	// Test every selectable uTLS profile as a real ClientHello generator.
+	// No external server is required: BuildHandshakeState stays local.
+	for _, name := range []string{
+		"chrome", "firefox", "safari", "edge", "ios", "android",
+		"360", "qq", "random", "randomized", "randomizednoalpn",
+	} {
+		t.Run(name, func(t *testing.T) {
+			id, err := uTLSClientHelloID(name)
+			if err != nil {
+				t.Fatalf("fingerprint is not supported: %v", err)
+			}
+			conn := utls.UClient(&net.TCPConn{}, &utls.Config{
+				ServerName: "example.com",
+				NextProtos: []string{"h2", "http/1.1"},
+			}, id)
+			if err := conn.BuildHandshakeState(); err != nil {
+				t.Fatalf("cannot construct ClientHello for %q: %v", name, err)
+			}
+			if len(conn.HandshakeState.Hello.Raw) == 0 {
+				t.Fatalf("no ClientHello for %q", name)
+			}
+		})
 	}
 }
