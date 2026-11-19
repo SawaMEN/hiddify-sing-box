@@ -255,17 +255,24 @@ will prepare ClientHello with empty uconn.Extensions so you can fill it with TLS
 	* `utls.HelloFirefox_Auto` - parrots recommended(usually latest) Firefox version
 	* `utls.HelloFirefox_55` - parrots Firefox 55
 
-In this fork `HelloChrome_Auto` selects `HelloChrome_155`. Older Chrome 133
-remains available explicitly via `HelloChrome_133` or the panel's
-`hellochrome_133` compatibility fingerprint. The default is the newest
-captured Chrome template shipped with this source tree, **not** a claim that
-Chrome 155 is the latest browser release. This profile includes
-GREASE and ML-DSA signature schemes and the 28 trust anchor IDs observed in a
-[fresh Chrome capture](testdata/chrome155_clienthello.md). The IDs are a snapshot
-of that build's Chrome Root Store; component updates and browser feature settings
-can change the ClientHello. `TrustAnchorsExtension` preserves these IDs when
-fingerprinting a capture and does not change `Config.RootCAs`.
-	
+In this fork, the public names `chrome`, `firefox`, and `safari` map to
+`HelloChrome_155`, `HelloFirefox_148`, and `HelloSafari_26_3`.
+These are the newest independently implemented snapshots currently in this
+repository, not necessarily the newest browser releases. Only the canonical
+unversioned names are offered by the panel, so upgrading does not duplicate
+old entries. The `random` selector uses only these three templates.
+
+The stock uTLS presets for Edge, iOS, Android, 360 and QQ are older and do not
+represent verified current releases. They must not be relabeled as current or
+silently replaced with a different product's ClientHello. PSK/PQ variants
+formerly offered in the native editor were aliases for ordinary Chrome,
+not distinct resumed / post-quantum handshakes; they are no longer selectable.
+
+The Chrome 155 profile includes GREASE, ML-DSA signature schemes and trust
+anchor IDs observed in the
+[original Chrome capture](testdata/chrome155_clienthello.md). The trust anchors
+are a snapshot from the capture, not an automatic Chrome Root Store updater.
+
 # Usage
 ## Examples
 Find basic examples [here](examples/examples.go).  
