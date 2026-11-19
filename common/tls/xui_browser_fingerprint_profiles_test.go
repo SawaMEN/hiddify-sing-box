@@ -10,7 +10,7 @@ import (
 
 // These mappings must match the ClientHello implementations in
 // replace/utls-native, not just the names offered by the web panel.
-func TestXUIBrowserFingerprintProfiles(t *testing.T) {
+func TestXUIPanelBrowserFingerprintProfiles(t *testing.T) {
 	tests := []struct {
 		name string
 		want utls.ClientHelloID
