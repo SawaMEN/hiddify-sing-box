@@ -67,7 +67,7 @@ require (
 	github.com/pion/rtp v1.10.2
 	github.com/pires/go-proxyproto v0.16.0
 	github.com/pkg/sftp v1.13.10
-	github.com/refraction-networking/utls v1.8.3-0.20260301010127-aa6edf4b11af
+	github.com/refraction-networking/utls v1.8.3-0.20261108164504-a13c59ffe98b
 	github.com/sagernet/asc-go v0.0.0-20260914163356-9e3d45a797c1
 	github.com/sagernet/bbolt v0.0.0-20260915102804-500ee1e84832
 	github.com/sagernet/cors v1.2.1
