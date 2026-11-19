@@ -37,7 +37,7 @@ func TestXUIPanelBrowserFingerprintProfiles(t *testing.T) {
 	}
 }
 
-func TestXUIPanelRejectFakeChromePSKProfiles(t *testing.T) {
+func TestXUIPanelBrowserFingerprintRejectFakePSKProfiles(t *testing.T) {
 	// These were never separate PSK/PQ handshakes: silently returning
 	// the Chrome profile was misleading, so reject them instead.
 	for _, name := range []string{
@@ -53,7 +53,7 @@ func TestXUIPanelRejectFakeChromePSKProfiles(t *testing.T) {
 	}
 }
 
-func TestXUIPanelRandomFingerprintUsesVerifiedBrowser(t *testing.T) {
+func TestXUIPanelBrowserFingerprintRandomUsesVerifiedBrowser(t *testing.T) {
 	got, err := uTLSClientHelloID("random")
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +67,7 @@ func TestXUIPanelRandomFingerprintUsesVerifiedBrowser(t *testing.T) {
 	t.Fatalf("random fingerprint selected an obsolete or unknown template: %s/%s", got.Client, got.Version)
 }
 
-func TestXUIPanelRandomizedNoALPN(t *testing.T) {
+func TestXUIPanelBrowserFingerprintRandomizedNoALPN(t *testing.T) {
 	got, err := uTLSClientHelloID("randomizednoalpn")
 	if err != nil {
 		t.Fatal(err)
