@@ -91,7 +91,7 @@ func TestXUIPanelRealityMLDSAAuthenticatedHandshake(t *testing.T) {
 				return wrongPublic.Bytes()
 			}(), wantReject: true},
 		} {
-			t.Run(fingerprint+"/"+tc.name, func(t *testing.T) {
+			t.Run(fingerprint + "/" + tc.name, func(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 				defer cancel()
 				serverConfig := &utls.RealityConfig{
