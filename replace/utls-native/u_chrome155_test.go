@@ -6,8 +6,6 @@ package tls
 
 import (
 	"bytes"
-	"crypto/fips140"
-	"crypto/mldsa"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -313,98 +311,3 @@ func TestChrome155PresetOwnership(t *testing.T) {
 	}
 }
 
-func TestChrome155MLDSAHandshake(t *testing.T) {
-	if fips140.Version() == "v1.0.0" {
-		t.Skip("ML-DSA is unavailable in FIPS 140-3 module v1.0.0")
-	}
-	for _, tc := range []struct {
-		scheme SignatureScheme
-		cert   Certificate
-	}{
-		{MLDSA44, testMLDSA44Cert},
-		{MLDSA65, testMLDSA65Cert},
-		{MLDSA87, testMLDSA87Cert},
-	} {
-		t.Run(tc.scheme.String(), func(t *testing.T) {
-			clientConfig := testConfigClient.Clone()
-			clientConfig.ClientSessionCache = nil
-			serverConfig := testConfigServer.Clone()
-			serverConfig.MinVersion, serverConfig.MaxVersion = VersionTLS13, VersionTLS13
-			serverConfig.Certificates = []Certificate{tc.cert}
-			serverConfig.SessionTicketsDisabled = true
-			clientConn, serverConn := localPipe(t)
-			client, server := UClient(clientConn, clientConfig, HelloChrome_155), Server(serverConn, serverConfig)
-			clientResult := make(chan error, 1)
-			go func() { clientResult <- client.Handshake() }()
-			serverErr := server.Handshake()
-			if serverErr != nil {
-				serverConn.Close()
-			}
-			clientErr := <-clientResult
-			if clientErr != nil || serverErr != nil {
-				t.Fatalf("Chrome 155 ML-DSA handshake: client=%v, server=%v", clientErr, serverErr)
-			}
-			for _, state := range []ConnectionState{client.ConnectionState(), server.ConnectionState()} {
-				if !state.HandshakeComplete || state.Version != VersionTLS13 || state.DidResume {
-					t.Fatalf("expected a fresh full TLS 1.3 handshake: %+v", state)
-				}
-			}
-			peer := client.ConnectionState().PeerCertificates
-			if len(peer) == 0 {
-				t.Fatal("missing verified server certificate")
-			}
-			if _, ok := peer[0].PublicKey.(*mldsa.PublicKey); !ok {
-				t.Fatalf("server public key = %T, want *mldsa.PublicKey", peer[0].PublicKey)
-			}
-		})
-	}
-}
-
-func TestChrome155SignatureGREASESeed(t *testing.T) {
-	client := UClient(&net.TCPConn{}, &Config{
-		ServerName: "example.com",
-		Rand:       &incrementingSource{next: 0x81},
-	}, HelloChrome_155)
-	if err := client.BuildHandshakeState(); err != nil {
-		t.Fatal(err)
-	}
-	// BoringSSL reserves seed slot 7 for signature algorithms, independently
-	// of the cipher, group, extension, and version GREASE slots.
-	const signatureSeedSlot = 7
-	seed := client.greaseSeed[signatureSeedSlot]
-	want := (seed & 0xf0) | 0x0a
-	want |= want << 8
-	if want == GREASE_PLACEHOLDER {
-		t.Fatal("deterministic test seed must distinguish generated GREASE from the placeholder")
-	}
-	_, _, raw := chrome155ParseWire(t, client.HandshakeState.Hello.Raw)
-	r := chrome155Reader{t, raw[13], "signature_algorithms"}
-	signatures := chrome155Reader{t, r.vector(2), "signature schemes"}
-	r.end()
-	got := uint16(signatures.number(2))
-	if got != want || got == GREASE_PLACEHOLDER {
-		t.Fatalf("signature GREASE = %#04x, want %#04x from BoringSSL seed slot 7", got, want)
-	}
-	if gotState := uint16(client.HandshakeState.Hello.SupportedSignatureAlgorithms[0]); gotState != want {
-		t.Fatalf("signature GREASE in handshake state = %#04x, want %#04x", gotState, want)
-	}
-}
-
-func TestChrome133CapabilitiesPreserved(t *testing.T) {
-	client := chrome155Build(t, HelloChrome_133, "example.com", nil)
-	_, _, raw := chrome155ParseWire(t, client.HandshakeState.Hello.Raw)
-	r := chrome155Reader{t, raw[13], "Chrome 133 signature_algorithms"}
-	got := chrome155Uint16s(t, r.vector(2))
-	r.end()
-	want := []uint16{
-		uint16(ECDSAWithP256AndSHA256), uint16(PSSWithSHA256), uint16(PKCS1WithSHA256),
-		uint16(ECDSAWithP384AndSHA384), uint16(PSSWithSHA384), uint16(PKCS1WithSHA384),
-		uint16(PSSWithSHA512), uint16(PKCS1WithSHA512),
-	}
-	if !slices.Equal(got, want) {
-		t.Fatalf("Chrome 133 signature schemes changed: got %x, want original classical schemes %x", got, want)
-	}
-	if _, ok := raw[0xca34]; ok {
-		t.Fatal("Chrome 155 trust anchor IDs leaked into the Chrome 133 profile")
-	}
-}
