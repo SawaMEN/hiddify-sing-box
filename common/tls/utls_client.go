@@ -395,13 +395,17 @@ func init() {
 
 func uTLSClientHelloID(name string) (utls.ClientHelloID, error) {
 	switch name {
-	case "chrome", "":
+	// Existing configurations may contain historical names. They all
+	// resolve to the canonical new profile; no old ClientHello is emitted.
+	case "chrome", "", "chrome_psk", "chrome_psk_shuffle",
+		"chrome_padding_psk_shuffle", "chrome_pq", "chrome_pq_psk",
+		"chrome_155", "hellochrome_155", "chrome_133", "hellochrome_133":
 		return utls.HelloChrome_Auto, nil
-	case "firefox":
+	case "firefox", "firefox_148", "hellofirefox_148":
 		return utls.HelloFirefox_Auto, nil
 	case "edge":
 		return utls.HelloEdge_Auto, nil
-	case "safari":
+	case "safari", "safari_26_3", "hellosafari_26_3":
 		return utls.HelloSafari_Auto, nil
 	case "360":
 		return utls.Hello360_Auto, nil
