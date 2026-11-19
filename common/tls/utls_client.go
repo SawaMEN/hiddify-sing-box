@@ -399,6 +399,14 @@ func uTLSClientHelloID(name string) (utls.ClientHelloID, error) {
 		fallthrough
 	case "chrome", "":
 		return utls.HelloChrome_Auto, nil
+	case "chrome_155", "hellochrome_155":
+		return utls.HelloChrome_155, nil
+	case "chrome_133", "hellochrome_133":
+		return utls.HelloChrome_133, nil
+	case "firefox_148", "hellofirefox_148":
+		return utls.HelloFirefox_148, nil
+	case "safari_26_3", "hellosafari_26_3":
+		return utls.HelloSafari_26_3, nil
 	case "firefox":
 		return utls.HelloFirefox_Auto, nil
 	case "edge":
