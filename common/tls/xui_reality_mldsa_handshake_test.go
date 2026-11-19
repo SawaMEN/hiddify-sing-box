@@ -78,84 +78,86 @@ func TestXUIPanelRealityMLDSAAuthenticatedHandshake(t *testing.T) {
 	public, private := mldsa65.NewKeyFromSeed(&seed)
 	originAddr := strings.TrimPrefix(origin.URL, "https://")
 
-	for _, tc := range []struct {
-		name       string
-		verifyKey  []byte
-		wantReject bool
-	}{
-		{name: "valid-transcript", verifyKey: public.Bytes()},
-		{name: "wrong-MLDSA-verification-key", verifyKey: func() []byte {
-			wrongSeed := [32]byte{42, 23, 16, 15, 8, 4}
-			wrongPublic, _ := mldsa65.NewKeyFromSeed(&wrongSeed)
-			return wrongPublic.Bytes()
-		}(), wantReject: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-			defer cancel()
-			serverConfig := &utls.RealityConfig{
-				// REALITY's internal logging may outlive the subtest. Never call
-				// t.Logf from that detached goroutine; it races with test teardown.
-				// Also avoid printing handshake secrets into CI logs.
-				Log:         func(string, ...any) {},
-				Type:        "tcp",
-				Dest:        originAddr,
-				PrivateKey:  x25519.Bytes(),
-				Mldsa65Key:  private.Bytes(),
-				ServerNames: map[string]bool{"example.com": true},
-				ShortIds:    map[[8]byte]bool{{}: true},
-				DialContext: (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
-			}
-			client, err := NewRealityClient(ctx, nil, "example.com", option.OutboundTLSOptions{
-				Enabled:    true,
-				ServerName: "example.com",
-				UTLS:       &option.OutboundUTLSOptions{Enabled: true, Fingerprint: "chrome"},
-				Reality: &option.OutboundRealityOptions{
-					Enabled:       true,
-					PublicKey:     base64.RawURLEncoding.EncodeToString(x25519.PublicKey().Bytes()),
-					Mldsa65Verify: base64.RawURLEncoding.EncodeToString(tc.verifyKey),
-				},
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			clientConn, serverConn := net.Pipe()
-			deadline := time.Now().Add(25 * time.Second)
-			if err := clientConn.SetDeadline(deadline); err != nil {
-				t.Fatal(err)
-			}
-			if err := serverConn.SetDeadline(deadline); err != nil {
-				t.Fatal(err)
-			}
-			serverDone := make(chan error, 1)
-			go func() {
-				_, handshakeErr := utls.RealityServer(ctx, serverConn, serverConfig)
-				serverDone <- handshakeErr
-			}()
-			verified, err := client.(*RealityClientConfig).ClientHandshake(ctx, clientConn)
-			if tc.wantReject {
-				if err == nil {
+	for _, fingerprint := range []string{"chrome", "firefox", "safari"} {
+		for _, tc := range []struct {
+			name       string
+			verifyKey  []byte
+			wantReject bool
+		}{
+			{name: "valid-transcript", verifyKey: public.Bytes()},
+			{name: "wrong-MLDSA-verification-key", verifyKey: func() []byte {
+				wrongSeed := [32]byte{42, 23, 16, 15, 8, 4}
+				wrongPublic, _ := mldsa65.NewKeyFromSeed(&wrongSeed)
+				return wrongPublic.Bytes()
+			}(), wantReject: true},
+		} {
+			t.Run(fingerprint+"/"+tc.name, func(t *testing.T) {
+				ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+				defer cancel()
+				serverConfig := &utls.RealityConfig{
+					// REALITY's internal logging may outlive the subtest. Never call
+					// t.Logf from that detached goroutine; it races with test teardown.
+					// Also avoid printing handshake secrets into CI logs.
+					Log:         func(string, ...any) {},
+					Type:        "tcp",
+					Dest:        originAddr,
+					PrivateKey:  x25519.Bytes(),
+					Mldsa65Key:  private.Bytes(),
+					ServerNames: map[string]bool{"example.com": true},
+					ShortIds:    map[[8]byte]bool{{}: true},
+					DialContext: (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
+				}
+				client, err := NewRealityClient(ctx, nil, "example.com", option.OutboundTLSOptions{
+					Enabled:    true,
+					ServerName: "example.com",
+					UTLS:       &option.OutboundUTLSOptions{Enabled: true, Fingerprint: fingerprint},
+					Reality: &option.OutboundRealityOptions{
+						Enabled:       true,
+						PublicKey:     base64.RawURLEncoding.EncodeToString(x25519.PublicKey().Bytes()),
+						Mldsa65Verify: base64.RawURLEncoding.EncodeToString(tc.verifyKey),
+					},
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				clientConn, serverConn := net.Pipe()
+				deadline := time.Now().Add(25 * time.Second)
+				if err := clientConn.SetDeadline(deadline); err != nil {
+					t.Fatal(err)
+				}
+				if err := serverConn.SetDeadline(deadline); err != nil {
+					t.Fatal(err)
+				}
+				serverDone := make(chan error, 1)
+				go func() {
+					_, handshakeErr := utls.RealityServer(ctx, serverConn, serverConfig)
+					serverDone <- handshakeErr
+				}()
+				verified, err := client.(*RealityClientConfig).ClientHandshake(ctx, clientConn)
+				if tc.wantReject {
+					if err == nil {
+						_ = verified.Close()
+						t.Error("REALITY accepted a server signed by the wrong ML-DSA key")
+					}
+				} else if err != nil {
+					t.Errorf("REALITY rejected a valid ML-DSA server handshake: %v", err)
+				}
+				if verified != nil {
 					_ = verified.Close()
-					t.Error("REALITY accepted a server signed by the wrong ML-DSA key")
 				}
-			} else if err != nil {
-				t.Errorf("REALITY rejected a valid ML-DSA server handshake: %v", err)
-			}
-			if verified != nil {
-				_ = verified.Close()
-			}
-			_ = clientConn.Close()
-			_ = serverConn.Close()
-			origin.CloseClientConnections()
-			select {
-			case serverErr := <-serverDone:
-				if serverErr != nil && !errors.Is(serverErr, io.EOF) {
-					t.Logf("REALITY server result: %v", serverErr)
+				_ = clientConn.Close()
+				_ = serverConn.Close()
+				origin.CloseClientConnections()
+				select {
+				case serverErr := <-serverDone:
+					if serverErr != nil && !errors.Is(serverErr, io.EOF) {
+						t.Logf("REALITY server result: %v", serverErr)
+					}
+				case <-time.After(5 * time.Second):
+					t.Error("REALITY server goroutines did not exit after disconnect")
 				}
-			case <-time.After(5 * time.Second):
-				t.Error("REALITY server goroutines did not exit after disconnect")
-			}
-		})
+			})
+		}
 	}
 }
 
