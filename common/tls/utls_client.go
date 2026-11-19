@@ -376,12 +376,12 @@ var (
 )
 
 func init() {
+	// Only include independently captured, current-enough browser templates.
+	// The legacy Edge/iOS defaults predate hybrid X25519+ML-KEM support.
 	modernFingerprints := []utls.ClientHelloID{
 		utls.HelloChrome_Auto,
 		utls.HelloFirefox_Auto,
-		utls.HelloEdge_Auto,
 		utls.HelloSafari_Auto,
-		utls.HelloIOS_Auto,
 	}
 	randomFingerprint = modernFingerprints[rand.Intn(len(modernFingerprints))]
 
@@ -395,18 +395,8 @@ func init() {
 
 func uTLSClientHelloID(name string) (utls.ClientHelloID, error) {
 	switch name {
-	case "chrome_psk", "chrome_psk_shuffle", "chrome_padding_psk_shuffle", "chrome_pq", "chrome_pq_psk":
-		fallthrough
 	case "chrome", "":
 		return utls.HelloChrome_Auto, nil
-	case "chrome_155", "hellochrome_155":
-		return utls.HelloChrome_155, nil
-	case "chrome_133", "hellochrome_133":
-		return utls.HelloChrome_133, nil
-	case "firefox_148", "hellofirefox_148":
-		return utls.HelloFirefox_148, nil
-	case "safari_26_3", "hellosafari_26_3":
-		return utls.HelloSafari_26_3, nil
 	case "firefox":
 		return utls.HelloFirefox_Auto, nil
 	case "edge":
@@ -425,6 +415,8 @@ func uTLSClientHelloID(name string) (utls.ClientHelloID, error) {
 		return randomFingerprint, nil
 	case "randomized":
 		return randomizedFingerprint, nil
+	case "randomizednoalpn":
+		return utls.HelloRandomizedNoALPN, nil
 	default:
 		if id, ok := xrayFingerprint(name); ok { // H: Xray's names, hellochrome_120 and the like
 			return id, nil // H
