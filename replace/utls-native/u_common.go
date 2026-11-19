@@ -614,7 +614,9 @@ var (
 	HelloFirefox_120  = ClientHelloID{helloFirefox, "120", nil, nil}
 	HelloFirefox_148  = ClientHelloID{helloFirefox, "148", nil, nil}
 
-	HelloChrome_Auto        = HelloChrome_133
+	// Use the newest locally verified Chrome ClientHello by default.
+	// Keep Chrome 133 available explicitly for existing compatibility profiles.
+	HelloChrome_Auto        = HelloChrome_155
 	HelloChrome_58          = ClientHelloID{helloChrome, "58", nil, nil}
 	HelloChrome_62          = ClientHelloID{helloChrome, "62", nil, nil}
 	HelloChrome_70          = ClientHelloID{helloChrome, "70", nil, nil}
