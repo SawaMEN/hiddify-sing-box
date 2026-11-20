@@ -31,7 +31,7 @@ func RegisterInbound(registry *inbound.Registry) {
 }
 
 func NewInbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.ShadowsocksInboundOptions) (adapter.Inbound, error) {
-	options.Method = normalizeMethod(options.Method) //H
+	options.Method = normalizeMethod(options.Method) // H
 	if len(options.Users) > 0 && len(options.Destinations) > 0 {
 		return nil, E.New("users and destinations options must not be combined")
 	} else if options.Managed && (len(options.Users) > 0 || len(options.Destinations) > 0) {

@@ -34,7 +34,7 @@ func isValidHTTPHost(request string, config string) bool {
 	// H: a Host with a colon was split as host:port, which a bracketed IPv6 address without a
 	// port is not: "[2001:db8::1]", what a client sends for the host 2001:db8::1 on the default
 	// port, never matched, and the server answered 404 to every request
-	return hHostName(request) == hHostName(config) //H
+	return hHostName(request) == hHostName(config) // H
 }
 
 // hHostName is the host of an HTTP Host value, in lower case, without its port and without the

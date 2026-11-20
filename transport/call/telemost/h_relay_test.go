@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/kulikov0/headless-client/webrtc"
 	"github.com/sagernet/sing/common/logger"
+
+	"github.com/kulikov0/headless-client/webrtc"
 	"github.com/stretchr/testify/require"
 )
 

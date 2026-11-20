@@ -43,7 +43,7 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 	if err != nil {
 		return nil, fmt.Errorf("failed to build mieru client config: %w", err)
 	}
-	config.Resolver = newMieruResolver(ctx, outboundDialer) //H
+	config.Resolver = newMieruResolver(ctx, outboundDialer) // H
 	c := mieruclient.NewClient()
 	if err := c.Store(config); err != nil {
 		return nil, fmt.Errorf("failed to store mieru client config: %w", err)
@@ -113,7 +113,7 @@ func (o *Outbound) Close() error {
 	// of every outbound that was closed stayed for good, with its goroutine and the ticker that
 	// wakes it every 5 s. Keep top closes each lazy outbound after its test, and a profile's
 	// mieru proxies leaked again at every pick. //H
-	return o.client.Stop() //H
+	return o.client.Stop() // H
 }
 
 // mieruDialer is an adapter to mieru dialer interface.

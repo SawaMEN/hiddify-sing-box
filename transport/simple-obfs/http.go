@@ -8,7 +8,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
-	"strings" //H
+	"strings" // H
 
 	B "github.com/sagernet/sing/common/buf"
 )
@@ -65,21 +65,21 @@ func (ho *HTTPObfs) Write(b []byte) (int, error) {
 	if ho.firstRequest {
 		randBytes := make([]byte, 16)
 		rand.Read(randBytes)
-		urlHost := hHTTPObfsHost(ho.host)                                                             //H: a bare IPv6 obfs-host made an unparsable URL
-		req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", urlHost), bytes.NewBuffer(b[:])) //H
-		if err != nil {                                                                               //H: a nil request crashed the whole app
-			return 0, err //H
-		} //H
+		urlHost := hHTTPObfsHost(ho.host)                                                             // H: a bare IPv6 obfs-host made an unparsable URL
+		req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", urlHost), bytes.NewBuffer(b[:])) // H
+		if err != nil {                                                                               // H: a nil request crashed the whole app
+			return 0, err // H
+		} // H
 		req.Header.Set("User-Agent", fmt.Sprintf("curl/7.%d.%d", rand.Int()%54, rand.Int()%2))
 		req.Header.Set("Upgrade", "websocket")
 		req.Header.Set("Connection", "Upgrade")
-		req.Host = urlHost //H
+		req.Host = urlHost // H
 		if ho.port != "80" {
-			req.Host = net.JoinHostPort(strings.Trim(urlHost, "[]"), ho.port) //H
+			req.Host = net.JoinHostPort(strings.Trim(urlHost, "[]"), ho.port) // H
 		}
 		req.Header.Set("Sec-WebSocket-Key", base64.URLEncoding.EncodeToString(randBytes))
 		req.ContentLength = int64(len(b))
-		err = req.Write(ho.Conn) //H
+		err = req.Write(ho.Conn) // H
 		ho.firstRequest = false
 		return len(b), err
 	}

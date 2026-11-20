@@ -171,18 +171,18 @@ func (s *ServerEndpoint) connHandler(ctx context.Context, conn net.Conn, metadat
 		// blocking receive, and a dial that emptied the queue in between left that receive
 		// waiting for good, with the server's lock held: no connection came in and no dial of
 		// any user went out after it.
-		for { //H
+		for { // H
 			select {
 			case ch <- conn:
-				return nil //H
+				return nil // H
 			default:
 			}
-			select { //H
-			case oldConn := <-ch: //H: the oldest makes room
+			select { // H
+			case oldConn := <-ch: // H: the oldest makes room
 				oldConn.Close()
-			default: //H: a dial took one meanwhile: there is room now
-			} //H
-		} //H
+			default: // H: a dial took one meanwhile: there is room now
+			} // H
+		} // H
 	}
 	if request.Command == CommandTCP {
 		sourceUUID, ok := s.users[request.UUID]

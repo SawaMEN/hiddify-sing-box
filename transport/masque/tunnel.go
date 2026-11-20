@@ -204,7 +204,7 @@ func (e *Tunnel) getIpConn() (*connectip.Conn, error) {
 	}
 	timer := time.NewTimer(0)
 	defer timer.Stop()
-	for failures := 1; ; failures++ { //H
+	for failures := 1; ; failures++ { // H
 		conn, err := e.connect()
 		if err == nil {
 			e.udpConn = conn.udpConn

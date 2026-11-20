@@ -5,10 +5,11 @@ import (
 	"net/netip"
 	"testing"
 
-	mierucommon "github.com/enfein/mieru/v3/apis/common"
 	"github.com/sagernet/sing-box/adapter"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/service"
+
+	mierucommon "github.com/enfein/mieru/v3/apis/common"
 	"github.com/stretchr/testify/require"
 )
 
