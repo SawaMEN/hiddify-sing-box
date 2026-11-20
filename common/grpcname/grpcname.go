@@ -42,3 +42,26 @@ func UnescapedPath(serviceName string) string {
 	}
 	return unescaped
 }
+
+// MultiPath selects Xray's TunMulti RPC method. Custom paths can declare
+// "/service/Tun|TunMulti"; without a pipe Xray uses the same custom stream
+// name for both methods.
+func MultiPath(serviceName string) string {
+	if !strings.HasPrefix(serviceName, "/") {
+		return "/" + url.PathEscape(serviceName) + "/TunMulti"
+	}
+	service, stream := Names(serviceName)
+	if ending := serviceName[strings.LastIndex(serviceName, "/")+1:]; strings.Contains(ending, "|") {
+		stream = url.PathEscape(strings.SplitN(ending, "|", 2)[1])
+	}
+	return "/" + service + "/" + stream
+}
+
+func UnescapedMultiPath(serviceName string) string {
+	path := MultiPath(serviceName)
+	unescaped, err := url.PathUnescape(path)
+	if err != nil {
+		return path
+	}
+	return unescaped
+}
