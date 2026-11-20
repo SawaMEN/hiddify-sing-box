@@ -16,14 +16,14 @@ import (
 )
 
 func NewGRPCServer(ctx context.Context, logger logger.ContextLogger, options option.V2RayGRPCOptions, tlsConfig tls.ServerConfig, handler adapter.V2RayServerTransportHandler) (adapter.V2RayServerTransport, error) {
-	if options.ForceLite {
+	if options.ForceLite || options.MultiMode {
 		return v2raygrpclite.NewServer(ctx, logger, options, tlsConfig, handler)
 	}
 	return v2raygrpc.NewServer(ctx, logger, options, tlsConfig, handler)
 }
 
 func NewGRPCClient(ctx context.Context, dialer N.Dialer, serverAddr M.Socksaddr, options option.V2RayGRPCOptions, tlsConfig tls.Config) (adapter.V2RayClientTransport, error) {
-	if options.ForceLite {
+	if options.ForceLite || options.MultiMode {
 		return v2raygrpclite.NewClient(ctx, dialer, serverAddr, options, tlsConfig), nil
 	}
 	return v2raygrpc.NewClient(ctx, dialer, serverAddr, options, tlsConfig)
