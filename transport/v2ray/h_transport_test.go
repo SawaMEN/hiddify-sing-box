@@ -157,6 +157,7 @@ func TestH_GRPCMultiModeLiteRoundTrip(t *testing.T) {
 	_, err = conn.Write(message)
 	require.NoError(t, err)
 	reply := make([]byte, len(message))
-	require.NoError(t, io.ReadFull(conn, reply))
+	_, err = io.ReadFull(conn, reply)
+	require.NoError(t, err)
 	require.Equal(t, message, reply)
 }
