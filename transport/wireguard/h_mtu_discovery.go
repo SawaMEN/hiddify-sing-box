@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"math/rand/v2"
 	"net/netip"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,10 +23,11 @@ import (
 // (the network changed, or its connection through the detour was made again because the detour's
 // selection changed or the connection was recovered), it sends ICMP echo requests of every size
 // from the smallest MTU to the configured one through the tunnel to 1.1.1.1 (2606:4700:4700::1111
-// without an IPv4 address), as package mtusearch says. Each request goes out as one tunnel UDP
-// packet of that size plus the WireGuard headers. The stack's MTU becomes the largest size
-// answered, within about a second. When nothing is answered (a server that drops ICMP, or no route
-// to the target), the MTU stays as configured.
+// without an IPv4 address), as package mtusearch says: the configured size first, and a binary
+// search when it does not get through. Each request goes out as one tunnel UDP packet of that
+// size plus the WireGuard headers. The stack's MTU becomes the largest size answered. When
+// nothing is answered (a server that drops ICMP, or no route to the target), the MTU stays as
+// configured.
 //
 // A WARP server keeps sending to the old path until the next handshake, which WireGuard starts only
 // after hearing nothing for 15 seconds. So when the path changes, the endpoint drops its session
@@ -237,8 +239,8 @@ func (p *mtuProber) discover(ctx context.Context, handshake bool) {
 	}
 }
 
-// round sends an echo request of each size at once, and returns the largest size answered within
-// timeout (0 for none). It returns early once the largest one is answered.
+// round sends an echo request of each size at once, in that order, and returns the largest size
+// answered within timeout (0 for none). It returns early once the largest one is answered.
 func (p *mtuProber) round(ctx context.Context, source, target netip.Addr, sizes []int, timeout time.Duration) int {
 	wgDevice := p.endpoint.device.Load()
 	if wgDevice == nil || len(sizes) == 0 {
@@ -246,7 +248,7 @@ func (p *mtuProber) round(ctx context.Context, source, target netip.Addr, sizes 
 	}
 	var (
 		best     atomic.Int32
-		largest  = sizes[len(sizes)-1]
+		largest  = slices.Max(sizes)
 		done     = make(chan struct{})
 		doneOnce sync.Once
 	)

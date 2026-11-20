@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptrace"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/tls"
 	"github.com/sagernet/sing-box/common/xray/buf"
+	Xbadoption "github.com/sagernet/sing-box/common/xray/json/badoption"
 	"github.com/sagernet/sing-box/common/xray/net"
 	"github.com/sagernet/sing-box/common/xray/pipe"
 	"github.com/sagernet/sing-box/common/xray/signal/done"
@@ -183,17 +185,11 @@ func (c *Client) DialContext(ctx context.Context) (net.Conn, error) {
 		}
 		return &conn, nil
 	}
-	scMaxEachPostBytes := options.GetNormalizedScMaxEachPostBytes()
+	scMaxEachPostBytes := hMinScMaxEachPostBytes(options.GetNormalizedScMaxEachPostBytes()) // H
 	scMinPostsIntervalMs := options.GetNormalizedScMinPostsIntervalMs()
-	if scMaxEachPostBytes.From <= buf.Size {
-		panic("`scMaxEachPostBytes` should be bigger than " + strconv.Itoa(buf.Size))
-	}
 	maxUploadSize := scMaxEachPostBytes.Rand()
-	// WithSizeLimit(0) will still allow single bytes to pass, and a lot of
-	// code relies on this behavior. Subtract 1 so that together with
-	// uploadWriter wrapper, exact size limits can be enforced
-	// uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize - 1))
-	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize - buf.Size))
+	// H: the pipe can grow by one write after reaching its size limit.
+	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize - hUploadPiece(maxUploadSize))) // H
 	conn.writer = uploadWriter{
 		uploadPipeWriter,
 		maxUploadSize,
@@ -281,6 +277,7 @@ func getBaseRequestURL(options *option.V2RayXHTTPBaseOptions, dest M.Socksaddr, 
 	if requestURL.Host == "" {
 		requestURL.Host = dest.AddrString()
 	}
+	requestURL.Host = hURLHost(requestURL.Host) //H: a bare IPv6 host made an unparsable URL and a nil request that took the whole app down
 	requestURL.Path = options.Path
 	if err := sHTTP.URLSetPath(&requestURL, options.Path); err != nil {
 		return requestURL, E.New(err, "parse path")
@@ -290,6 +287,9 @@ func getBaseRequestURL(options *option.V2RayXHTTPBaseOptions, dest M.Socksaddr, 
 	}
 	requestURL.Path = options.GetNormalizedPath()
 	requestURL.RawQuery = options.GetNormalizedQuery()
+	if _, err := url.Parse(requestURL.String()); err != nil { //H: refused when the outbound is made, not on every dial
+		return requestURL, E.Cause(err, "xhttp request url") //H
+	} //H
 	return requestURL, nil
 }
 
@@ -373,4 +373,24 @@ func createHTTPClient(dest M.Socksaddr, dialer N.Dialer, options *option.V2RayXH
 		dialUploadConn: dialContext,
 	}
 	return client
+}
+
+// hURLHost brackets a bare IPv6 address, which a URL host needs: "2001:db8::1" -> "[2001:db8::1]".
+func hURLHost(host string) string {
+	addr, err := netip.ParseAddr(host)
+	if err != nil || !addr.Is6() {
+		return host
+	}
+	return "[" + addr.String() + "]"
+}
+
+// hMinScMaxEachPostBytes keeps small post sizes valid down to one byte.
+func hMinScMaxEachPostBytes(value Xbadoption.Range) Xbadoption.Range {
+	value.From = max(1, value.From)
+	value.To = max(value.From, value.To)
+	return value
+}
+
+func hUploadPiece(maxUploadSize int32) int32 {
+	return min(maxUploadSize, buf.Size)
 }

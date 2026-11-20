@@ -46,6 +46,7 @@ type Outbound struct {
 }
 
 func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.ShadowsocksOutboundOptions) (adapter.Outbound, error) {
+	options.Method = normalizeMethod(options.Method) //H
 	method, err := shadowsocks.CreateMethod(ctx, options.Method, shadowsocks.MethodOptions{
 		Password: options.Password,
 	})

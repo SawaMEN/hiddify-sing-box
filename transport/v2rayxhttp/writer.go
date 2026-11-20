@@ -18,26 +18,17 @@ type uploadWriter struct {
 	maxLen int32
 }
 
-func (w uploadWriter) Write(b []byte) (int, error) {
-	/*
-		capacity := int(w.maxLen - w.Len())
-		if capacity > 0 && capacity < len(b) {
-			b = b[:capacity]
+func (w uploadWriter) Write(data []byte) (int, error) {
+	piece := int(hUploadPiece(w.maxLen))
+	written := 0
+	for written < len(data) {
+		end := written + min(piece, len(data)-written)
+		buffer := buf.New()
+		common.Must2(buffer.Write(data[written:end]))
+		if err := w.WriteMultiBuffer(buf.MultiBuffer{buffer}); err != nil {
+			return written, err
 		}
-	*/
-
-	buffer := buf.MultiBufferContainer{}
-	common.Must2(buffer.Write(b))
-
-	var writed int
-	for i, buff := range buffer.MultiBuffer {
-		length := int(buff.Len()) // H: capture before handing ownership to the reader
-		err := w.WriteMultiBuffer(buf.MultiBuffer{buff})
-		if err != nil {
-			buf.ReleaseMulti(buffer.MultiBuffer[i+1:])
-			return writed, err
-		}
-		writed += length // H
+		written = end
 	}
-	return writed, nil
+	return written, nil
 }
