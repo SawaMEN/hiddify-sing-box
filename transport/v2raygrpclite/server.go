@@ -44,7 +44,7 @@ func NewServer(ctx context.Context, logger logger.ContextLogger, options option.
 		tlsConfig: tlsConfig,
 		logger:    logger,
 		handler:   handler,
-		path: grpcname.UnescapedPath(options.ServiceName), // H: Xray custom paths
+		path:      grpcname.UnescapedPath(options.ServiceName), // H: Xray custom paths
 		multiPath: func() string {
 			if options.MultiMode {
 				return grpcname.UnescapedMultiPath(options.ServiceName)
