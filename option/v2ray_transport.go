@@ -139,6 +139,7 @@ type V2RayQUICOptions struct{}
 
 type V2RayGRPCOptions struct {
 	ServiceName         string             `json:"service_name,omitempty"`
+	MultiMode           bool               `json:"multi_mode,omitempty"` // Xray TunMulti (MultiHunk), not standard Tun
 	IdleTimeout         badoption.Duration `json:"idle_timeout,omitempty"`
 	PingTimeout         badoption.Duration `json:"ping_timeout,omitempty"`
 	PermitWithoutStream bool               `json:"permit_without_stream,omitempty"`
