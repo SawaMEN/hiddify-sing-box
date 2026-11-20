@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -105,19 +106,39 @@ func StartPool(logger log.ContextLogger, tag string, options PoolOptions, dial m
 	return &Pool{manager: manager, addr: addr, dial: dial}, nil
 }
 
-// The resolver library reserves an ephemeral UDP port before binding TCP on
-// the same port. Concurrent pools can claim that port between the two binds.
-// Retry only EADDRINUSE: malformed options and other failures are never hidden.
+// The resolver library reserves a UDP port before binding TCP on the same
+// port. Another listener can claim it in between; on Windows, a UDP ephemeral
+// port may also fall into a TCP-excluded range (WSAEACCES / 10013). Since each
+// new attempt gets a fresh ephemeral port, retry only these bind errors.
 func startLocalWithRetry(options multidns.Options, start func(multidns.Options) (*multidns.Manager, string, error)) (*multidns.Manager, string, error) {
-	const attempts = 5
-	for attempt := range attempts {
+	const (
+		busyPortAttempts = 5
+		windowsExcludedPortAttempts = 256
+	)
+	for attempt := range windowsExcludedPortAttempts {
 		manager, addr, err := start(options)
-		if err == nil || !errors.Is(err, syscall.EADDRINUSE) || attempt == attempts-1 {
+		if err == nil {
+			return manager, addr, nil
+		}
+		busyPort := errors.Is(err, syscall.EADDRINUSE) && attempt+1 < busyPortAttempts
+		excludedPort := windowsExcludedTCPPort(err) && attempt+1 < windowsExcludedPortAttempts
+		if !busyPort && !excludedPort {
 			return manager, addr, err
 		}
-		time.Sleep(time.Duration(attempt+1) * time.Millisecond)
+		// Bound the retry delay even if the excluded Windows port range is large.
+		time.Sleep(time.Duration(min(attempt+1, 5)) * time.Millisecond)
 	}
 	panic("unreachable")
+}
+
+// Windows can reject a TCP bind to a UDP-selected ephemeral port with 10013.
+// Do not retry unrelated permission errors or failed UDP binds.
+func windowsExcludedTCPPort(err error) bool {
+	if runtime.GOOS != "windows" || !errors.Is(err, syscall.Errno(10013)) {
+		return false
+	}
+	var opErr *net.OpError
+	return errors.As(err, &opErr) && opErr.Op == "listen" && opErr.Net == "tcp"
 }
 
 // Addr is the local "127.0.0.1:port" the tunnel sends its queries to.
