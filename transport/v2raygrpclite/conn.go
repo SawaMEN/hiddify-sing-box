@@ -23,13 +23,13 @@ import (
 var _ net.Conn = (*GunConn)(nil)
 
 type GunConn struct {
-	rawReader     io.Reader
-	reader        *std_bufio.Reader
-	writer        io.Writer
-	flusher       http.Flusher
-	create        chan struct{}
-	err           error
-	cancel        context.CancelFunc
+	rawReader      io.Reader
+	reader         *std_bufio.Reader
+	writer         io.Writer
+	flusher        http.Flusher
+	create         chan struct{}
+	err            error
+	cancel         context.CancelFunc
 	readRemaining  int
 	frameRemaining int64
 	multiMode      bool
