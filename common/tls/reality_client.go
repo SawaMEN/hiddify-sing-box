@@ -156,7 +156,7 @@ func (e *RealityClientConfig) Client(conn net.Conn) (Conn, error) {
 // H: realityClientVersion is the Xray version reported to REALITY servers. Servers compare it
 // with their minClientVer (Xray v26.7 applied 26.3.27 when unset), so it follows Xray's latest
 // release instead of sing-box's old 1.8.1, which those servers reject.
-var realityClientVersion = [3]byte{26, 10, 17}
+var realityClientVersion = [3]byte{26, 11, 9}
 
 func (e *RealityClientConfig) ClientHandshake(ctx context.Context, conn net.Conn) (aTLS.Conn, error) {
 	verifier := &realityVerifier{
@@ -210,7 +210,7 @@ func (e *RealityClientConfig) ClientHandshake(ctx context.Context, conn net.Conn
 	binary.BigEndian.PutUint64(hello.SessionId, uint64(nowTime.Unix()))
 
 	copy(hello.SessionId[:3], realityClientVersion[:]) // H
-	binary.BigEndian.PutUint32(hello.SessionId[4:], uint32(time.Now().Unix()))
+	binary.BigEndian.PutUint32(hello.SessionId[4:], uint32(nowTime.Unix()))
 	copy(hello.SessionId[8:], e.shortID[:])
 	if debug.Enabled {
 		fmt.Printf("REALITY hello.sessionId[:16]: %v\n", hello.SessionId[:16])
