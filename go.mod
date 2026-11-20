@@ -43,7 +43,7 @@ require (
 	github.com/juju/ratelimit v1.0.2
 	github.com/keybase/go-keychain v0.0.1
 	github.com/kianmhz/GooseRelayVPN v0.0.0-20260429125124-0e68c2a3ae4c
-	github.com/klauspost/compress v1.20.0
+	github.com/klauspost/compress v1.20.3
 	github.com/klauspost/cpuid/v2 v2.4.1
 	github.com/kulikov0/headless-client v0.1.0
 	github.com/libdns/acmedns v0.5.0
