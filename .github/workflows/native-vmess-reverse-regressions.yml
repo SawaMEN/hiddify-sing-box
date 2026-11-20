@@ -37,6 +37,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Temporary diagnostic: identify exact Go 1.27 tidy changes.
+          go mod tidy
+          git diff -- go.mod
+          git diff --numstat -- go.sum
           go test -race -tags with_utls \
             github.com/sagernet/sing-vmess/vless \
             github.com/sagernet/sing-box/protocol/vless \
