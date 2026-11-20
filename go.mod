@@ -43,7 +43,7 @@ require (
 	github.com/juju/ratelimit v1.0.2
 	github.com/keybase/go-keychain v0.0.1
 	github.com/kianmhz/GooseRelayVPN v0.0.0-20260429125124-0e68c2a3ae4c
-	github.com/klauspost/compress v1.20.0
+	github.com/klauspost/compress v1.20.3
 	github.com/klauspost/cpuid/v2 v2.4.1
 	github.com/kulikov0/headless-client v0.1.0
 	github.com/libdns/acmedns v0.5.0
@@ -231,6 +231,7 @@ require (
 	github.com/marusama/semaphore v0.0.0-20171214154724-565ffd8e868a // indirect
 	github.com/mdlayher/socket v0.6.0 // indirect
 	github.com/mitchellh/go-ps v1.0.0 // indirect
+	github.com/molecule-man/go-brrr v1.2.0 // indirect
 	github.com/mroth/weightedrand v1.0.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nats-io/nats.go v1.52.0 // indirect

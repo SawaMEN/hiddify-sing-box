@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"runtime"
 	"sync"
 	"syscall"
 	"testing"
@@ -178,10 +179,27 @@ func startLocalDNS(t *testing.T) string {
 		}
 		_ = w.WriteMsg(m)
 	})
-	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
-	require.NoError(t, err)
-	ln, err := net.Listen("tcp", pc.LocalAddr().String())
-	require.NoError(t, err)
+	// Bind TCP first: Windows UDP ephemeral ports may overlap ranges excluded
+	// from TCP. Both listeners must keep the same port for DNS UDP/TCP parity.
+	var pc net.PacketConn
+	var ln net.Listener
+	for range 32 {
+		var err error
+		ln, err = net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		pc, err = net.ListenPacket("udp", ln.Addr().String())
+		if err == nil {
+			break
+		}
+		_ = ln.Close()
+		if !errors.Is(err, syscall.EADDRINUSE) &&
+			!(runtime.GOOS == "windows" && errors.Is(err, syscall.Errno(10013))) {
+			t.Fatalf("bind UDP DNS fixture: %v", err)
+		}
+	}
+	if pc == nil {
+		t.Fatal("could not bind a shared UDP/TCP DNS test port")
+	}
 	udp := &dns.Server{PacketConn: pc, Handler: handler}
 	tcp := &dns.Server{Listener: ln, Handler: handler}
 	go udp.ActivateAndServe()
@@ -276,4 +294,32 @@ func TestH_DnspoolLocalBindRetry(t *testing.T) {
 	})
 	require.ErrorIs(t, err, syscall.EADDRINUSE)
 	require.Equal(t, 5, attempts, "bind retries must be bounded")
+}
+
+// Windows can reserve a sequential range of TCP ports while allowing UDP
+// ephemeral allocation there. Ensure WSAEACCES is retried only for TCP binds.
+func TestH_DnspoolWindowsExcludedPortRetry(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Winsock excluded-port behavior")
+	}
+	denied := &net.OpError{Op: "listen", Net: "tcp", Err: syscall.Errno(10013)}
+	attempts := 0
+	_, addr, err := startLocalWithRetry(multidns.Options{}, func(multidns.Options) (*multidns.Manager, string, error) {
+		attempts++
+		if attempts < 3 {
+			return nil, "", fmt.Errorf("multidns: bind tcp: %w", denied)
+		}
+		return nil, "127.0.0.1:5300", nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, "127.0.0.1:5300", addr)
+	require.Equal(t, 3, attempts)
+
+	attempts = 0
+	_, _, err = startLocalWithRetry(multidns.Options{}, func(multidns.Options) (*multidns.Manager, string, error) {
+		attempts++
+		return nil, "", &net.OpError{Op: "listen", Net: "udp", Err: syscall.Errno(10013)}
+	})
+	require.Error(t, err)
+	require.Equal(t, 1, attempts, "do not mask unrelated UDP bind errors")
 }
