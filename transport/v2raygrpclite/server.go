@@ -36,6 +36,7 @@ type Server struct {
 	h2Server   *http2.Server
 	h2cHandler http.Handler
 	path       string
+	multiPath  string
 }
 
 func NewServer(ctx context.Context, logger logger.ContextLogger, options option.V2RayGRPCOptions, tlsConfig tls.ServerConfig, handler adapter.V2RayServerTransportHandler) (*Server, error) {
@@ -43,7 +44,13 @@ func NewServer(ctx context.Context, logger logger.ContextLogger, options option.
 		tlsConfig: tlsConfig,
 		logger:    logger,
 		handler:   handler,
-		path:      grpcname.UnescapedPath(options.ServiceName), // H: Xray's custom paths; compared with the decoded request path
+		path: grpcname.UnescapedPath(options.ServiceName), // H: Xray custom paths
+		multiPath: func() string {
+			if options.MultiMode {
+				return grpcname.UnescapedMultiPath(options.ServiceName)
+			}
+			return ""
+		}(),
 		h2Server: &http2.Server{
 			IdleTimeout: time.Duration(options.IdleTimeout),
 		},
@@ -67,7 +74,7 @@ func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		s.h2cHandler.ServeHTTP(writer, request)
 		return
 	}
-	if request.URL.Path != s.path {
+	if request.URL.Path != s.path && (s.multiPath == "" || request.URL.Path != s.multiPath) {
 		s.invalidRequest(writer, request, http.StatusNotFound, E.New("bad path: ", request.URL.Path))
 		return
 	}
@@ -83,7 +90,9 @@ func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("TE", "trailers")
 	writer.WriteHeader(http.StatusOK)
 	done := make(chan struct{})
-	conn := v2rayhttp.NewHTTP2Wrapper(newGunConn(request.Body, writer, writer.(http.Flusher)))
+	gun := newGunConn(request.Body, writer, writer.(http.Flusher))
+	gun.multiMode = s.multiPath != "" && request.URL.Path == s.multiPath
+	conn := v2rayhttp.NewHTTP2Wrapper(gun)
 	s.handler.NewConnectionEx(request.Context(), conn, badhttp.SourceAddress(request), M.Socksaddr{}, N.OnceClose(func(it error) {
 		close(done)
 	}))
