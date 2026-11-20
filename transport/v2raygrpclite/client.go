@@ -49,6 +49,10 @@ func NewClient(ctx context.Context, dialer N.Dialer, serverAddr M.Socksaddr, opt
 	} else {
 		host = serverAddr.String()
 	}
+	path, rawPath := grpcname.UnescapedPath(options.ServiceName), grpcname.Path(options.ServiceName)
+	if options.MultiMode {
+		path, rawPath = grpcname.UnescapedMultiPath(options.ServiceName), grpcname.MultiPath(options.ServiceName)
+	}
 	client := &Client{
 		ctx:        ctx,
 		serverAddr: serverAddr,
@@ -61,8 +65,8 @@ func NewClient(ctx context.Context, dialer N.Dialer, serverAddr M.Socksaddr, opt
 		url: &url.URL{
 			Scheme:  "https",
 			Host:    serverAddr.String(),
-			Path:    grpcname.UnescapedPath(options.ServiceName), // H: Xray's custom paths
-			RawPath: grpcname.Path(options.ServiceName),          // H
+			Path:    path,    // H: Xray custom path and optional TunMulti
+			RawPath: rawPath, // H
 		},
 		host: host,
 	}
@@ -94,6 +98,7 @@ func (c *Client) DialContext(ctx context.Context) (net.Conn, error) {
 		Host:   c.host,
 	}
 	conn := newLateGunConn(pipeInWriter, cancel)
+	conn.multiMode = c.options.MultiMode
 	keepSession := adapter.KeepSessionFromContext(ctx)
 	conn.onClose = func() {
 		if c.closeIdle.Load() && !keepSession {
