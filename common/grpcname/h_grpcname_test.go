@@ -30,3 +30,19 @@ func TestH_Names(t *testing.T) {
 		require.Equal(t, test.path, Path(test.name), test.name)
 	}
 }
+
+func TestH_MultiPaths(t *testing.T) {
+	for _, tc := range []struct {
+		name, path, decoded string
+	}{
+		{"", "//TunMulti", "//TunMulti"},
+		{"TunService", "/TunService/TunMulti", "/TunService/TunMulti"},
+		{"a b", "/a%20b/TunMulti", "/a b/TunMulti"},
+		{"/my/path/Tun|TunMulti", "/my/path/TunMulti", "/my/path/TunMulti"},
+		{"/my/path/method", "/my/path/method", "/my/path/method"},
+		{"/a b/c d|e f", "/a%20b/e%20f", "/a b/e f"},
+	} {
+		require.Equal(t, tc.path, MultiPath(tc.name), tc.name)
+		require.Equal(t, tc.decoded, UnescapedMultiPath(tc.name), tc.name)
+	}
+}
