@@ -127,3 +127,36 @@ func TestH_RawThroughDispatcher(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "dispatch", string(reply))
 }
+
+func TestH_GRPCMultiModeLiteRoundTrip(t *testing.T) {
+	options := option.V2RayTransportOptions{
+		Type: C.V2RayTransportTypeGRPC,
+		GRPCOptions: option.V2RayGRPCOptions{
+			ServiceName: "test-service",
+			MultiMode:   true,
+		},
+	}
+	server, err := NewServerTransport(context.Background(), logger.NOP(), options, nil, &hEchoHandler{})
+	require.NoError(t, err)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	go server.Serve(listener)
+	defer func() {
+		listener.Close()
+		server.Close()
+	}()
+	client, err := NewClientTransport(context.Background(), N.SystemDialer, M.SocksaddrFromNet(listener.Addr()), options, nil)
+	require.NoError(t, err)
+	defer client.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := client.DialContext(ctx)
+	require.NoError(t, err)
+	defer conn.Close()
+	message := []byte("xray grpc TunMulti framing")
+	_, err = conn.Write(message)
+	require.NoError(t, err)
+	reply := make([]byte, len(message))
+	require.NoError(t, io.ReadFull(conn, reply))
+	require.Equal(t, message, reply)
+}
