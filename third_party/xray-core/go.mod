@@ -41,6 +41,7 @@ require (
 )
 
 require (
+	github.com/molecule-man/go-brrr v1.2.0 // indirect
 	github.com/andybalholm/brotli v1.2.3 // indirect
 	github.com/google/gopacket v1.1.19 // indirect
 	github.com/huin/goupnp v1.2.0 // indirect
