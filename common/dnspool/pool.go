@@ -112,7 +112,7 @@ func StartPool(logger log.ContextLogger, tag string, options PoolOptions, dial m
 // new attempt gets a fresh ephemeral port, retry only these bind errors.
 func startLocalWithRetry(options multidns.Options, start func(multidns.Options) (*multidns.Manager, string, error)) (*multidns.Manager, string, error) {
 	const (
-		busyPortAttempts = 5
+		busyPortAttempts            = 5
 		windowsExcludedPortAttempts = 256
 	)
 	for attempt := range windowsExcludedPortAttempts {
