@@ -89,7 +89,7 @@ func processOwnerAndParent(pid int) (uid string, parent int) {
 	if err != nil {
 		return "", 0
 	}
-	for _, line := range strings.Split(string(content), "\n") {
+	for _, line := range strings.SplitSeq(string(content), "\n") {
 		if value, found := strings.CutPrefix(line, "Uid:"); found {
 			if fields := strings.Fields(value); len(fields) > 0 {
 				uid = fields[0]
@@ -106,7 +106,7 @@ func processSessionBus(pid int) string {
 	if err != nil {
 		return ""
 	}
-	for _, variable := range strings.Split(string(content), "\x00") {
+	for _, variable := range strings.SplitSeq(string(content), "\x00") {
 		if bus, found := strings.CutPrefix(variable, "DBUS_SESSION_BUS_ADDRESS="); found && !strings.ContainsAny(bus, "'\n") {
 			return bus
 		}

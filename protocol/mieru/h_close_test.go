@@ -31,7 +31,7 @@ func TestH_MieruOutboundCloseStopsClient(t *testing.T) {
 	var outbounds []*Outbound
 	for range 5 {
 		out, err := NewOutbound(ctx, &echoRouter{}, log.NewNOPFactory().Logger(), "mieru-out", option.MieruOutboundOptions{
-			ServerOptions: option.ServerOptions{Server: "127.0.0.1"},
+			ServerOptions: {Server: "127.0.0.1"},
 			PortBindings:  []option.MieruPortBinding{{Protocol: "TCP", Port: freeTCPPort(t)}},
 			UserName:      "alice",
 			Password:      "secret",
