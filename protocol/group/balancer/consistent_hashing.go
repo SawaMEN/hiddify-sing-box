@@ -77,7 +77,7 @@ func (s *ConsistentHashing) Select(metadata adapter.InboundContext, net string, 
 		}
 	}
 	idx := jumpHash(key, buckets)
-	return s.outbounds[net][idx]
+	return s.outbounds[net][fallbackIndex(s.outbounds[net], int(idx), s.delays)]
 }
 
 func (s *ConsistentHashing) Alive(proxy adapter.Outbound, net string) bool {
