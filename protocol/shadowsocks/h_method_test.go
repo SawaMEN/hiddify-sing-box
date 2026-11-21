@@ -20,9 +20,10 @@ func TestH_ShadowsocksXrayMethodNames(t *testing.T) {
 	} {
 		t.Run(method, func(t *testing.T) {
 			_, err := NewOutbound(context.Background(), newTestRouter(), logger, "out", option.ShadowsocksOutboundOptions{
-				ServerOptions: option.ServerOptions{Server: "127.0.0.1", ServerPort: 1},
-				Method:        method,
-				Password:      "password",
+				Server:     "127.0.0.1",
+				ServerPort: 1,
+				Method:     method,
+				Password:   "password",
 			})
 			require.NoError(t, err)
 			_, err = NewInbound(context.Background(), newTestRouter(), logger, "in", option.ShadowsocksInboundOptions{

@@ -71,13 +71,13 @@ func Search(ctx context.Context, smallest, configured int, before func(first boo
 	if configured > smallest {
 		sizes = append(sizes, configured)
 	}
-	low, high := 0, len(sizes) // sizes[low] gets through; sizes[high] and above do not
+	low := 0 // sizes[low] gets through; sizes[high] and above do not
 	if fits, known := search.fits(sizes[len(sizes)-1]); !known {
 		return 0 // the path stopped answering
 	} else if fits {
 		return configured
 	}
-	high = len(sizes) - 1
+	high := len(sizes) - 1
 	for high-low > 1 {
 		middle := (low + high) / 2
 		fits, known := search.fits(sizes[middle])

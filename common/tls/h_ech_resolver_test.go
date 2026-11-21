@@ -36,11 +36,11 @@ func (r *hECHTestRouter) Exchange(ctx context.Context, message *mDNS.Msg, option
 	r.queries++
 	r.name = message.Question[0].Name
 	r.options = options
-	record := &mDNS.HTTPS{SVCB: mDNS.SVCB{
+	record := &mDNS.HTTPS{
 		Hdr:   mDNS.RR_Header{Name: r.name, Rrtype: mDNS.TypeHTTPS, Class: mDNS.ClassINET, Ttl: r.ttl},
 		Value: []mDNS.SVCBKeyValue{&mDNS.SVCBECHConfig{ECH: []byte("ech-config-list")}},
-	}}
-	return &mDNS.Msg{MsgHdr: mDNS.MsgHdr{Response: true, Rcode: mDNS.RcodeSuccess}, Answer: []mDNS.RR{record}}, nil
+	}
+	return &mDNS.Msg{Response: true, Rcode: mDNS.RcodeSuccess, Answer: []mDNS.RR{record}}, nil
 }
 
 func hECHTestClient(t *testing.T, ttl uint32) (*hECHTestRouter, *ECHClientConfig) {
