@@ -1,0 +1,36 @@
+name: Sync Hiddify v5 (temporary)
+on:
+  push:
+    branches:
+      - maintenance/sync-hiddify-2026-11-21
+    paths:
+      - .github/workflows/_sync-hiddify-v5-once.yml
+permissions:
+  contents: write
+jobs:
+  merge-upstream:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch and merge Hiddify v5 without force-push
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/hiddify/hiddify-sing-box.git
+          git fetch --no-tags upstream v5
+          echo "Upstream: $(git rev-parse FETCH_HEAD)"
+          if ! git merge-base --is-ancestor "$(git merge-base HEAD FETCH_HEAD)" HEAD; then
+            echo "::error::No common history with Hiddify v5"
+            exit 1
+          fi
+          if ! git merge --no-ff --no-edit FETCH_HEAD; then
+            echo "::error::Upstream merge has conflicts; existing changes preserved"
+            git status --short | head -100
+            git merge --abort
+            exit 1
+          fi
+          git push origin HEAD:refs/heads/maintenance/sync-hiddify-2026-11-21
