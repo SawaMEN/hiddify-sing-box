@@ -67,7 +67,7 @@ func (s *LowestDelay) Now() string {
 // ping that works, however slow, and for a better cached one, and a cached ping never takes a
 // member whose real ping answers.
 func (s *LowestDelay) UpdateOutboundsInfo(history map[string]*adapter.URLTestHistory) bool {
-	reported := inUse(s.outbounds, history) // exclude members at rest
+	reported := inUse(s.outbounds, history)       // exclude members at rest
 	min, delays := getMinDelay(reported, history) // real pings first, then cached ones
 
 	s.mu.Lock()
