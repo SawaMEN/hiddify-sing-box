@@ -96,6 +96,9 @@ func (p *Psiphon) PreStart() error {
 	if p.dataStoreOpened {
 		return nil
 	}
+	if err := installNoticeHub(); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(p.config.DataRootDirectory, 0o700); err != nil {
 		return err
 	}
