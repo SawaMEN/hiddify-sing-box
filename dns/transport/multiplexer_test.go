@@ -611,7 +611,7 @@ func TestMultiplexerSerializesWritesOnSharedConn(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, queries)
 	for range queries {
-		wg.Go(func()
+		wg.Go(func() {
 			message := new(mDNS.Msg)
 			message.SetQuestion("example.com.", mDNS.TypeA)
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
